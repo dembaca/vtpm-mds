@@ -1,0 +1,53 @@
+# Binaries
+bin/
+prox-mds
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output
+*.out
+
+# Dependencies
+vendor/
+
+# Logs
+*.log
+
+# Configuration (sensitive)
+config.local.yaml
+*.pem
+*.key
+
+# Debian build artifacts
+debian/prox-mds
+debian/*.substvars
+debian/files
+debian/*.debhelper.log
+debian/*.debhelper
+../prox-mds*.deb
+../prox-mds*.changes
+../prox-mds*.dsc
+../prox-mds*.tar.gz
+../prox-mds_*.buildinfo
+../prox-mds_*.build
+../deb-packages/
+

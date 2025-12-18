@@ -1,0 +1,13 @@
+mds:
+  listen_addr: "169.254.169.1:80"
+  jwks_path: "/var/lib/prox-mds/jwks.json"
+  attestation_ca: "/etc/prox-mds/attestation-ca.pem"
+  ek_ca_chain: "/etc/prox-mds/ek-chain.pem"
+  token_ttl: "60s"
+  jwt_ttl: "5m"
+  enable_ec2_compat: true
+  enable_tpm_attestation: true
+  tpm_device: "/dev/tpm0"
+  host_tpm_device: "/dev/tpmrm0"
+  signing_key_path: "/var/lib/prox-mds/signing-key.pem"
+
