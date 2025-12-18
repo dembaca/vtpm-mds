@@ -71,10 +71,8 @@ make build
 make test
 
 # Debian Package
-make deb          # Build package (auto-detects macOS/Linux)
-make deb-native    # Build natively on Linux
-make deb-docker    # Build in Docker container
-make deb-clean     # Clean build artifacts
+make deb          # Build package natively
+make deb-clean    # Clean build artifacts
 ```
 
 ## Testing

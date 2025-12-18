@@ -65,15 +65,6 @@ make test
 - Versionierung automatisch
 - Keine zusätzlichen Tools nötig
 
-### Option 3: Docker Development Container
-
-**Verwendung:**
-```bash
-# Auf Mac
-docker build -t prox-mds-dev -f Dockerfile.dev .
-docker run -it -v $(pwd):/workspace prox-mds-dev bash
-```
-
 ## Lokale Entwicklung (Mac)
 
 ### Voraussetzungen
