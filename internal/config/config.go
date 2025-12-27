@@ -50,10 +50,6 @@ func DefaultConfig() *Config {
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// If file doesn't exist, return defaults
-		if os.IsNotExist(err) {
-			return DefaultConfig(), nil
-		}
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/dembaca/prox-mds/internal/proxmox"
 )
 
 // Store references (initialized by server)
@@ -20,14 +22,14 @@ func HandleCreateToken(s *TokenStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse TTL from request header (optional, IMDSv2 compatible)
 		_ = r.Header.Get("X-aws-ec2-metadata-token-ttl-seconds")
-		
+
 		// Generate token
 		token, err := s.GenerateToken()
 		if err != nil {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
-		
+
 		// Write token as plain text (IMDSv2 compatible)
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
@@ -42,7 +44,7 @@ func HandleMetaDataIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
 		return
 	}
-	
+
 	paths := []string{
 		"instance-id",
 		"local-hostname",
@@ -51,7 +53,7 @@ func HandleMetaDataIndex(w http.ResponseWriter, r *http.Request) {
 		"placement/",
 		"services/",
 	}
-	
+
 	w.Header().Set("Content-Type", "text/plain")
 	for _, path := range paths {
 		fmt.Fprintln(w, path)
@@ -65,9 +67,9 @@ func HandleInstanceID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
 		return
 	}
-	
+
 	instanceID := getInstanceID(r)
-	
+
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprint(w, instanceID)
 }
@@ -79,9 +81,9 @@ func HandleHostname(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
 		return
 	}
-	
+
 	hostname := getHostname(r)
-	
+
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprint(w, hostname)
 }
@@ -93,9 +95,9 @@ func HandleLocalIPv4(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
 		return
 	}
-	
+
 	ip := getLocalIP(r)
-	
+
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprint(w, ip)
 }
@@ -107,9 +109,9 @@ func HandlePublicIPv4(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
 		return
 	}
-	
+
 	ip := getPublicIP(r)
-	
+
 	w.Header().Set("Content-Type", "text/plain")
 	if ip != "" {
 		fmt.Fprint(w, ip)
@@ -125,9 +127,9 @@ func HandleAvailabilityZone(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
 		return
 	}
-	
+
 	az := getAvailabilityZone(r)
-	
+
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprint(w, az)
 }
@@ -139,9 +141,9 @@ func HandleDomain(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
 		return
 	}
-	
+
 	domain := getDomain(r)
-	
+
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprint(w, domain)
 }
@@ -153,20 +155,20 @@ func HandleInstanceIdentityDocument(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
 		return
 	}
-	
+
 	doc := map[string]interface{}{
-		"instanceId":  getInstanceID(r),
-		"imageId":     "proxmox-unknown",
-		"instanceType": "vm",
-		"region":      getRegion(r),
-		"availabilityZone": getAvailabilityZone(r),
-		"privateIp":   getLocalIP(r),
+		"instanceId":         getInstanceID(r),
+		"imageId":            "proxmox-unknown",
+		"instanceType":       "vm",
+		"region":             getRegion(r),
+		"availabilityZone":   getAvailabilityZone(r),
+		"privateIp":          getLocalIP(r),
 		"devpayProductCodes": nil,
-		"version":     "2017-09-30",
-		"billingProducts": nil,
-		"accountId":   "012345678901",
+		"version":            "2017-09-30",
+		"billingProducts":    nil,
+		"accountId":          "012345678901",
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(doc)
 }
@@ -178,10 +180,10 @@ func HandleInstanceIdentitySignature(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
 		return
 	}
-	
+
 	// TODO: Implement actual PKCS#7 signing with CA
 	signature := "dGVzdC1zaWduYXR1cmU=" // base64 placeholder
-	
+
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprint(w, signature)
 }
@@ -200,7 +202,13 @@ func validateToken(r *http.Request) bool {
 
 // Helper functions to extract metadata
 func getInstanceID(r *http.Request) string {
-	// In a real implementation, extract from VM config or Proxmox
+	// Get VM config from request context (set by server middleware)
+	vmConfig := proxmox.GetVMConfigFromRequest(r)
+	if vmConfig != nil && vmConfig.VMID != "" {
+		return fmt.Sprintf("i-%s", vmConfig.VMID)
+	}
+
+	// Fallback to old behavior if VM config not available
 	clientIP := getClientIP(r)
 	return fmt.Sprintf("i-%s", strings.ReplaceAll(clientIP, ".", "-"))
 }
@@ -254,5 +262,3 @@ func getClientIP(r *http.Request) string {
 	}
 	return "127.0.0.1"
 }
-
-

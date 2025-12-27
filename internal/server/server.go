@@ -4,27 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"strings"
+	"sync"
 	"time"
 
-	"github.com/dembaca/prox-mds/internal/config"
 	"github.com/dembaca/prox-mds/attest"
 	"github.com/dembaca/prox-mds/identity"
 	"github.com/dembaca/prox-mds/imds"
+	"github.com/dembaca/prox-mds/internal/config"
+	"github.com/dembaca/prox-mds/internal/proxmox"
 )
 
 type Server struct {
-	httpServer  *http.Server
-	cfg         *config.Config
-	tokenStore  *imds.TokenStore
-	nonceStore  *attest.NonceStore
+	httpServer *http.Server
+	cfg        *config.Config
+	tokenStore *imds.TokenStore
+	nonceStore *attest.NonceStore
 }
 
 func New(cfg *config.Config) (*Server, error) {
 	srv := &Server{
-		cfg: cfg,
+		cfg:        cfg,
 		tokenStore: imds.NewTokenStore(cfg),
 		nonceStore: attest.NewNonceStore(),
+	}
+
+	// Load VM config cache on startup (auto-detect node name from /etc/pve/nodes/)
+	if err := RefreshVMConfigCache(""); err != nil {
+		log.Printf("Warning: Failed to load VM config cache on startup: %v", err)
 	}
 
 	// Initialize handlers with stores
@@ -33,10 +43,10 @@ func New(cfg *config.Config) (*Server, error) {
 	identity.SetStore(srv.tokenStore)
 
 	mux := http.NewServeMux()
-	
+
 	// IMDSv2 token endpoint
 	mux.HandleFunc("PUT /latest/api/token", imds.HandleCreateToken(srv.tokenStore))
-	
+
 	// Metadata endpoints (with token middleware)
 	if cfg.MDS.EnableEC2Compat {
 		mux.HandleFunc("GET /latest/meta-data/instance-id", imds.HandleInstanceID)
@@ -49,7 +59,7 @@ func New(cfg *config.Config) (*Server, error) {
 		mux.HandleFunc("GET /latest/dynamic/instance-identity/document", imds.HandleInstanceIdentityDocument)
 		mux.HandleFunc("GET /latest/dynamic/instance-identity/signature", imds.HandleInstanceIdentitySignature)
 	}
-	
+
 	// TPM attestation endpoints
 	if cfg.MDS.EnableTPMAttestation {
 		mux.HandleFunc("GET /latest/attest/nonce", attest.HandleNonce)
@@ -57,16 +67,23 @@ func New(cfg *config.Config) (*Server, error) {
 		mux.HandleFunc("GET /latest/identity", identity.HandleIdentity(srv.tokenStore))
 		mux.HandleFunc("GET /.well-known/jwks.json", identity.HandleJWKS)
 	}
-	
+
 	// Health check
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
+	// Catch-all handler for debugging unmatched routes
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Unmatched route: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+		http.NotFound(w, r)
+	})
+
 	srv.httpServer = &http.Server{
 		Addr:         cfg.MDS.ListenAddr,
-		Handler:      loggingMiddleware(mux),
+		Handler:      vmConfigMiddleware(loggingMiddleware(mux)),
+		ConnContext:  connContext,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -76,7 +93,19 @@ func New(cfg *config.Config) (*Server, error) {
 }
 
 func (s *Server) Start() error {
-	return s.httpServer.ListenAndServe()
+	// Parse listen address
+	addr, err := net.ResolveTCPAddr("tcp", s.httpServer.Addr)
+	if err != nil {
+		return err
+	}
+
+	// Create custom listener to capture VM config information
+	listener, err := newVMConnectionListener(addr)
+	if err != nil {
+		return err
+	}
+
+	return s.httpServer.Serve(listener)
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
@@ -87,10 +116,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		
+
 		lw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(lw, r)
-		
+
 		log.Printf(
 			"%s %s %d %v",
 			r.Method,
@@ -111,3 +140,193 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// connectionMap stores VMIDs per connection
+var connectionMap sync.Map
+
+// connContext stores VM config information in the request context
+func connContext(ctx context.Context, c net.Conn) context.Context {
+	if vmConn, ok := c.(*vmConnection); ok {
+		// Trigger VM config extraction if not already done
+		vmConn.vmConfigOnce.Do(func() {
+			log.Printf("[DEBUG connContext] Extracting VM config for connection from %s", c.RemoteAddr())
+			vmConn.extractVMConfig()
+		})
+		if vmConn.vmConfig != nil {
+			log.Printf("[DEBUG connContext] Setting VM config in context: VMID=%s", vmConn.vmid)
+			return context.WithValue(ctx, proxmox.VMConfigContextKey, vmConn.vmConfig)
+		} else {
+			log.Printf("[DEBUG connContext] No VM config found for connection from %s", c.RemoteAddr())
+		}
+	} else {
+		log.Printf("[DEBUG connContext] Connection is not *vmConnection, type: %T", c)
+	}
+	return ctx
+}
+
+// vmConnectionListener wraps a TCP listener to capture VM config information
+type vmConnectionListener struct {
+	*net.TCPListener
+}
+
+func newVMConnectionListener(addr *net.TCPAddr) (*vmConnectionListener, error) {
+	ln, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Note: IP_PKTINFO is not supported on TCP sockets
+	// We'll determine the VM config from the connection's remote IP via ARP lookup
+	return &vmConnectionListener{TCPListener: ln}, nil
+}
+
+func (ln *vmConnectionListener) Accept() (net.Conn, error) {
+	conn, err := ln.TCPListener.AcceptTCP()
+	if err != nil {
+		return nil, err
+	}
+	return &vmConnection{TCPConn: conn}, nil
+}
+
+// vmConnection wraps a TCP connection to extract VM config information
+type vmConnection struct {
+	*net.TCPConn
+	vmConfigOnce sync.Once
+	vmid         string
+	vmConfig     *proxmox.VMConfig
+}
+
+func (c *vmConnection) Read(b []byte) (int, error) {
+	// Extract VM config on first read
+	c.vmConfigOnce.Do(func() {
+		c.extractVMConfig()
+	})
+	return c.TCPConn.Read(b)
+}
+
+func (c *vmConnection) extractVMConfig() {
+	// For TCP connections, we determine the VM config from the remote IP
+	// by looking up MAC address in ARP table and matching to VM config
+	c.extractVMConfigByRouting()
+}
+
+func (c *vmConnection) extractVMConfigByRouting() {
+	remoteAddr := c.TCPConn.RemoteAddr()
+	if tcpAddr, ok := remoteAddr.(*net.TCPAddr); ok && tcpAddr.IP != nil {
+		remoteIP := tcpAddr.IP.String()
+		log.Printf("[DEBUG extractVMConfigByRouting] Starting VM config extraction for remote IP: %s", remoteIP)
+
+		// Use ARP table to get MAC address, then find VM config
+		macAddr := c.getMACFromARP(remoteIP)
+		if macAddr != "" {
+			log.Printf("[DEBUG extractVMConfigByRouting] Found MAC address: %s for IP: %s", macAddr, remoteIP)
+			vmConfig := c.findVMConfigByMAC(macAddr)
+			if vmConfig != nil {
+				log.Printf("[DEBUG extractVMConfigByRouting] Found VM config: VMID=%s for MAC: %s", vmConfig.VMID, macAddr)
+				c.vmid = vmConfig.VMID
+				c.vmConfig = vmConfig
+				connectionMap.Store(c.TCPConn, vmConfig.VMID)
+				return
+			} else {
+				log.Printf("[DEBUG extractVMConfigByRouting] No VM config found for MAC: %s", macAddr)
+			}
+		} else {
+			log.Printf("[DEBUG extractVMConfigByRouting] No MAC address found for IP: %s", remoteIP)
+		}
+		log.Printf("[DEBUG extractVMConfigByRouting] No VM config found for IP: %s", remoteIP)
+	}
+}
+
+// getMACFromARP reads the ARP table from /proc/net/arp to get MAC address for an IP
+func (c *vmConnection) getMACFromARP(ip string) string {
+	log.Printf("[DEBUG getMACFromARPFile] Reading /proc/net/arp for IP: %s", ip)
+	data, err := os.ReadFile("/proc/net/arp")
+	if err != nil {
+		log.Printf("[DEBUG getMACFromARPFile] Failed to read /proc/net/arp: %v", err)
+		return ""
+	}
+
+	// Parse tab-separated format: IP address | HW type | Flags | HW address | Mask | Device
+	lines := strings.Split(string(data), "\n")
+	log.Printf("[DEBUG getMACFromARPFile] Parsing %d lines from /proc/net/arp", len(lines))
+	for _, line := range lines {
+		// Skip header line
+		if strings.HasPrefix(line, "IP address") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 4 && fields[0] == ip {
+			mac := strings.ToLower(fields[3])
+			// Skip incomplete entries (0x0 MAC)
+			if mac != "00:00:00:00:00:00" {
+				log.Printf("[DEBUG getMACFromARPFile] Found MAC %s for IP %s (device: %s)", mac, ip, fields[5])
+				return mac
+			}
+		}
+	}
+	log.Printf("[DEBUG getMACFromARP] No MAC address found in /proc/net/arp for IP: %s", ip)
+	return ""
+}
+
+// vmConfigCache caches VM configs
+var (
+	vmConfigCache   proxmox.VMConfigMap // map[string]*VMConfig: VMID -> VMConfig
+	vmConfigCacheMu sync.RWMutex
+)
+
+// findVMConfigByMAC finds the VM config for the given MAC address
+func (c *vmConnection) findVMConfigByMAC(mac string) *proxmox.VMConfig {
+	mac = strings.ToLower(strings.TrimSpace(mac))
+	log.Printf("[DEBUG findVMConfigByMAC] Looking for VM config with MAC: %s", mac)
+
+	vmConfigCacheMu.RLock()
+	defer vmConfigCacheMu.RUnlock()
+
+	vmid := proxmox.GetVMIDByMAC(vmConfigCache, mac)
+	if vmid != "" {
+		vmConfig, ok := vmConfigCache[vmid]
+		if ok && vmConfig != nil {
+			log.Printf("[DEBUG findVMConfigByMAC] Found in cache: MAC %s -> VMID %s", mac, vmid)
+			return vmConfig
+		}
+	}
+
+	log.Printf("[DEBUG findVMConfigByMAC] MAC %s not found in cache", mac)
+	return nil
+}
+
+// RefreshVMConfigCache parses VM config files and caches VM configurations
+// This can be called from a signal handler to reload VM configs
+func RefreshVMConfigCache(nodeName string) error {
+	vmConfigCacheMu.Lock()
+	defer vmConfigCacheMu.Unlock()
+
+	log.Printf("[DEBUG RefreshVMConfigCache] Starting VM config cache refresh (node: %s)", nodeName)
+
+	// Parse VM configs
+	vmConfigMap, err := proxmox.ParseVMConfigs(nodeName)
+	if err != nil {
+		log.Printf("[DEBUG RefreshVMConfigCache] Failed to parse VM configs: %v", err)
+		return err
+	}
+
+	// Replace cache with new data
+	vmConfigCache = vmConfigMap
+
+	// Count total MAC addresses
+	macCount := 0
+	for _, vmConfig := range vmConfigCache {
+		macCount += len(vmConfig.MACs)
+	}
+
+	log.Printf("[DEBUG RefreshVMConfigCache] Cache refresh complete: %d VMs, %d MAC addresses cached", len(vmConfigCache), macCount)
+	return nil
+}
+
+// vmConfigMiddleware extracts VM config from request context (already set by connContext)
+// This middleware is kept for compatibility but the VM config is already in context
+func vmConfigMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// VM config is already in context from connContext, just pass through
+		next.ServeHTTP(w, r)
+	})
+}
