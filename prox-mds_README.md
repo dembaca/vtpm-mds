@@ -133,7 +133,8 @@ mds:
 - [SPIRE TPM DevID Plugin](https://github.com/spiffe/spire/blob/main/doc/plugin_server_nodeattestor_tpm_devid.md)
 - [AWS IMDSv2 API Reference](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html)
 - [HashiCorp Vault JWT Auth Method](https://developer.hashicorp.com/vault/docs/auth/jwt)
-
+- [TPM 2.0 Keys for Device Identity and Attestation](https://trustedcomputinggroup.org/wp-content/uploads/TCG_IWG_DevID_v1r2_02dec2020.pdf)
+- [HP DevID Provisioning Tool](https://github.com/HewlettPackard/devid-provisioning-tool/)
 ---
 
 ## 🧱 License & Maintainers
