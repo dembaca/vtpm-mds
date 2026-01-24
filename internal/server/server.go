@@ -7,30 +7,24 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dembaca/prox-mds/internal/config"
-	"github.com/dembaca/prox-mds/attest"
-	"github.com/dembaca/prox-mds/identity"
 	"github.com/dembaca/prox-mds/imds"
+	"github.com/dembaca/prox-mds/internal/config"
 )
 
 type Server struct {
-	httpServer  *http.Server
-	cfg         *config.Config
-	tokenStore  *imds.TokenStore
-	nonceStore  *attest.NonceStore
+	httpServer *http.Server
+	cfg        *config.Config
+	tokenStore *imds.TokenStore
 }
 
 func New(cfg *config.Config) (*Server, error) {
 	srv := &Server{
-		cfg: cfg,
+		cfg:        cfg,
 		tokenStore: imds.NewTokenStore(cfg),
-		nonceStore: attest.NewNonceStore(),
 	}
 
 	// Initialize handlers with stores
 	imds.SetStore(srv.tokenStore)
-	attest.SetStore(srv.nonceStore)
-	identity.SetStore(srv.tokenStore)
 
 	mux := http.NewServeMux()
 	
@@ -48,14 +42,6 @@ func New(cfg *config.Config) (*Server, error) {
 		mux.HandleFunc("GET /latest/meta-data/", imds.HandleMetaDataIndex)
 		mux.HandleFunc("GET /latest/dynamic/instance-identity/document", imds.HandleInstanceIdentityDocument)
 		mux.HandleFunc("GET /latest/dynamic/instance-identity/signature", imds.HandleInstanceIdentitySignature)
-	}
-	
-	// TPM attestation endpoints
-	if cfg.MDS.EnableTPMAttestation {
-		mux.HandleFunc("GET /latest/attest/nonce", attest.HandleNonce)
-		mux.HandleFunc("POST /latest/attest", attest.HandleAttest)
-		mux.HandleFunc("GET /latest/identity", identity.HandleIdentity(srv.tokenStore))
-		mux.HandleFunc("GET /.well-known/jwks.json", identity.HandleJWKS)
 	}
 	
 	// Health check

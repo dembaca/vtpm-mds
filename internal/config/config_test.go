@@ -15,10 +15,6 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.MDS.EnableEC2Compat {
 		t.Error("EnableEC2Compat should be true by default")
 	}
-	
-	if !cfg.MDS.EnableTPMAttestation {
-		t.Error("EnableTPMAttestation should be true by default")
-	}
 }
 
 func TestLoadMissingFile(t *testing.T) {

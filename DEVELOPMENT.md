@@ -1,138 +1,128 @@
-# Development Setup
+# Development
 
-## Remote Development Options
+## Prerequisites
 
-### Option 1: Cursor/VS Code Remote SSH (Empfohlen)
+- Go 1.21+
+- Make
 
-**Vorteile:**
-- Direkt auf Proxmox entwickeln
-- Kein Datei-Kopieren nötig
-- Go-Tools laufen direkt auf dem Server
-- TPM-Zugriff möglich (wenn auf Proxmox-Host)
+## Build Commands
 
-**Setup:**
+```bash
+make deps      # Download Go dependencies
+make build     # Build binary to bin/prox-mds
+make test      # Run all tests
+make run       # Build and run (requires sudo)
+make deb       # Build Debian package
+```
 
-1. **SSH-Konfiguration auf dem Mac** (`~/.ssh/config`):
+## Running Tests
+
+```bash
+# All tests
+make test
+
+# Single package
+go test -v ./imds
+
+# Single test
+go test -v ./imds -run TestTokenStore
+
+# With coverage
+go test -cover ./...
+```
+
+## Local Development (macOS)
+
+```bash
+brew install go
+make deps
+make build
+make test
+```
+
+Note: Running the service locally requires sudo and network configuration for link-local addressing.
+
+## Remote Development (Proxmox)
+
+For testing on actual Proxmox infrastructure, remote development is recommended.
+
+### SSH Configuration
+
+Add to `~/.ssh/config`:
+
 ```ssh-config
-Host hogan
-    HostName 10.7.10.5
+Host proxmox-dev
+    HostName <your-proxmox-ip>
     User root
     IdentityFile ~/.ssh/id_rsa
     ForwardAgent yes
 ```
 
-2. **In Cursor/VS Code:**
-   - Installiere Extension: "Remote - SSH" (falls nicht vorhanden)
-   - `Cmd+Shift+P` → "Remote-SSH: Connect to Host"
-   - Wähle `hogan`
-   - Öffne den Workspace-Ordner auf dem Server
+### VS Code / Cursor Remote SSH
 
-3. **Projekt auf Proxmox klonen:**
+1. Install "Remote - SSH" extension
+2. `Cmd+Shift+P` -> "Remote-SSH: Connect to Host"
+3. Select your configured host
+4. Open `/opt/prox-mds` folder
+
+### Setup on Proxmox Host
+
 ```bash
-# Auf hogan (10.7.10.5)
-ssh hogan
+ssh proxmox-dev
 cd /opt
 git clone https://github.com/dembaca/prox-mds.git
 cd prox-mds
-```
 
-4. **Go installieren (falls nicht vorhanden):**
-```bash
-# Auf Proxmox (Debian/Ubuntu)
-apt-get update
-apt-get install -y golang-go
-```
+# Install Go if needed
+apt-get update && apt-get install -y golang-go
 
-### Option 2: Git-basierter Workflow
-
-**Workflow:**
-```bash
-# Auf Mac: Entwickeln
-git add .
-git commit -m "feature"
-git push
-
-# Auf Proxmox: Pullen und testen
-ssh proxmox-dev
-cd /opt/prox-mds
-git pull
+make deps
 make build
 make test
 ```
 
-**Vorteile:**
-- Einfach
-- Versionierung automatisch
-- Keine zusätzlichen Tools nötig
+### Sync Workflow
 
-### Option 3: Docker Development Container
+For quick iteration without commits:
 
-**Verwendung:**
 ```bash
-# Auf Mac
-docker build -t prox-mds-dev -f Dockerfile.dev .
-docker run -it -v $(pwd):/workspace prox-mds-dev bash
-```
-
-## Lokale Entwicklung (Mac)
-
-### Voraussetzungen
-```bash
-# Go installieren
-brew install go
-
-# Dependencies
-make deps
-```
-
-### Build & Test
-```bash
-make build    # Binary bauen
-make test      # Tests laufen lassen
-make run       # Lokal starten (benötigt sudo)
-```
-
-## Remote Testing Workflow
-
-### Schneller Test-Zyklus
-
-1. **Code auf Mac entwickeln**
-2. **Via Git pushen**
-3. **Auf Proxmox pullen und testen:**
-```bash
-ssh proxmox-dev "cd /opt/prox-mds && git pull && make build && sudo ./bin/prox-mds"
-```
-
-### Oder mit rsync (schneller für Tests):
-```bash
-# Von Mac aus
+# From local machine
 rsync -avz --exclude '.git' --exclude 'bin' ./ proxmox-dev:/opt/prox-mds/
-ssh proxmox-dev "cd /opt/prox-mds && make build"
+ssh proxmox-dev "cd /opt/prox-mds && make build && make test"
 ```
 
-## TPM Development
+Or use the Makefile targets:
 
-Für TPM-Entwicklung benötigst du Zugriff auf:
-- `/dev/tpm0` (VM TPM)
-- `/dev/tpmrm0` (Host TPM)
-
-**Wichtig:** Remote SSH funktioniert am besten, wenn du direkt auf dem Proxmox-Host arbeitest.
+```bash
+make sync         # rsync to remote
+make remote-test  # Run tests on remote
+```
 
 ## Debugging
 
-### Remote Debugging mit Delve
+### Remote Debugging with Delve
+
+On Proxmox:
 ```bash
-# Auf Proxmox
 go install github.com/go-delve/delve/cmd/dlv@latest
 dlv debug ./cmd/prox-mds --headless --listen=:2345 --api-version=2
-
-# Auf Mac: VS Code/Cursor mit Go Debugger verbinden
 ```
 
-## Empfohlene Extensions (Cursor/VS Code)
+Connect VS Code/Cursor debugger to port 2345.
+
+## Project Structure
+
+```
+cmd/prox-mds/main.go     Entry point
+internal/
+  config/config.go       Configuration parsing
+  server/server.go       HTTP server and routing
+imds/                    Metadata endpoint handlers
+```
+
+## Recommended Extensions
 
 - Go (golang.go)
 - Remote - SSH
 - GitLens
 - YAML
-
