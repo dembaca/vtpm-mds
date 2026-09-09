@@ -70,10 +70,18 @@ make build
 # Test
 make test
 
+# QEMU/netns lab (no Proxmox required)
+./scripts/qemu-lab/cloud-install.sh
+./scripts/qemu-lab/cloud-start.sh
+sudo ./bin/prox-mds -config /etc/prox-mds/config.lab.yaml &
+make lab-e2e
+
 # Debian Package
 make deb          # Build package natively
 make deb-clean    # Clean build artifacts
 ```
+
+See `scripts/qemu-lab/README.md` for the nested-guest lab. Set `mds.inventory_path` to a YAML inventory to run without `/etc/pve`.
 
 ## Testing
 

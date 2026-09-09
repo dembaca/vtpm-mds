@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/dembaca/prox-mds/internal/proxmox"
+	"github.com/dembaca/prox-mds/internal/inventory"
 )
 
 // Store references (initialized by server)
@@ -203,7 +203,7 @@ func validateToken(r *http.Request) bool {
 // Helper functions to extract metadata
 func getInstanceID(r *http.Request) string {
 	// Get VM config from request context (set by server middleware)
-	vmConfig := proxmox.GetVMConfigFromRequest(r)
+	vmConfig := inventory.GetVMConfigFromRequest(r)
 	if vmConfig != nil && vmConfig.VMID != "" {
 		return fmt.Sprintf("i-%s", vmConfig.VMID)
 	}

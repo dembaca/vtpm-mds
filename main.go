@@ -73,9 +73,9 @@ func main() {
 	for sig := range sigChan {
 		switch sig {
 		case syscall.SIGHUP:
-			// Reload VM config cache (auto-detect node name from /etc/pve/nodes/)
+			// Reload VM config cache
 			log.Println("Received SIGHUP, reloading VM config cache...")
-			if err := server.RefreshVMConfigCache(""); err != nil {
+			if err := server.RefreshActiveVMConfigCache(); err != nil {
 				log.Printf("Error reloading VM config cache: %v", err)
 			} else {
 				log.Println("VM config cache reloaded successfully")

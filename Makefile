@@ -1,4 +1,4 @@
-.PHONY: build clean test run deps deb deb-clean install help
+.PHONY: build clean test run deps deb deb-clean install help lab-setup lab-e2e
 
 BINARY_NAME=prox-mds
 VERSION?=dev
@@ -41,3 +41,8 @@ deb-clean: ## Clean Debian build artifacts
 	@rm -f ../prox-mds*.deb ../prox-mds*.changes ../prox-mds*.dsc
 	@rm -f ../deb-packages/*.deb ../deb-packages/*.changes ../deb-packages/*.dsc
 
+lab-setup: ## Prepare QEMU/netns MDS lab host networking
+	@./scripts/qemu-lab/setup-host.sh
+
+lab-e2e: ## Run netns IMDS smoke test (prox-mds must be running)
+	@./scripts/qemu-lab/e2e-netns.sh

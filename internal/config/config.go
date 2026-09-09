@@ -14,17 +14,20 @@ type Config struct {
 
 // MDSConfig holds the metadata service specific configuration
 type MDSConfig struct {
-	ListenAddr         string `yaml:"listen_addr"`
-	JWKSPath          string `yaml:"jwks_path"`
-	AttestationCA     string `yaml:"attestation_ca"`
-	EKCAChain         string `yaml:"ek_ca_chain"`
-	TokenTTL          string `yaml:"token_ttl"`
-	JWTTTL            string `yaml:"jwt_ttl"`
-	EnableEC2Compat   bool   `yaml:"enable_ec2_compat"`
-	EnableTPMAttestation bool `yaml:"enable_tpm_attestation"`
-	TPMDevice         string `yaml:"tpm_device"`
-	HostTPMDevice     string `yaml:"host_tpm_device"`
-	SigningKeyPath    string `yaml:"signing_key_path"`
+	ListenAddr           string `yaml:"listen_addr"`
+	JWKSPath             string `yaml:"jwks_path"`
+	AttestationCA        string `yaml:"attestation_ca"`
+	EKCAChain            string `yaml:"ek_ca_chain"`
+	TokenTTL             string `yaml:"token_ttl"`
+	JWTTTL               string `yaml:"jwt_ttl"`
+	EnableEC2Compat      bool   `yaml:"enable_ec2_compat"`
+	EnableTPMAttestation bool   `yaml:"enable_tpm_attestation"`
+	TPMDevice            string `yaml:"tpm_device"`
+	HostTPMDevice        string `yaml:"host_tpm_device"`
+	SigningKeyPath       string `yaml:"signing_key_path"`
+	// InventoryPath is a YAML VM inventory (MAC → VM ID). When set, it is
+	// preferred over Proxmox /etc/pve parsing so the service can run on plain QEMU.
+	InventoryPath string `yaml:"inventory_path"`
 }
 
 // DefaultConfig returns a configuration with default values
@@ -42,6 +45,7 @@ func DefaultConfig() *Config {
 			TPMDevice:         "/dev/tpm0",
 			HostTPMDevice:     "/dev/tpmrm0",
 			SigningKeyPath:    "/var/lib/prox-mds/signing-key.pem",
+			InventoryPath:     "",
 		},
 	}
 }
