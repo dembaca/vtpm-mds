@@ -15,6 +15,10 @@ import (
 )
 
 // ClientEnroll performs the full DevID enrollment against an MDS base URL.
+// The guest authenticates with:
+//  1. Source MAC → inventory VM identity (server ConnContext / ARP)
+//  2. TPM EK certificate in HeaderEKCert on every enroll request
+//
 // It writes devid.crt.pem, devid.priv.blob, and devid.pub.blob under outDir.
 func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error {
 	if mdsBaseURL == "" {
@@ -34,6 +38,11 @@ func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error
 	}
 	defer res.Flush()
 
+	if sr.EndorsementCertificate == nil {
+		return fmt.Errorf("TPM EK certificate required for enroll authentication")
+	}
+	ekAuth := EncodeEKCertHeader(sr.EndorsementCertificate)
+
 	requestData, err := sr.MarshalBinary()
 	if err != nil {
 		return err
@@ -47,7 +56,7 @@ func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error
 		RequestB64:   base64.StdEncoding.EncodeToString(requestData),
 		SignatureB64: base64.StdEncoding.EncodeToString(sig),
 	})
-	startResp, err := httpPostJSON(mdsBaseURL+"/latest/devid/enroll/start", startBody)
+	startResp, err := httpPostJSON(mdsBaseURL+"/latest/devid/enroll/start", startBody, ekAuth)
 	if err != nil {
 		return fmt.Errorf("enroll/start: %w", err)
 	}
@@ -73,7 +82,7 @@ func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error
 		SessionID:            start.SessionID,
 		ChallengeResponseB64: base64.StdEncoding.EncodeToString(challengeResp),
 	})
-	finishResp, err := httpPostJSON(mdsBaseURL+"/latest/devid/enroll/finish", finishBody)
+	finishResp, err := httpPostJSON(mdsBaseURL+"/latest/devid/enroll/finish", finishBody, ekAuth)
 	if err != nil {
 		return fmt.Errorf("enroll/finish: %w", err)
 	}
@@ -97,9 +106,17 @@ func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error
 	return nil
 }
 
-func httpPostJSON(url string, body []byte) ([]byte, error) {
+func httpPostJSON(url string, body []byte, ekCertHeader string) ([]byte, error) {
 	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if ekCertHeader != "" {
+		req.Header.Set(HeaderEKCert, ekCertHeader)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

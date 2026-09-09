@@ -5,6 +5,8 @@ mds:
   ek_ca_chain: "/etc/prox-mds/ek-chain.pem"
   # DevID CA (optional). When both are present and enable_tpm_attestation is true,
   # POST /latest/devid/enroll/{start,finish} are registered.
+  # Enroll callers must authenticate with MAC→inventory identity AND header
+  # X-qemu-mds-ek-cert (base64 DER of the TPM EK certificate).
   devid_ca_cert: "/etc/prox-mds/devid-ca.pem"
   devid_ca_key: "/etc/prox-mds/devid-ca-key.pem"
   token_ttl: "60s"

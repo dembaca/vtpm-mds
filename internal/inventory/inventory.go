@@ -15,6 +15,9 @@ type VMConfig struct {
 	Name      string            // Optional human-readable name
 	RawConfig map[string]string // Optional key/value metadata
 	MACs      []string          // NIC MAC addresses used for caller identification
+	// EKSHA256 is an optional pin: lowercase hex SHA-256 of the TPM EK
+	// certificate DER. When set, DevID enroll requires a matching EK cert.
+	EKSHA256 string
 }
 
 // VMConfigMap maps VMID to VMConfig.
@@ -23,9 +26,10 @@ type VMConfigMap map[string]*VMConfig
 // File format for YAML inventory used by the QEMU lab (and non-Proxmox hosts).
 type fileFormat struct {
 	VMs []struct {
-		ID   string   `yaml:"id"`
-		Name string   `yaml:"name"`
-		MACs []string `yaml:"macs"`
+		ID       string   `yaml:"id"`
+		Name     string   `yaml:"name"`
+		MACs     []string `yaml:"macs"`
+		EKSHA256 string   `yaml:"ek_sha256"`
 	} `yaml:"vms"`
 }
 
@@ -58,6 +62,7 @@ func LoadYAML(path string) (VMConfigMap, error) {
 			Name:      vm.Name,
 			RawConfig: map[string]string{"name": vm.Name},
 			MACs:      macs,
+			EKSHA256:  strings.ToLower(strings.TrimSpace(vm.EKSHA256)),
 		}
 	}
 

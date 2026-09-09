@@ -10,11 +10,13 @@ import (
 
 // Session holds in-flight enrollment state after a successful start.
 type Session struct {
-	ID        string
-	Nonce     []byte
-	Request   SigningRequest
-	SubjectCN string
-	Created   time.Time
+	ID           string
+	Nonce        []byte
+	Request      SigningRequest
+	SubjectCN    string
+	VMID         string
+	EKFingerprint string
+	Created      time.Time
 }
 
 // SessionStore is an in-memory enroll session map.
@@ -36,7 +38,7 @@ func NewSessionStore(ttl time.Duration) *SessionStore {
 }
 
 // Put stores a session and returns its ID.
-func (s *SessionStore) Put(nonce []byte, sr SigningRequest, subjectCN string) (string, error) {
+func (s *SessionStore) Put(nonce []byte, sr SigningRequest, subjectCN, vmid, ekFP string) (string, error) {
 	idBytes := make([]byte, 16)
 	if _, err := rand.Read(idBytes); err != nil {
 		return "", err
@@ -47,11 +49,13 @@ func (s *SessionStore) Put(nonce []byte, sr SigningRequest, subjectCN string) (s
 	defer s.mu.Unlock()
 	s.purgeLocked()
 	s.sessions[id] = &Session{
-		ID:        id,
-		Nonce:     append([]byte{}, nonce...),
-		Request:   sr,
-		SubjectCN: subjectCN,
-		Created:   time.Now(),
+		ID:            id,
+		Nonce:         append([]byte{}, nonce...),
+		Request:       sr,
+		SubjectCN:     subjectCN,
+		VMID:          vmid,
+		EKFingerprint: ekFP,
+		Created:       time.Now(),
 	}
 	return id, nil
 }
