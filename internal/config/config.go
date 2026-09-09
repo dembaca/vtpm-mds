@@ -18,6 +18,8 @@ type MDSConfig struct {
 	JWKSPath             string `yaml:"jwks_path"`
 	AttestationCA        string `yaml:"attestation_ca"`
 	EKCAChain            string `yaml:"ek_ca_chain"`
+	DevIDCACert          string `yaml:"devid_ca_cert"`
+	DevIDCAKey           string `yaml:"devid_ca_key"`
 	TokenTTL             string `yaml:"token_ttl"`
 	JWTTTL               string `yaml:"jwt_ttl"`
 	EnableEC2Compat      bool   `yaml:"enable_ec2_compat"`
@@ -38,6 +40,8 @@ func DefaultConfig() *Config {
 			JWKSPath:          "/var/lib/prox-mds/jwks.json",
 			AttestationCA:     "/etc/prox-mds/attestation-ca.pem",
 			EKCAChain:         "/etc/prox-mds/ek-chain.pem",
+			DevIDCACert:       "/etc/prox-mds/devid-ca.pem",
+			DevIDCAKey:        "/etc/prox-mds/devid-ca-key.pem",
 			TokenTTL:          "60s",
 			JWTTTL:            "5m",
 			EnableEC2Compat:   true,

@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"log"
 	"net"
@@ -16,6 +18,7 @@ import (
 	"github.com/dembaca/prox-mds/identity"
 	"github.com/dembaca/prox-mds/imds"
 	"github.com/dembaca/prox-mds/internal/config"
+	"github.com/dembaca/prox-mds/internal/devid"
 	"github.com/dembaca/prox-mds/internal/inventory"
 	"github.com/dembaca/prox-mds/internal/proxmox"
 )
@@ -25,6 +28,7 @@ type Server struct {
 	cfg        *config.Config
 	tokenStore *imds.TokenStore
 	nonceStore *attest.NonceStore
+	devid      *devid.Enroller
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -72,6 +76,14 @@ func New(cfg *config.Config) (*Server, error) {
 		mux.HandleFunc("POST /latest/attest", attest.HandleAttest)
 		mux.HandleFunc("GET /latest/identity", identity.HandleIdentity(srv.tokenStore))
 		mux.HandleFunc("GET /.well-known/jwks.json", identity.HandleJWKS)
+
+		if enroller, err := loadDevIDEnroller(cfg); err != nil {
+			log.Printf("Warning: DevID enrollment disabled: %v", err)
+		} else if enroller != nil {
+			srv.devid = enroller
+			devid.Register(mux, enroller)
+			log.Printf("DevID enrollment routes registered")
+		}
 	}
 
 	// Health check
@@ -348,6 +360,49 @@ func RefreshActiveVMConfigCache() error {
 		return fmt.Errorf("server not initialized")
 	}
 	return srv.RefreshVMConfigCache()
+}
+
+func loadDevIDEnroller(cfg *config.Config) (*devid.Enroller, error) {
+	certPath := cfg.MDS.DevIDCACert
+	keyPath := cfg.MDS.DevIDCAKey
+	if certPath == "" || keyPath == "" {
+		log.Printf("Warning: devid_ca_cert/devid_ca_key not set; skipping DevID routes")
+		return nil, nil
+	}
+	if _, err := os.Stat(certPath); err != nil {
+		return nil, fmt.Errorf("DevID CA cert %s: %w", certPath, err)
+	}
+	if _, err := os.Stat(keyPath); err != nil {
+		return nil, fmt.Errorf("DevID CA key %s: %w", keyPath, err)
+	}
+	ca, err := devid.LoadCA(certPath, keyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	ekRoots := x509.NewCertPool()
+	if cfg.MDS.EKCAChain != "" {
+		pemBytes, err := os.ReadFile(cfg.MDS.EKCAChain)
+		if err != nil {
+			return nil, fmt.Errorf("read ek_ca_chain: %w", err)
+		}
+		if !ekRoots.AppendCertsFromPEM(pemBytes) {
+			// Also try parsing a single DER-in-PEM cert manually for clearer errors.
+			block, _ := pem.Decode(pemBytes)
+			if block == nil {
+				return nil, fmt.Errorf("ek_ca_chain: no certificates found")
+			}
+			cert, err := x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("ek_ca_chain: %w", err)
+			}
+			ekRoots.AddCert(cert)
+		}
+	} else {
+		log.Printf("Warning: ek_ca_chain empty; DevID EK verification will fail")
+	}
+
+	return devid.NewEnroller(ca, ekRoots, nil), nil
 }
 
 // vmConfigMiddleware extracts VM config from request context (already set by connContext)

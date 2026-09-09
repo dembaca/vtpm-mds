@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Stop the MDS lab QEMU guest and clean up its tap device.
+# Does not stop the guest vTPM — setup-guest-tpm.sh owns that lifecycle.
 set -euo pipefail
 
 LAB_DIR="${MDS_LAB_DIR:-/var/lib/mds-lab}"

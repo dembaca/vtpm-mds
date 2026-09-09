@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the MDS lab QEMU guest (SSH on host port 2222, IMDS NIC on br-imds).
+# Start the MDS lab QEMU guest with vTPM + IMDS NIC + 9p shared folder.
 set -euo pipefail
 
 LAB_DIR="${MDS_LAB_DIR:-/var/lib/mds-lab}"
@@ -20,6 +20,7 @@ PIDFILE="${RUN_DIR}/${VM_NAME}.pid"
 QMP="${RUN_DIR}/${VM_NAME}.qmp"
 SERIAL="${RUN_DIR}/${VM_NAME}.serial.log"
 TAP_NAME="tap-${VM_NAME}"
+TPM_CTRL="${RUN_DIR}/${VM_NAME}.tpm.sock"
 
 if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
   echo "Guest ${VM_NAME} already running (pid $(cat "$PIDFILE"))"
@@ -31,41 +32,34 @@ if ! ip link show "$BRIDGE" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Create a persistent tap attached to the IMDS bridge
+if [[ ! -S "$TPM_CTRL" ]]; then
+  echo "Guest TPM socket missing; run setup-guest-tpm.sh first" >&2
+  exit 1
+fi
+
 if ! ip link show "$TAP_NAME" >/dev/null 2>&1; then
   sudo ip tuntap add dev "$TAP_NAME" mode tap user "$USER"
   sudo ip link set "$TAP_NAME" master "$BRIDGE"
 fi
 sudo ip link set "$TAP_NAME" up
+sudo ip link set "$BRIDGE" up
 
 ACCEL_ARGS=()
-# Nested KVM on Cloud Agent hosts currently triggers a host kvm BUG in vmx_vcpu_create.
-# Prefer TCG unless MDS_LAB_ACCEL=kvm is explicitly requested and /dev/kvm is usable.
 ACCEL_MODE="${MDS_LAB_ACCEL:-tcg}"
 if [[ "$ACCEL_MODE" == "kvm" && -r /dev/kvm && -w /dev/kvm ]]; then
   ACCEL_ARGS=(-enable-kvm -cpu host)
-  echo "Using KVM acceleration (MDS_LAB_ACCEL=kvm)"
+  echo "Using KVM acceleration"
 else
   ACCEL_ARGS=(-accel tcg,thread=multi -cpu max)
-  if [[ "$ACCEL_MODE" == "kvm" ]]; then
-    echo "WARNING: KVM requested but /dev/kvm not usable; falling back to TCG" >&2
-  else
-    echo "Using TCG emulation (set MDS_LAB_ACCEL=kvm to try nested KVM)"
-  fi
+  echo "Using TCG emulation"
 fi
 
 OVMF_CODE="${OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}"
 OVMF_VARS_TEMPLATE="${OVMF_VARS_TEMPLATE:-/usr/share/OVMF/OVMF_VARS_4M.fd}"
 OVMF_VARS="${VM_DIR}/OVMF_VARS.fd"
-if [[ ! -f "$OVMF_CODE" ]]; then
-  echo "ERROR: OVMF code missing at $OVMF_CODE (install ovmf)" >&2
-  exit 1
-fi
-if [[ ! -f "$OVMF_VARS" ]]; then
-  cp "$OVMF_VARS_TEMPLATE" "$OVMF_VARS"
-fi
+[[ -f "$OVMF_VARS" ]] || cp "$OVMF_VARS_TEMPLATE" "$OVMF_VARS"
 
-# Avoid qemu -daemonize: the parent can hang under this environment's process supervision.
+: >"$SERIAL"
 qemu-system-x86_64 \
   "${ACCEL_ARGS[@]}" \
   -machine q35 \
@@ -79,13 +73,17 @@ qemu-system-x86_64 \
   -device "virtio-net-pci,netdev=net0,mac=52:54:00:11:22:33" \
   -netdev "tap,id=net1,ifname=${TAP_NAME},script=no,downscript=no" \
   -device "virtio-net-pci,netdev=net1,mac=${IMDS_MAC}" \
+  -chardev "socket,id=chrtpm,path=${TPM_CTRL}" \
+  -tpmdev "emulator,id=tpm0,chardev=chrtpm" \
+  -device "tpm-tis,tpmdev=tpm0" \
+  -fsdev "local,id=shared,path=${SHARED},security_model=mapped-xattr" \
+  -device "virtio-9p-pci,fsdev=shared,mount_tag=shared" \
   -display none \
   -serial "file:${SERIAL}" \
   -qmp "unix:${QMP},server,nowait" \
   -pidfile "$PIDFILE" \
   >>"${RUN_DIR}/${VM_NAME}.qemu.log" 2>&1 &
 
-# Wait briefly for pidfile
 for _ in $(seq 1 50); do
   if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
     break
@@ -95,6 +93,7 @@ done
 
 if [[ ! -f "$PIDFILE" ]] || ! kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
   echo "ERROR: guest failed to start; see ${RUN_DIR}/${VM_NAME}.qemu.log" >&2
+  tail -50 "${RUN_DIR}/${VM_NAME}.qemu.log" >&2 || true
   exit 1
 fi
 
@@ -102,4 +101,5 @@ echo "Guest ${VM_NAME} started"
 echo "  pid:    $(cat "$PIDFILE")"
 echo "  ssh:    ssh -p ${SSH_PORT} ubuntu@127.0.0.1"
 echo "  serial: ${SERIAL}"
-echo "  tap:    ${TAP_NAME} -> ${BRIDGE} (MAC ${IMDS_MAC})"
+echo "  shared: ${SHARED}"
+echo "  tpm:    ${TPM_CTRL}"
