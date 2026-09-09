@@ -8,9 +8,12 @@ RUN_DIR="${LAB_DIR}/run"
 PIDFILE="${RUN_DIR}/${VM_NAME}.pid"
 TAP_NAME="tap-${VM_NAME}"
 
-if [[ -f "$PIDFILE" ]]; then
-  pid="$(cat "$PIDFILE")"
-  if kill -0 "$pid" 2>/dev/null; then
+stop_pidfile() {
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  local pid
+  pid="$(cat "$f" 2>/dev/null || true)"
+  if [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null; then
     kill "$pid" || true
     for _ in $(seq 1 20); do
       kill -0 "$pid" 2>/dev/null || break
@@ -20,8 +23,12 @@ if [[ -f "$PIDFILE" ]]; then
       kill -9 "$pid" || true
     fi
   fi
-  rm -f "$PIDFILE"
-fi
+  rm -f "$f"
+}
+
+stop_pidfile "$PIDFILE"
+stop_pidfile "${RUN_DIR}/${VM_NAME}.tpm.pid"
+rm -f "${RUN_DIR}/${VM_NAME}.tpm.sock" 2>/dev/null || true
 
 if ip link show "$TAP_NAME" >/dev/null 2>&1; then
   sudo ip link set "$TAP_NAME" down || true

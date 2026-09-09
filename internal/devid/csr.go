@@ -1,6 +1,7 @@
 package devid
 
 import (
+	"bytes"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -266,9 +267,19 @@ func certifyWithRetry(rw io.ReadWriter, object, signer tpmutil.Handle) ([]byte, 
 	const maxAttempts = 5
 	var last error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		data, sig, err := tpm2.Certify(rw, "", "", object, signer, nil)
+		data, sigBlob, err := tpm2.Certify(rw, "", "", object, signer, nil)
 		if err == nil {
-			return data, sig, nil
+			// Certify returns a TPMT_SIGNATURE blob; store the raw RSA/ECDSA bytes
+			// so server-side PKCS#1 verification works.
+			sig, err := tpm2.DecodeSignature(bytes.NewBuffer(sigBlob))
+			if err != nil {
+				return nil, nil, fmt.Errorf("decode Certify signature: %w", err)
+			}
+			raw, err := signatureBytes(sig)
+			if err != nil {
+				return nil, nil, err
+			}
+			return data, raw, nil
 		}
 		last = err
 		if !isTPMRetry(err) {

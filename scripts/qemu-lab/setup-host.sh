@@ -82,6 +82,8 @@ mds:
   jwks_path: "/var/lib/prox-mds/jwks.json"
   attestation_ca: "/etc/prox-mds/attestation-ca.pem"
   ek_ca_chain: "/etc/prox-mds/ek-chain.pem"
+  devid_ca_cert: "/etc/prox-mds/devid-ca.pem"
+  devid_ca_key: "/etc/prox-mds/devid-ca-key.pem"
   token_ttl: "60s"
   jwt_ttl: "5m"
   enable_ec2_compat: true
