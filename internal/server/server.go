@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/dembaca/prox-mds/identity"
 	"github.com/dembaca/prox-mds/imds"
 	"github.com/dembaca/prox-mds/internal/config"
+	"github.com/dembaca/prox-mds/internal/inventory"
 	"github.com/dembaca/prox-mds/internal/proxmox"
 )
 
@@ -32,8 +34,12 @@ func New(cfg *config.Config) (*Server, error) {
 		nonceStore: attest.NewNonceStore(),
 	}
 
-	// Load VM config cache on startup (auto-detect node name from /etc/pve/nodes/)
-	if err := RefreshVMConfigCache(""); err != nil {
+	activeServerMu.Lock()
+	activeServer = srv
+	activeServerMu.Unlock()
+
+	// Load VM inventory (YAML path preferred; otherwise Proxmox /etc/pve)
+	if err := srv.RefreshVMConfigCache(); err != nil {
 		log.Printf("Warning: Failed to load VM config cache on startup: %v", err)
 	}
 
@@ -153,7 +159,7 @@ func connContext(ctx context.Context, c net.Conn) context.Context {
 		})
 		if vmConn.vmConfig != nil {
 			log.Printf("[DEBUG connContext] Setting VM config in context: VMID=%s", vmConn.vmid)
-			return context.WithValue(ctx, proxmox.VMConfigContextKey, vmConn.vmConfig)
+			return context.WithValue(ctx, inventory.VMConfigContextKey, vmConn.vmConfig)
 		} else {
 			log.Printf("[DEBUG connContext] No VM config found for connection from %s", c.RemoteAddr())
 		}
@@ -192,7 +198,7 @@ type vmConnection struct {
 	*net.TCPConn
 	vmConfigOnce sync.Once
 	vmid         string
-	vmConfig     *proxmox.VMConfig
+	vmConfig     *inventory.VMConfig
 }
 
 func (c *vmConnection) Read(b []byte) (int, error) {
@@ -269,19 +275,21 @@ func (c *vmConnection) getMACFromARP(ip string) string {
 
 // vmConfigCache caches VM configs
 var (
-	vmConfigCache   proxmox.VMConfigMap // map[string]*VMConfig: VMID -> VMConfig
+	vmConfigCache   inventory.VMConfigMap // VMID -> VMConfig
 	vmConfigCacheMu sync.RWMutex
+	activeServer    *Server
+	activeServerMu  sync.RWMutex
 )
 
 // findVMConfigByMAC finds the VM config for the given MAC address
-func (c *vmConnection) findVMConfigByMAC(mac string) *proxmox.VMConfig {
+func (c *vmConnection) findVMConfigByMAC(mac string) *inventory.VMConfig {
 	mac = strings.ToLower(strings.TrimSpace(mac))
 	log.Printf("[DEBUG findVMConfigByMAC] Looking for VM config with MAC: %s", mac)
 
 	vmConfigCacheMu.RLock()
 	defer vmConfigCacheMu.RUnlock()
 
-	vmid := proxmox.GetVMIDByMAC(vmConfigCache, mac)
+	vmid := inventory.GetVMIDByMAC(vmConfigCache, mac)
 	if vmid != "" {
 		vmConfig, ok := vmConfigCache[vmid]
 		if ok && vmConfig != nil {
@@ -294,32 +302,52 @@ func (c *vmConnection) findVMConfigByMAC(mac string) *proxmox.VMConfig {
 	return nil
 }
 
-// RefreshVMConfigCache parses VM config files and caches VM configurations
-// This can be called from a signal handler to reload VM configs
-func RefreshVMConfigCache(nodeName string) error {
+// RefreshVMConfigCache reloads VM identity data for caller identification.
+// Prefer YAML inventory (QEMU lab / non-Proxmox); fall back to Proxmox configs.
+func (s *Server) RefreshVMConfigCache() error {
 	vmConfigCacheMu.Lock()
 	defer vmConfigCacheMu.Unlock()
 
-	log.Printf("[DEBUG RefreshVMConfigCache] Starting VM config cache refresh (node: %s)", nodeName)
+	var (
+		vmConfigMap inventory.VMConfigMap
+		err         error
+		source      string
+	)
 
-	// Parse VM configs
-	vmConfigMap, err := proxmox.ParseVMConfigs(nodeName)
+	if s.cfg.MDS.InventoryPath != "" {
+		source = s.cfg.MDS.InventoryPath
+		log.Printf("[DEBUG RefreshVMConfigCache] Loading YAML inventory from %s", source)
+		vmConfigMap, err = inventory.LoadYAML(s.cfg.MDS.InventoryPath)
+	} else {
+		source = "proxmox:/etc/pve"
+		log.Printf("[DEBUG RefreshVMConfigCache] Loading Proxmox VM configs")
+		vmConfigMap, err = proxmox.ParseVMConfigs("")
+	}
 	if err != nil {
-		log.Printf("[DEBUG RefreshVMConfigCache] Failed to parse VM configs: %v", err)
+		log.Printf("[DEBUG RefreshVMConfigCache] Failed to load VM configs from %s: %v", source, err)
 		return err
 	}
 
-	// Replace cache with new data
 	vmConfigCache = vmConfigMap
 
-	// Count total MAC addresses
 	macCount := 0
 	for _, vmConfig := range vmConfigCache {
 		macCount += len(vmConfig.MACs)
 	}
 
-	log.Printf("[DEBUG RefreshVMConfigCache] Cache refresh complete: %d VMs, %d MAC addresses cached", len(vmConfigCache), macCount)
+	log.Printf("[DEBUG RefreshVMConfigCache] Cache refresh complete (%s): %d VMs, %d MAC addresses cached", source, len(vmConfigCache), macCount)
 	return nil
+}
+
+// RefreshActiveVMConfigCache reloads inventory for the running server (SIGHUP).
+func RefreshActiveVMConfigCache() error {
+	activeServerMu.RLock()
+	srv := activeServer
+	activeServerMu.RUnlock()
+	if srv == nil {
+		return fmt.Errorf("server not initialized")
+	}
+	return srv.RefreshVMConfigCache()
 }
 
 // vmConfigMiddleware extracts VM config from request context (already set by connContext)

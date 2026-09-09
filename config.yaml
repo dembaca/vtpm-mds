@@ -10,4 +10,6 @@ mds:
   tpm_device: "/dev/tpm0"
   host_tpm_device: "/dev/tpmrm0"
   signing_key_path: "/var/lib/prox-mds/signing-key.pem"
+  # Optional YAML inventory (preferred). When empty, falls back to Proxmox /etc/pve.
+  # inventory_path: "/var/lib/mds-lab/inventory/lab.yaml"
 

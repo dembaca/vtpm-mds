@@ -22,13 +22,9 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestLoadMissingFile(t *testing.T) {
-	cfg, err := Load("/nonexistent/config.yaml")
-	if err != nil {
-		t.Fatalf("Load should return default config for missing file, got error: %v", err)
-	}
-	
-	if cfg == nil {
-		t.Fatal("Load should return default config, got nil")
+	_, err := Load("/nonexistent/config.yaml")
+	if err == nil {
+		t.Fatal("Load should return an error for a missing file")
 	}
 }
 
