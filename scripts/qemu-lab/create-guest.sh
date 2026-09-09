@@ -41,7 +41,7 @@ else
   echo "Reusing existing disk ${VM_DIR}/disk.qcow2 (instance-id=${INSTANCE_ID} forces cloud-init)"
 fi
 
-# Cloud-init oneshot: bring up IMDS NIC by MAC (q35 names enp0s*), enroll DevID, mirror to 9p.
+# cloud-init runcmd runs under /bin/sh (dash). Ship a bash script via write_files.
 cat >"${VM_DIR}/user-data" <<EOF
 #cloud-config
 hostname: ${VM_NAME}
@@ -58,86 +58,89 @@ package_update: false
 bootcmd:
   - [ mkdir, -p, /mnt/shared ]
   - [ mount, -t, 9p, -o, trans=virtio,version=9p2000.L,shared, /mnt/shared ]
-runcmd:
-  - |
-    set -euo pipefail
-    exec > >(tee -a /mnt/shared/devid-enroll.log) 2>&1
-    echo "devid oneshot starting \$(date -Is)"
+write_files:
+  - path: /usr/local/sbin/devid-enroll-oneshot
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      mkdir -p /mnt/shared /mnt/shared/devid-out
+      mountpoint -q /mnt/shared || mount -t 9p -o trans=virtio,version=9p2000.L shared /mnt/shared
+      exec > >(tee -a /mnt/shared/devid-enroll.log) 2>&1
+      echo "devid oneshot starting \$(date -Is)"
 
-    mkdir -p /mnt/shared /mnt/shared/devid-out
-    mountpoint -q /mnt/shared || mount -t 9p -o trans=virtio,version=9p2000.L shared /mnt/shared
+      iface_by_mac() {
+        local mac="\$1" path iface
+        mac="\$(echo "\$mac" | tr '[:upper:]' '[:lower:]')"
+        for path in /sys/class/net/*/address; do
+          if [ "\$(cat "\$path" | tr '[:upper:]' '[:lower:]')" = "\$mac" ]; then
+            iface="\$(basename "\$(dirname "\$path")")"
+            echo "\$iface"
+            return 0
+          fi
+        done
+        return 1
+      }
 
-    iface_by_mac() {
-      local mac="\$1" path iface
-      mac="\$(echo "\$mac" | tr '[:upper:]' '[:lower:]')"
-      for path in /sys/class/net/*/address; do
-        if [ "\$(cat "\$path" | tr '[:upper:]' '[:lower:]')" = "\$mac" ]; then
-          iface="\$(basename "\$(dirname "\$path")")"
-          echo "\$iface"
-          return 0
+      IMDS_IF=""
+      for i in \$(seq 1 60); do
+        if IMDS_IF=\$(iface_by_mac ${IMDS_MAC}); then
+          break
         fi
+        sleep 1
       done
-      return 1
-    }
-
-    IMDS_IF=""
-    for i in \$(seq 1 60); do
-      if IMDS_IF=\$(iface_by_mac ${IMDS_MAC}); then
-        break
+      if [ -z "\${IMDS_IF}" ]; then
+        echo "IMDS NIC ${IMDS_MAC} not found" >&2
+        ip -br link || true
+        echo 1 > /mnt/shared/DONE
+        exit 1
       fi
-      sleep 1
-    done
-    if [ -z "\${IMDS_IF}" ]; then
-      echo "IMDS NIC ${IMDS_MAC} not found" >&2
-      ip -br link || true
-      echo 1 > /mnt/shared/DONE
-      exit 1
-    fi
 
-    ip link set "\${IMDS_IF}" up
-    ip addr replace ${IMDS_GUEST_IP}/${IMDS_PREFIX} dev "\${IMDS_IF}"
-    # On-link reachability to host MDS / classic IMDS address.
-    ip route replace ${IMDS_HOST_IP}/32 dev "\${IMDS_IF}" || true
-    ip route replace 169.254.169.254/32 dev "\${IMDS_IF}" || true
-    echo "IMDS NIC \${IMDS_IF} configured as ${IMDS_GUEST_IP}/${IMDS_PREFIX}"
-    ip -br addr show "\${IMDS_IF}" || true
+      ip link set "\${IMDS_IF}" up
+      ip addr replace ${IMDS_GUEST_IP}/${IMDS_PREFIX} dev "\${IMDS_IF}"
+      ip route replace ${IMDS_HOST_IP}/32 dev "\${IMDS_IF}" || true
+      ip route replace 169.254.169.254/32 dev "\${IMDS_IF}" || true
+      echo "IMDS NIC \${IMDS_IF} configured as ${IMDS_GUEST_IP}/${IMDS_PREFIX}"
+      ip -br addr show "\${IMDS_IF}" || true
 
-    TPM_PATH=/dev/tpmrm0
-    if [ ! -c "\$TPM_PATH" ]; then
-      TPM_PATH=/dev/tpm0
-    fi
-    for i in \$(seq 1 60); do
-      [ -c "\$TPM_PATH" ] && break
-      sleep 1
-    done
-    if [ ! -c "\$TPM_PATH" ]; then
-      echo "no TPM device" >&2
-      ls -la /dev/tpm* || true
-      echo 1 > /mnt/shared/DONE
-      exit 1
-    fi
-
-    for i in \$(seq 1 60); do
-      if curl -fsS -m 2 -o /dev/null -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 60" http://169.254.169.254/latest/api/token; then
-        echo "IMDS reachable after \${i} attempts"
-        break
+      TPM_PATH=/dev/tpmrm0
+      if [ ! -c "\$TPM_PATH" ]; then
+        TPM_PATH=/dev/tpm0
       fi
-      sleep 2
-    done
+      for i in \$(seq 1 60); do
+        [ -c "\$TPM_PATH" ] && break
+        sleep 1
+      done
+      if [ ! -c "\$TPM_PATH" ]; then
+        echo "no TPM device" >&2
+        ls -la /dev/tpm* || true
+        echo 1 > /mnt/shared/DONE
+        exit 1
+      fi
 
-    chmod +x /mnt/shared/devid-enroll
-    set +e
-    /mnt/shared/devid-enroll \
-      -tpm "\${TPM_PATH}" \
-      -mds http://169.254.169.254 \
-      -out /mnt/shared/devid-out \
-      -cn ${VM_NAME}
-    rc=\$?
-    set -e
-    echo "\$rc" > /mnt/shared/DONE
-    chmod -R a+rX /mnt/shared/devid-out /mnt/shared/DONE /mnt/shared/devid-enroll.log 2>/dev/null || true
-    echo "devid oneshot finished rc=\$rc \$(date -Is)"
-    exit "\$rc"
+      for i in \$(seq 1 60); do
+        if curl -fsS -m 2 -o /dev/null -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 60" http://169.254.169.254/latest/api/token; then
+          echo "IMDS reachable after \${i} attempts"
+          break
+        fi
+        sleep 2
+      done
+
+      chmod +x /mnt/shared/devid-enroll
+      set +e
+      /mnt/shared/devid-enroll \\
+        -tpm "\${TPM_PATH}" \\
+        -mds http://169.254.169.254 \\
+        -out /mnt/shared/devid-out \\
+        -cn ${VM_NAME}
+      rc=\$?
+      set -e
+      echo "\$rc" > /mnt/shared/DONE
+      chmod -R a+rX /mnt/shared/devid-out /mnt/shared/DONE /mnt/shared/devid-enroll.log 2>/dev/null || true
+      echo "devid oneshot finished rc=\$rc \$(date -Is)"
+      exit "\$rc"
+runcmd:
+  - [ /usr/local/sbin/devid-enroll-oneshot ]
 EOF
 
 cat >"${VM_DIR}/meta-data" <<EOF
@@ -146,6 +149,7 @@ local-hostname: ${VM_NAME}
 EOF
 
 # Match NICs by MAC — q35 virtio-net names are enp0s2/enp0s3, not ens3/ens4.
+# /16 on the IMDS NIC makes 169.254.169.1 and .254 on-link.
 cat >"${VM_DIR}/network-config" <<EOF
 version: 2
 ethernets:
@@ -161,11 +165,6 @@ ethernets:
     dhcp4: false
     addresses:
       - ${IMDS_GUEST_IP}/${IMDS_PREFIX}
-    routes:
-      - to: ${IMDS_HOST_IP}/32
-        scope: link
-      - to: 169.254.169.254/32
-        scope: link
 EOF
 
 cloud-localds -N "${VM_DIR}/network-config" "${VM_DIR}/seed.iso" "${VM_DIR}/user-data" "${VM_DIR}/meta-data"

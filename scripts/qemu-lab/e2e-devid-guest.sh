@@ -17,8 +17,6 @@ go build -o bin/devid-enroll ./cmd/devid-enroll
 ./scripts/qemu-lab/gen-lab-pki.sh
 ./scripts/qemu-lab/setup-host.sh
 ./scripts/qemu-lab/download-image.sh
-./scripts/qemu-lab/setup-guest-tpm.sh
-./scripts/qemu-lab/create-guest.sh
 
 # Ensure MDS is running with DevID CA
 if ! curl -fsS http://169.254.169.1/health >/dev/null 2>&1; then
@@ -27,8 +25,10 @@ if ! curl -fsS http://169.254.169.1/health >/dev/null 2>&1; then
 fi
 curl -fsS http://169.254.169.1/health >/dev/null
 
-# Stop prior guest if any
+# Stop prior guest before recreating TPM/seed
 ./scripts/qemu-lab/stop-guest.sh >/dev/null 2>&1 || true
+./scripts/qemu-lab/setup-guest-tpm.sh
+./scripts/qemu-lab/create-guest.sh
 ./scripts/qemu-lab/start-guest.sh
 
 echo "Waiting up to ${WAIT_SECS}s for guest DevID enrollment (TCG boot is slow)..."
