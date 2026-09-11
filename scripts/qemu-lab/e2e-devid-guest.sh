@@ -20,7 +20,7 @@ go build -o bin/devid-enroll ./cmd/devid-enroll
 
 # Ensure MDS is running with DevID CA
 if ! curl -fsS http://169.254.169.1/health >/dev/null 2>&1; then
-  sudo ./bin/qemu-mds -config /etc/prox-mds/config.lab.yaml -debug >/tmp/qemu-mds.log 2>&1 &
+  sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.lab.yaml -debug >/tmp/vtpm-mds.log 2>&1 &
   sleep 1
 fi
 curl -fsS http://169.254.169.1/health >/dev/null

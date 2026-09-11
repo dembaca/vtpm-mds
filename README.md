@@ -1,12 +1,11 @@
-# qemu-mds / prox-mds — QEMU Metadata & Attestation Service
+# vtpm-mds — QEMU Metadata & Attestation Service
 
 A lightweight **metadata and attestation service** for QEMU-based hosting environments
 (Proxmox VE is a first-class inventory backend). It provides cloud-style **Instance
 Metadata Service (IMDS)** functionality and **TPM-anchored workload identity** for VMs,
 including SPIRE-compatible **TPM DevID** enrollment.
 
-Binary names: `prox-mds` (legacy) and `qemu-mds` (preferred alias). Module path remains
-`github.com/dembaca/prox-mds`.
+Binary: `vtpm-mds` (aliases: `qemu-mds`, `prox-mds`). Module path: `github.com/dembaca/vtpm-mds`.
 
 ## Features
 
@@ -24,21 +23,21 @@ Binary names: `prox-mds` (legacy) and `qemu-mds` (preferred alias). Module path 
 
 ```bash
 make build
-# also builds: bin/qemu-mds (copy/alias), bin/devid-enroll (guest client)
+# also builds aliases bin/qemu-mds, bin/prox-mds and guest client bin/devid-enroll
 ```
 
 ### Configuration
 
-Create `/etc/prox-mds/config.yaml` (see `config.yaml` for the full template):
+Create `/etc/vtpm-mds/config.yaml` (see `config.yaml` for the full template):
 
 ```yaml
 mds:
   listen_addr: "169.254.169.1:80"
-  jwks_path: "/var/lib/prox-mds/jwks.json"
-  attestation_ca: "/etc/prox-mds/attestation-ca.pem"
-  ek_ca_chain: "/etc/prox-mds/ek-chain.pem"
-  devid_ca_cert: "/etc/prox-mds/devid-ca.pem"
-  devid_ca_key: "/etc/prox-mds/devid-ca-key.pem"
+  jwks_path: "/var/lib/vtpm-mds/jwks.json"
+  attestation_ca: "/etc/vtpm-mds/attestation-ca.pem"
+  ek_ca_chain: "/etc/vtpm-mds/ek-chain.pem"
+  devid_ca_cert: "/etc/vtpm-mds/devid-ca.pem"
+  devid_ca_key: "/etc/vtpm-mds/devid-ca-key.pem"
   token_ttl: "60s"
   jwt_ttl: "5m"
   enable_ec2_compat: true
@@ -50,8 +49,8 @@ mds:
 ### Run
 
 ```bash
-sudo ./bin/qemu-mds -config /etc/prox-mds/config.yaml
-# or: sudo ./bin/prox-mds -config /etc/prox-mds/config.yaml
+sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.yaml
+# or: sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.yaml
 ```
 
 ## API Endpoints
@@ -86,7 +85,7 @@ Registered when `devid_ca_cert` / `devid_ca_key` are set and TPM attestation is 
 **Authentication (both calls):**
 
 1. **MAC → inventory** — caller identified via ARP / ConnContext (same as metadata)
-2. **`X-qemu-mds-ek-cert`** — base64(DER) of the guest TPM Endorsement Key certificate;
+2. **`X-vtpm-mds-ek-cert`** — base64(DER) of the guest TPM Endorsement Key certificate;
    must chain to `ek_ca_chain`, match the CSR EK on `start`, and match the session on `finish`
 
 Optional inventory pin: `ek_sha256` (hex SHA-256 of EK cert DER).
@@ -106,14 +105,14 @@ make test
 # QEMU/netns lab (no Proxmox required)
 ./scripts/qemu-lab/cloud-install.sh
 ./scripts/qemu-lab/cloud-start.sh
-sudo ./bin/qemu-mds -config /etc/prox-mds/config.lab.yaml &
+sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.lab.yaml &
 make lab-e2e          # fast IMDS netns smoke
 make lab-devid-e2e    # full guest vTPM DevID enrollment
 ```
 
 See [`scripts/qemu-lab/README.md`](scripts/qemu-lab/README.md) for the nested-guest lab.
 
-Architecture notes: [`prox-mds_README.md`](prox-mds_README.md).  
+Architecture notes: [`vtpm-mds_README.md`](vtpm-mds_README.md).  
 Remote/Proxmox workflows: [`DEVELOPMENT.md`](DEVELOPMENT.md), [`SETUP_REMOTE.md`](SETUP_REMOTE.md).
 
 ## Testing

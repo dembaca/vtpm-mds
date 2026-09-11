@@ -1,4 +1,4 @@
-module github.com/dembaca/prox-mds
+module github.com/dembaca/vtpm-mds
 
 go 1.24.0
 

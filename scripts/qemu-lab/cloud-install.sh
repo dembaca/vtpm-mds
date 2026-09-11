@@ -8,8 +8,8 @@ cd "$ROOT"
 chmod +x scripts/qemu-lab/*.sh
 
 # Durable lab directories (snapshot-friendly)
-sudo mkdir -p /var/lib/mds-lab/{images,vms,run,inventory} /etc/mds-lab /etc/prox-mds /var/lib/prox-mds
-sudo chown -R "$(id -u):$(id -g)" /var/lib/mds-lab /etc/mds-lab /var/lib/prox-mds || true
+sudo mkdir -p /var/lib/mds-lab/{images,vms,run,inventory} /etc/mds-lab /etc/vtpm-mds /var/lib/vtpm-mds
+sudo chown -R "$(id -u):$(id -g)" /var/lib/mds-lab /etc/mds-lab /var/lib/vtpm-mds || true
 
 # Ensure kvm device node is present/accessible for hosts where nested KVM works.
 # Cloud Agent VMs currently hit a host kvm BUG on vcpu create; lab defaults to TCG.
@@ -39,7 +39,7 @@ make build
 cp -f testdata/vm-inventory/lab.yaml /var/lib/mds-lab/inventory/lab.yaml
 ln -sfn /var/lib/mds-lab/inventory/lab.yaml /etc/mds-lab/inventory.yaml
 
-echo "prox-mds cloud install complete"
-./bin/prox-mds -h 2>&1 | head -5 || true
+echo "vtpm-mds cloud install complete"
+./bin/vtpm-mds -h 2>&1 | head -5 || true
 qemu-system-x86_64 --version | head -1
 ls -lh /var/lib/mds-lab/images/

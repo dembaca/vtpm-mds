@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dembaca/prox-mds/internal/inventory"
+	"github.com/dembaca/vtpm-mds/internal/inventory"
 	"github.com/google/go-tpm/legacy/tpm2"
 )
 

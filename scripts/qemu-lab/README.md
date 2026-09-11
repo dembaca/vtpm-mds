@@ -1,8 +1,8 @@
 # QEMU MDS Lab
 
-Nested-guest harness for developing **qemu-mds** without Proxmox.
+Nested-guest harness for developing **vtpm-mds** without Proxmox.
 
-The Cloud Agent / lab host acts as the hypervisor: `qemu-mds` listens on
+The Cloud Agent / lab host acts as the hypervisor: `vtpm-mds` listens on
 `169.254.169.1:80`, bridge `br-imds` also owns `169.254.169.254` (DNAT → `:80`),
 and callers are identified by **ARP MAC → YAML inventory**.
 
@@ -26,7 +26,7 @@ and callers are identified by **ARP MAC → YAML inventory**.
 ```bash
 ./scripts/qemu-lab/cloud-install.sh
 ./scripts/qemu-lab/cloud-start.sh
-sudo ./bin/qemu-mds -config /etc/prox-mds/config.lab.yaml &
+sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.lab.yaml &
 ./scripts/qemu-lab/e2e-netns.sh
 ```
 
@@ -39,12 +39,12 @@ Boots a QEMU guest with vTPM, runs a **cloud-init oneshot** that:
 
 1. Brings up the IMDS NIC **by MAC** (q35 names are `enp0s*`, not `ens4`)
 2. Runs `devid-enroll` against `http://169.254.169.254`
-3. Authenticates with **MAC inventory + `X-qemu-mds-ek-cert`**
+3. Authenticates with **MAC inventory + `X-vtpm-mds-ek-cert`**
 4. Writes SPIRE `tpm_devid` materials onto the 9p share
 
 ```bash
 make build
-sudo ./bin/qemu-mds -config /etc/prox-mds/config.lab.yaml &
+sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.lab.yaml &
 sudo ./scripts/qemu-lab/e2e-devid-guest.sh
 # materials: /var/lib/mds-lab/vms/guest100/shared/devid-out/
 #   devid.crt.pem  devid.priv.blob  devid.pub.blob
@@ -76,8 +76,8 @@ service falls back to Proxmox qemu-server configs under `/etc/pve`.
 
 | Path | Role |
 |------|------|
-| `/etc/prox-mds/config.lab.yaml` | MDS listen + inventory + DevID CA paths |
-| `/etc/prox-mds/devid-ca.pem` / `devid-ca-key.pem` | Lab DevID issuing CA |
-| `/etc/prox-mds/ek-chain.pem` | Trust store for guest EK certs (swtpm-localca) |
+| `/etc/vtpm-mds/config.lab.yaml` | MDS listen + inventory + DevID CA paths |
+| `/etc/vtpm-mds/devid-ca.pem` / `devid-ca-key.pem` | Lab DevID issuing CA |
+| `/etc/vtpm-mds/ek-chain.pem` | Trust store for guest EK certs (swtpm-localca) |
 | `/var/lib/mds-lab/inventory/lab.yaml` | YAML VM inventory |
 | `/var/lib/mds-lab/vms/guest100/` | Disk, seed, shared/, tpm/ |

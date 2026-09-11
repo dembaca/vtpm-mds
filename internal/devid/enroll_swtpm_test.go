@@ -30,7 +30,7 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 		t.Fatalf("residency: %v", err)
 	}
 
-	ekPEM, err := os.ReadFile("/etc/prox-mds/ek-chain.pem")
+	ekPEM, err := os.ReadFile("/etc/vtpm-mds/ek-chain.pem")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 		t.Fatalf("ek cert: %v", err)
 	}
 
-	ca, err := LoadCA("/etc/prox-mds/devid-ca.pem", "/etc/prox-mds/devid-ca-key.pem")
+	ca, err := LoadCA("/etc/vtpm-mds/devid-ca.pem", "/etc/vtpm-mds/devid-ca-key.pem")
 	if err != nil {
 		t.Fatal(err)
 	}

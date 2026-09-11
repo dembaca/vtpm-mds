@@ -14,13 +14,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dembaca/prox-mds/attest"
-	"github.com/dembaca/prox-mds/identity"
-	"github.com/dembaca/prox-mds/imds"
-	"github.com/dembaca/prox-mds/internal/config"
-	"github.com/dembaca/prox-mds/internal/devid"
-	"github.com/dembaca/prox-mds/internal/inventory"
-	"github.com/dembaca/prox-mds/internal/proxmox"
+	"github.com/dembaca/vtpm-mds/attest"
+	"github.com/dembaca/vtpm-mds/identity"
+	"github.com/dembaca/vtpm-mds/imds"
+	"github.com/dembaca/vtpm-mds/internal/config"
+	"github.com/dembaca/vtpm-mds/internal/devid"
+	"github.com/dembaca/vtpm-mds/internal/inventory"
+	"github.com/dembaca/vtpm-mds/internal/proxmox"
 )
 
 type Server struct {
