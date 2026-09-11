@@ -1,148 +1,186 @@
-# prox-mds — Proxmox Metadata & Attestation Service
+# qemu-mds / prox-mds — Architecture & Design Anchor
 
-## 🧩 Overview
+## Overview
 
-**prox-mds** is a lightweight **metadata and attestation service** for Proxmox VE environments.
-It provides cloud-style **Instance Metadata Service (IMDS)** functionality and a **TPM-anchored workload identity** layer for virtual machines.
+**qemu-mds** (legacy name **prox-mds**) is a lightweight **metadata and attestation service**
+for QEMU-based hosting. **Proxmox VE** is a special inventory/hosting subclass (parse
+`/etc/pve`); plain QEMU labs use a YAML inventory.
 
-The goal is to enable **secure workload identity** (SPIFFE/SPIRE, Teleport, Vault, Kubernetes) inside DG-i’s private cloud without depending on external cloud infrastructure.
+It provides cloud-style **Instance Metadata Service (IMDS)** functionality and a
+**TPM-anchored workload identity** layer for virtual machines—including issuance of
+**IEEE 802.1AR / TCG LDevID** certificates for SPIRE’s `tpm_devid` node attestor.
 
----
-
-## 🎯 Key Goals
-
-- **Cloud-compatible metadata API** — an EC2-IMDSv2-compatible endpoint for cloud-init and generic tooling.
-- **TPM-anchored attestation** — verify VM identity and integrity using vTPM (swtpm) quotes and EKCerts.
-- **Short-lived identity documents (JWT/JWS)** — signed by host TPM-sealed keys, consumable by SPIRE, Teleport, and Vault.
-- **Secure multi-tenant isolation** — per-bridge IMDS interface with L2 isolation and iif-based nftables filters.
-- **Host-anchored trust** — host TPM keys seal the attestation signing material.
+The goal is secure workload identity (SPIFFE/SPIRE, Teleport, Vault, Kubernetes) in
+private cloud without depending on external cloud IMDS.
 
 ---
 
-## 🧠 Architecture Summary
+## Key Goals
+
+- **Cloud-compatible metadata API** — EC2-IMDSv2-compatible endpoint for cloud-init and tooling
+- **TPM-anchored attestation** — verify VM identity using vTPM (swtpm) quotes and EKCerts
+- **TPM DevID provisioning** — modern go-tpm reimplementation of HP-style LDevID enrollment over IMDS HTTP (not gRPC)
+- **Short-lived identity documents (JWT/JWS)** — consumable by SPIRE, Teleport, and Vault
+- **Caller binding** — MAC → inventory for tenant isolation; DevID enroll also requires EK cert auth
+- **Host-anchored trust** — EK CA chain + DevID CA; host TPM sealing for JWT keys (roadmap)
+
+---
+
+## Architecture Summary
 
 ```
 +-------------------------------------------------------------+
 |                     Control Plane / Consumers               |
-|   SPIRE / Teleport / Vault / K8s Webhooks / Brokers         |
+|   SPIRE (tpm_devid / JWT) / Teleport / Vault / K8s          |
 +-----------------------------▲-------------------------------+
-                              │  verify JWT / JWS (JWKS)
+                              │  JWKS / DevID trust
                               │
 +-----------------------------│-------------------------------+
-|                Proxmox Host (pmx-mds daemon)                 |
-|  - swtpm_localca (issues EKCerts via DG-i EK CA)             |
-|  - prox-mds service:                                         |
-|      • /latest/api/token (IMDSv2)                            |
-|      • /latest/meta-data/* (EC2-compatible)                  |
-|      • /latest/attest/* (TPM attestation)                    |
-|      • /latest/identity (signed JWT/JWS)                     |
-|  - Host key sealed to physical TPM (PCR policy)              |
-|  - nftables: iif filter + DNAT 169.254.169.254 → 169.254.169.1 |
+|           QEMU host (Proxmox or plain QEMU lab)             |
+|  - swtpm_localca (issues EKCerts)                           |
+|  - qemu-mds / prox-mds:                                     |
+|      • /latest/api/token (IMDSv2)                           |
+|      • /latest/meta-data/* (EC2-compatible)                 |
+|      • /latest/attest/* (TPM attestation)                   |
+|      • /latest/identity (signed JWT/JWS)                    |
+|      • /latest/devid/enroll/{start,finish} (LDevID)         |
+|  - Inventory: YAML path  -or-  Proxmox /etc/pve             |
+|  - nftables/iptables: DNAT 169.254.169.254 → listen addr    |
 +-----------------------------▲-------------------------------+
                               │
-                 Dedicated bridge: vmbr_imds
+                 Dedicated bridge (br-imds / vmbr_imds)
                               │
 +-----------------------------│-------------------------------+
 |                  Virtual Machines (with vTPM)                |
-|  - swtpm-backed TPM 2.0 device                               |
-|  - Agents: SPIRE / Teleport / Vault                          |
-|  - Secondary NIC → vmbr_imds (no VLAN dependency)            |
-|  - Calls prox-mds endpoints to get attested identity         |
+|  - swtpm-backed TPM 2.0                                     |
+|  - cloud-init oneshot: devid-enroll                         |
+|      auth: MAC + X-qemu-mds-ek-cert                         |
+|  - SPIRE agent: tpm_devid materials                         |
+|  - Secondary NIC on IMDS bridge                             |
 +-------------------------------------------------------------+
 ```
 
 ---
 
-## ⚙️ Key Endpoints
+## Key Endpoints
 
 | Endpoint | Method | Description | Compatibility |
 |-----------|---------|--------------|---------------|
-| `/latest/api/token` | PUT | Issue short-lived IMDSv2 token | ✅ EC2-compatible |
-| `/latest/meta-data/*` | GET | Instance metadata tree | ✅ EC2-compatible |
-| `/latest/dynamic/instance-identity/document` | GET | EC2-style IID (shape-compatible) | ✅ partial |
-| `/latest/dynamic/instance-identity/signature` | GET | PKCS#7 signature (DG-i Attestation CA) | ⚠️ AWS-incompatible |
-| `/latest/attest/nonce` | GET | Request nonce for TPM quote | 🔒 attestation |
-| `/latest/attest` | POST | Submit TPM quote + EKCert for validation | 🔒 attestation |
-| `/latest/identity` | GET | Retrieve DG-i signed JWT/JWS identity | 🔒 attestation |
-| `/.well-known/jwks.json` | GET | Public JWKS for verifiers | 🔒 attestation |
+| `/latest/api/token` | PUT | Issue short-lived IMDSv2 token | EC2-compatible |
+| `/latest/meta-data/*` | GET | Instance metadata tree | EC2-compatible |
+| `/latest/dynamic/instance-identity/document` | GET | EC2-style IID | partial |
+| `/latest/dynamic/instance-identity/signature` | GET | PKCS#7 signature | AWS-incompatible |
+| `/latest/attest/nonce` | GET | Request nonce for TPM quote | attestation |
+| `/latest/attest` | POST | Submit TPM quote + EKCert | attestation |
+| `/latest/identity` | GET | Retrieve signed JWT/JWS identity | attestation |
+| `/.well-known/jwks.json` | GET | Public JWKS for verifiers | attestation |
+| `/latest/devid/enroll/start` | POST | DevID CSR → credential challenge | SPIRE DevID |
+| `/latest/devid/enroll/finish` | POST | Challenge response → LDevID PEM | SPIRE DevID |
+
+### DevID enroll authentication
+
+Both enroll calls require:
+
+1. **MAC → inventory** VM identity (ConnContext / ARP), same binding as metadata
+2. Header **`X-qemu-mds-ek-cert`**: base64(DER) of the TPM EK certificate, trusted via
+   `ek_ca_chain`, matching the CSR (start) and the enroll session (finish)
+
+Optional YAML inventory field `ek_sha256` pins a specific EK certificate to a VM.
+
+Guest client (`cmd/devid-enroll`) performs credential activation locally and writes:
+
+| File | Use |
+|------|-----|
+| `devid.crt.pem` | LDevID certificate |
+| `devid.priv.blob` | TPM2B_PRIVATE for SPIRE |
+| `devid.pub.blob` | TPM2B_PUBLIC for SPIRE |
 
 ---
 
-## 🔐 Trust Model
+## Trust Model
 
-- **Cluster EK Root CA** → issues **EK Issuing CAs** for each host.
+- **Cluster EK Root CA** → issues **EK Issuing CAs** per host (lab: swtpm-localca chain).
 - Each **swtpm_localca** signs EKCerts for vTPMs on that host.
-- **prox-mds** validates TPM quotes and signs identity JWTs with a key **sealed to the host’s physical TPM**.
-- Consumers (Vault, SPIRE, Teleport) validate JWTs using the **Host Attestation Root CA** (JWKS).
+- **qemu-mds** verifies EKCerts on DevID enroll, runs TPM credential activation challenge,
+  and issues LDevIDs from `devid_ca_*`.
+- JWT path (separate): validates TPM quotes and signs identity JWTs; consumers trust JWKS.
+- SPIRE `tpm_devid`: trusts the DevID CA and verifies residency via TPM blobs.
 
 ---
 
-## 🧰 Implementation Notes
+## Implementation Notes
 
 ### Languages / Components
-- **Language:** Go (preferred)
-- **API layer:** `net/http` or `echo` with clear route grouping.
-- **Crypto:** Go `x509`, `crypto/tpm2`, `jose`.
-- **Signing:** TPM2 policy-sealed keys (via `tpm2-tools` or `go-tpm`).
-- **Logging/Tracing:** structured JSON logs for SIEM.
+
+- **Language:** Go
+- **API:** `net/http` ServeMux
+- **TPM:** `github.com/google/go-tpm` (legacy/tpm2 + credactivation) for SPIRE-compatible blobs
+- **Inventory:** `internal/inventory` (YAML) / `internal/proxmox` (`/etc/pve`)
 
 ### Configuration
+
 ```yaml
 mds:
   listen_addr: 169.254.169.1:80
   jwks_path: /var/lib/prox-mds/jwks.json
   attestation_ca: /etc/prox-mds/attestation-ca.pem
   ek_ca_chain: /etc/prox-mds/ek-chain.pem
+  devid_ca_cert: /etc/prox-mds/devid-ca.pem
+  devid_ca_key: /etc/prox-mds/devid-ca-key.pem
   token_ttl: 60s
   jwt_ttl: 5m
   enable_ec2_compat: true
   enable_tpm_attestation: true
+  inventory_path: /var/lib/mds-lab/inventory/lab.yaml  # empty → Proxmox
 ```
+
+See also root `config.yaml` and `scripts/qemu-lab/README.md`.
 
 ---
 
-## 🧩 Integration Targets
+## Integration Targets
 
 | System | Purpose | Integration |
 |---------|----------|-------------|
-| **SPIRE** | Node attestation via JWT | trust JWKS from prox-mds |
-| **Teleport** | Join via TPM join method | restrict to DG-i EK CA |
-| **Vault** | `auth/jwt` with bound claims (`level`, `ek_hash`) | trust prox-mds JWKS |
-| **Kubernetes** | Node attestation controller → labels | uses `/identity` JWTs |
-| **Proxmox** | Hook scripts to create vTPMs and populate EKCerts | integrate at VM create |
+| **SPIRE** | Node attestation via `tpm_devid` | DevID PEM + TPM2B blobs from enroll |
+| **SPIRE** | JWT node/workload path | trust JWKS from qemu-mds |
+| **Teleport** | TPM join | restrict to EK CA |
+| **Vault** | `auth/jwt` with bound claims | trust JWKS |
+| **Kubernetes** | Node attestation labels | `/identity` JWTs |
+| **Proxmox** | Inventory + hooks for vTPM/EKCert | `/etc/pve` fallback + future hooks |
+| **Plain QEMU** | Lab / non-Proxmox hosts | YAML `inventory_path` |
 
 ---
 
-## 🚀 Roadmap
+## Roadmap
 
 | Phase | Description | Status |
 |--------|--------------|--------|
-| 1 | Minimal IMDSv2 API with EC2-compatible paths | ☐ |
-| 2 | TPM attestation endpoints and quote verification | ☐ |
-| 3 | JWT/JWS identity issuance + JWKS publishing | ☐ |
-| 4 | TPM key sealing for host-level signing | ☐ |
-| 5 | Proxmox hook integration (`swtpm_localca`) | ☐ |
-| 6 | End-to-end SPIRE / Vault / Teleport integration demos | ☐ |
+| 1 | Minimal IMDSv2 API with EC2-compatible paths | done |
+| 2 | TPM attestation endpoints | done (hardening ongoing) |
+| 3 | JWT/JWS identity + JWKS | partial |
+| 4 | YAML inventory + QEMU lab; Proxmox as backend | done |
+| 5 | TPM DevID enroll (go-tpm) + cloud-init client + EK/MAC auth | done |
+| 6 | Host TPM key sealing for JWT signing | planned |
+| 7 | Proxmox hook integration (`swtpm_localca`) | planned |
+| 8 | End-to-end SPIRE / Vault / Teleport demos | planned |
 
 ---
 
-## 📚 Reference Links
+## Reference Links
 
-- [SWTPM GitHub](https://github.com/stefanberger/swtpm)
-- [Teleport TPM Join Docs](https://goteleport.com/docs/machine-workload-identity/machine-id/deployment/linux-tpm/)
+- [SWTPM](https://github.com/stefanberger/swtpm)
 - [SPIRE TPM DevID Plugin](https://github.com/spiffe/spire/blob/main/doc/plugin_server_nodeattestor_tpm_devid.md)
-- [AWS IMDSv2 API Reference](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html)
-- [HashiCorp Vault JWT Auth Method](https://developer.hashicorp.com/vault/docs/auth/jwt)
-- [TPM 2.0 Keys for Device Identity and Attestation](https://trustedcomputinggroup.org/wp-content/uploads/TCG_IWG_DevID_v1r2_02dec2020.pdf)
-- [HP DevID Provisioning Tool](https://github.com/HewlettPackard/devid-provisioning-tool/)
----
-
-## 🧱 License & Maintainers
-
-- **License:** Apache 2.0 (draft)
-- **Maintainers:** DG-i Platform Engineering  
-  Contact: `andreas.dembach@dg-i.net`
+- [AWS IMDSv2](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html)
+- [TCG DevID](https://trustedcomputinggroup.org/wp-content/uploads/TCG_IWG_DevID_v1r2_02dec2020.pdf)
+- [HP DevID Provisioning Tool](https://github.com/HewlettPackard/devid-provisioning-tool/) (protocol inspiration; not vendored)
 
 ---
 
-> _This file defines the architectural intent and API surface of the prox-mds service. Developers should treat it as the design anchor for implementation and integration with Proxmox, Vault, SPIRE, and Teleport._
+## License & Maintainers
+
+- **License:** Apache 2.0
+- **Maintainers:** DG-i Platform Engineering — `andreas.dembach@dg-i.net`
+
+> Architectural intent and API surface for qemu-mds / prox-mds. Treat as the design
+> anchor for QEMU lab, Proxmox, Vault, SPIRE, and Teleport integration.

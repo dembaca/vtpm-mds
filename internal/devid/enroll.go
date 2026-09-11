@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -34,7 +35,8 @@ type StartResult struct {
 
 // Start verifies the signing request + signature, creates a credential challenge,
 // and stores an enroll session. subjectCN is used when the CSR has no CN.
-func (e *Enroller) Start(requestData, signature []byte, subjectCN string) (*StartResult, error) {
+// vmid and ekFP bind the session to the MAC-identified VM and EK certificate.
+func (e *Enroller) Start(requestData, signature []byte, subjectCN, vmid, ekFP string) (*StartResult, error) {
 	if e == nil || e.CA == nil {
 		return nil, errors.New("enroller not configured")
 	}
@@ -57,6 +59,11 @@ func (e *Enroller) Start(requestData, signature []byte, subjectCN string) (*Star
 	if err := CheckAKProp(sr.AttestationKey.Attributes); err != nil {
 		return nil, err
 	}
+	if ekFP != "" && sr.EndorsementCertificate != nil {
+		if fp := EKFingerprint(sr.EndorsementCertificate); !strings.EqualFold(fp, ekFP) {
+			return nil, errors.New("EK fingerprint does not match authenticated certificate")
+		}
+	}
 
 	akName, err := sr.AttestationKey.Name()
 	if err != nil {
@@ -68,7 +75,7 @@ func (e *Enroller) Start(requestData, signature []byte, subjectCN string) (*Star
 	}
 
 	cn := subjectCNFromRequest(&sr, subjectCN)
-	sid, err := e.Sessions.Put(nonce, sr, cn)
+	sid, err := e.Sessions.Put(nonce, sr, cn, vmid, ekFP)
 	if err != nil {
 		return nil, err
 	}
@@ -91,13 +98,20 @@ func subjectCNFromRequest(sr *SigningRequest, fallback string) string {
 }
 
 // Finish completes enrollment if challengeResponse matches the stored nonce.
-func (e *Enroller) Finish(sessionID string, challengeResponse []byte) ([]byte, error) {
+// vmid and ekFP must match the values bound at Start (MAC + EK auth).
+func (e *Enroller) Finish(sessionID string, challengeResponse []byte, vmid, ekFP string) ([]byte, error) {
 	if e == nil || e.CA == nil {
 		return nil, errors.New("enroller not configured")
 	}
 	sess, err := e.Sessions.Take(sessionID)
 	if err != nil {
 		return nil, err
+	}
+	if sess.VMID != "" && sess.VMID != vmid {
+		return nil, errors.New("VM identity does not match enroll session")
+	}
+	if sess.EKFingerprint != "" && !strings.EqualFold(sess.EKFingerprint, ekFP) {
+		return nil, errors.New("EK certificate does not match enroll session")
 	}
 	if !bytes.Equal(sess.Nonce, challengeResponse) {
 		return nil, errors.New("challenge verification failed")

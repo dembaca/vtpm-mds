@@ -176,19 +176,19 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 	}
 
 	enroller := NewEnroller(ca, x509.NewCertPool(), NewSessionStore(time.Minute))
-	sid, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "vm-100")
+	sid, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "vm-100", "100", "ekfp")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := enroller.Finish(sid, []byte("wrong-nonce")); err == nil {
+	if _, err := enroller.Finish(sid, []byte("wrong-nonce"), "100", "ekfp"); err == nil {
 		t.Fatal("expected nonce mismatch error")
 	}
 
-	sid2, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "vm-100")
+	sid2, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "vm-100", "100", "ekfp")
 	if err != nil {
 		t.Fatal(err)
 	}
-	pemBytes, err := enroller.Finish(sid2, []byte("correct-nonce"))
+	pemBytes, err := enroller.Finish(sid2, []byte("correct-nonce"), "100", "ekfp")
 	if err != nil {
 		t.Fatalf("Finish: %v", err)
 	}

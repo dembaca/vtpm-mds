@@ -1,5 +1,8 @@
 # Remote Development Setup für hogan (10.7.10.5)
 
+Projekt: **qemu-mds** / **prox-mds** (IMDS + TPM attestation + DevID).  
+Lokales QEMU-Lab ohne Proxmox: siehe `scripts/qemu-lab/README.md` und Root-`README.md`.
+
 ## Schritt 1: SSH-Konfiguration auf dem Mac
 
 Füge folgende Zeilen zu `~/.ssh/config` hinzu:

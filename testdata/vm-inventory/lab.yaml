@@ -1,5 +1,6 @@
 # Lab inventory for QEMU nested testing (not Proxmox).
 # MACs must match the IMDS NIC created by scripts/qemu-lab/start-guest.sh
+# Optional ek_sha256 pins the guest TPM EK certificate (hex SHA-256 of DER).
 vms:
   - id: "100"
     name: mds-lab-guest

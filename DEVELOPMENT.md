@@ -104,20 +104,26 @@ ssh proxmox-dev "cd /opt/prox-mds && make build"
 ## TPM Development
 
 Für TPM-Entwicklung benötigst du Zugriff auf:
-- `/dev/tpm0` (VM TPM)
-- `/dev/tpmrm0` (Host TPM)
+- `/dev/tpm0` bzw. `/dev/tpmrm0` (Guest-/Host-TPM)
+- Lab ohne Proxmox: `scripts/qemu-lab/` (swtpm + QEMU/TCG, siehe `scripts/qemu-lab/README.md`)
+
+**DevID-Client (Guest):**
+```bash
+make build   # erzeugt auch bin/devid-enroll
+# Guest-Oneshot (Lab) authentifiziert mit MAC + Header X-qemu-mds-ek-cert
+sudo ./scripts/qemu-lab/e2e-devid-guest.sh
+```
 
 **Wichtig:** Remote SSH funktioniert am besten, wenn du direkt auf dem Proxmox-Host arbeitest.
+Cloud-Agent-Lab: nested KVM ist oft kaputt → TCG; IMDS-Smoke über `e2e-netns.sh`.
 
 ## Debugging
 
 ### Remote Debugging mit Delve
 ```bash
-# Auf Proxmox
+# Auf Proxmox / Lab-Host
 go install github.com/go-delve/delve/cmd/dlv@latest
-dlv debug ./cmd/prox-mds --headless --listen=:2345 --api-version=2
-
-# Auf Mac: VS Code/Cursor mit Go Debugger verbinden
+dlv debug . --headless --listen=:2345 --api-version=2 -- -config /etc/prox-mds/config.yaml
 ```
 
 ## Empfohlene Extensions (Cursor/VS Code)

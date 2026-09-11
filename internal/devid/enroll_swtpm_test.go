@@ -55,7 +55,7 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	start, err := enroller.Start(data, sig, "guest100")
+	start, err := enroller.Start(data, sig, "guest100", "100", EKFingerprint(sr.EndorsementCertificate))
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("activate: %v", err)
 	}
-	certPEM, err := enroller.Finish(start.SessionID, secret)
+	certPEM, err := enroller.Finish(start.SessionID, secret, "100", EKFingerprint(sr.EndorsementCertificate))
 	if err != nil {
 		t.Fatalf("finish: %v", err)
 	}

@@ -15,6 +15,7 @@ func TestLoadYAML(t *testing.T) {
     macs:
       - "52:54:00:12:34:56"
       - "52:54:00:AA:BB:CC"
+    ek_sha256: "abcd1234"
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write inventory: %v", err)
@@ -36,5 +37,8 @@ func TestLoadYAML(t *testing.T) {
 	}
 	if GetVMIDByMAC(m, "00:11:22:33:44:55") != "" {
 		t.Fatalf("expected empty for unknown MAC")
+	}
+	if vm.EKSHA256 != "abcd1234" {
+		t.Fatalf("ek_sha256=%q", vm.EKSHA256)
 	}
 }
