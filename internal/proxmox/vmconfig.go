@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dembaca/prox-mds/internal/inventory"
+	"github.com/dembaca/vtpm-mds/internal/inventory"
 )
 
 // ParseVMConfigs parses Proxmox qemu-server config files into an inventory map.

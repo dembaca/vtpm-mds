@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dembaca/prox-mds/internal/config"
+	"github.com/dembaca/vtpm-mds/internal/config"
 )
 
 // Token represents an IMDSv2 token

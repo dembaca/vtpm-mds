@@ -12,13 +12,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/dembaca/prox-mds/internal/inventory"
+	"github.com/dembaca/vtpm-mds/internal/inventory"
 )
 
 // HeaderEKCert is sent by the guest enroll client. Value is base64(DER) of the
 // TPM Endorsement Key certificate (or a PEM block base64-encoded as a whole).
 // Combined with MAC→inventory identity, this authenticates the enroll caller.
-const HeaderEKCert = "X-qemu-mds-ek-cert"
+const HeaderEKCert = "X-vtpm-mds-ek-cert"
 
 // EKFingerprint returns lowercase hex SHA-256 over the certificate DER.
 func EKFingerprint(cert *x509.Certificate) string {

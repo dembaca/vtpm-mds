@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/dembaca/prox-mds/internal/inventory"
+	"github.com/dembaca/vtpm-mds/internal/inventory"
 )
 
 // Store references (initialized by server)

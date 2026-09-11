@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dembaca/prox-mds/internal/config"
+	"github.com/dembaca/vtpm-mds/internal/config"
 )
 
 func TestHandleInstanceID(t *testing.T) {

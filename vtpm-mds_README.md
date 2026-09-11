@@ -1,8 +1,8 @@
-# qemu-mds / prox-mds — Architecture & Design Anchor
+# vtpm-mds — Architecture & Design Anchor
 
 ## Overview
 
-**qemu-mds** (legacy name **prox-mds**) is a lightweight **metadata and attestation service**
+**vtpm-mds** is a lightweight **metadata and attestation service**
 for QEMU-based hosting. **Proxmox VE** is a special inventory/hosting subclass (parse
 `/etc/pve`); plain QEMU labs use a YAML inventory.
 
@@ -38,7 +38,7 @@ private cloud without depending on external cloud IMDS.
 +-----------------------------│-------------------------------+
 |           QEMU host (Proxmox or plain QEMU lab)             |
 |  - swtpm_localca (issues EKCerts)                           |
-|  - qemu-mds / prox-mds:                                     |
+|  - vtpm-mds:                                     |
 |      • /latest/api/token (IMDSv2)                           |
 |      • /latest/meta-data/* (EC2-compatible)                 |
 |      • /latest/attest/* (TPM attestation)                   |
@@ -54,7 +54,7 @@ private cloud without depending on external cloud IMDS.
 |                  Virtual Machines (with vTPM)                |
 |  - swtpm-backed TPM 2.0                                     |
 |  - cloud-init oneshot: devid-enroll                         |
-|      auth: MAC + X-qemu-mds-ek-cert                         |
+|      auth: MAC + X-vtpm-mds-ek-cert                         |
 |  - SPIRE agent: tpm_devid materials                         |
 |  - Secondary NIC on IMDS bridge                             |
 +-------------------------------------------------------------+
@@ -82,7 +82,7 @@ private cloud without depending on external cloud IMDS.
 Both enroll calls require:
 
 1. **MAC → inventory** VM identity (ConnContext / ARP), same binding as metadata
-2. Header **`X-qemu-mds-ek-cert`**: base64(DER) of the TPM EK certificate, trusted via
+2. Header **`X-vtpm-mds-ek-cert`**: base64(DER) of the TPM EK certificate, trusted via
    `ek_ca_chain`, matching the CSR (start) and the enroll session (finish)
 
 Optional YAML inventory field `ek_sha256` pins a specific EK certificate to a VM.
@@ -101,7 +101,7 @@ Guest client (`cmd/devid-enroll`) performs credential activation locally and wri
 
 - **Cluster EK Root CA** → issues **EK Issuing CAs** per host (lab: swtpm-localca chain).
 - Each **swtpm_localca** signs EKCerts for vTPMs on that host.
-- **qemu-mds** verifies EKCerts on DevID enroll, runs TPM credential activation challenge,
+- **vtpm-mds** verifies EKCerts on DevID enroll, runs TPM credential activation challenge,
   and issues LDevIDs from `devid_ca_*`.
 - JWT path (separate): validates TPM quotes and signs identity JWTs; consumers trust JWKS.
 - SPIRE `tpm_devid`: trusts the DevID CA and verifies residency via TPM blobs.
@@ -122,11 +122,11 @@ Guest client (`cmd/devid-enroll`) performs credential activation locally and wri
 ```yaml
 mds:
   listen_addr: 169.254.169.1:80
-  jwks_path: /var/lib/prox-mds/jwks.json
-  attestation_ca: /etc/prox-mds/attestation-ca.pem
-  ek_ca_chain: /etc/prox-mds/ek-chain.pem
-  devid_ca_cert: /etc/prox-mds/devid-ca.pem
-  devid_ca_key: /etc/prox-mds/devid-ca-key.pem
+  jwks_path: /var/lib/vtpm-mds/jwks.json
+  attestation_ca: /etc/vtpm-mds/attestation-ca.pem
+  ek_ca_chain: /etc/vtpm-mds/ek-chain.pem
+  devid_ca_cert: /etc/vtpm-mds/devid-ca.pem
+  devid_ca_key: /etc/vtpm-mds/devid-ca-key.pem
   token_ttl: 60s
   jwt_ttl: 5m
   enable_ec2_compat: true
@@ -143,7 +143,7 @@ See also root `config.yaml` and `scripts/qemu-lab/README.md`.
 | System | Purpose | Integration |
 |---------|----------|-------------|
 | **SPIRE** | Node attestation via `tpm_devid` | DevID PEM + TPM2B blobs from enroll |
-| **SPIRE** | JWT node/workload path | trust JWKS from qemu-mds |
+| **SPIRE** | JWT node/workload path | trust JWKS from vtpm-mds |
 | **Teleport** | TPM join | restrict to EK CA |
 | **Vault** | `auth/jwt` with bound claims | trust JWKS |
 | **Kubernetes** | Node attestation labels | `/identity` JWTs |
@@ -182,5 +182,5 @@ See also root `config.yaml` and `scripts/qemu-lab/README.md`.
 - **License:** Apache 2.0
 - **Maintainers:** DG-i Platform Engineering — `andreas.dembach@dg-i.net`
 
-> Architectural intent and API surface for qemu-mds / prox-mds. Treat as the design
+> Architectural intent and API surface for vtpm-mds. Treat as the design
 > anchor for QEMU lab, Proxmox, Vault, SPIRE, and Teleport integration.

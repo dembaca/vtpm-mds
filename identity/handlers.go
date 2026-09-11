@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dembaca/prox-mds/imds"
+	"github.com/dembaca/vtpm-mds/imds"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -64,7 +64,7 @@ func HandleIdentity(store *imds.TokenStore) http.HandlerFunc {
 
 		claims := IdentityClaims{
 			RegisteredClaims: jwt.RegisteredClaims{
-				Issuer:    "prox-mds",
+				Issuer:    "vtpm-mds",
 				Subject:   getInstanceID(r),
 				IssuedAt:  jwt.NewNumericDate(time.Now()),
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),

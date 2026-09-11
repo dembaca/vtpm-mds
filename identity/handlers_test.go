@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dembaca/prox-mds/imds"
-	"github.com/dembaca/prox-mds/internal/config"
+	"github.com/dembaca/vtpm-mds/imds"
+	"github.com/dembaca/vtpm-mds/internal/config"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -98,8 +98,8 @@ func TestHandleIdentity(t *testing.T) {
 		t.Fatal("Failed to parse claims")
 	}
 	
-	if claims["iss"] != "prox-mds" {
-		t.Errorf("Expected issuer 'prox-mds', got '%v'", claims["iss"])
+	if claims["iss"] != "vtpm-mds" {
+		t.Errorf("Expected issuer 'vtpm-mds', got '%v'", claims["iss"])
 	}
 	
 	if claims["instance_id"] == nil {
@@ -136,7 +136,7 @@ func TestHandleIdentity_MissingToken(t *testing.T) {
 func TestIdentityClaims_Structure(t *testing.T) {
 	claims := IdentityClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:  "prox-mds",
+			Issuer:  "vtpm-mds",
 			Subject: "test-instance",
 		},
 		InstanceID: "test-instance",

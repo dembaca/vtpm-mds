@@ -54,7 +54,7 @@ ensure_dnat() {
 }
 
 ensure_dirs() {
-  sudo mkdir -p /var/lib/mds-lab/{images,vms,run,inventory} /etc/mds-lab /etc/prox-mds
+  sudo mkdir -p /var/lib/mds-lab/{images,vms,run,inventory} /etc/mds-lab /etc/vtpm-mds
   sudo chown -R "$USER:$USER" /var/lib/mds-lab /etc/mds-lab
 }
 
@@ -75,22 +75,22 @@ install_inventory() {
 }
 
 install_lab_config() {
-  sudo mkdir -p /etc/prox-mds /var/lib/prox-mds
-  sudo tee /etc/prox-mds/config.lab.yaml >/dev/null <<EOF
+  sudo mkdir -p /etc/vtpm-mds /var/lib/vtpm-mds
+  sudo tee /etc/vtpm-mds/config.lab.yaml >/dev/null <<EOF
 mds:
   listen_addr: "${HOST_IP}:80"
-  jwks_path: "/var/lib/prox-mds/jwks.json"
-  attestation_ca: "/etc/prox-mds/attestation-ca.pem"
-  ek_ca_chain: "/etc/prox-mds/ek-chain.pem"
-  devid_ca_cert: "/etc/prox-mds/devid-ca.pem"
-  devid_ca_key: "/etc/prox-mds/devid-ca-key.pem"
+  jwks_path: "/var/lib/vtpm-mds/jwks.json"
+  attestation_ca: "/etc/vtpm-mds/attestation-ca.pem"
+  ek_ca_chain: "/etc/vtpm-mds/ek-chain.pem"
+  devid_ca_cert: "/etc/vtpm-mds/devid-ca.pem"
+  devid_ca_key: "/etc/vtpm-mds/devid-ca-key.pem"
   token_ttl: "60s"
   jwt_ttl: "5m"
   enable_ec2_compat: true
   enable_tpm_attestation: true
   inventory_path: "/var/lib/mds-lab/inventory/lab.yaml"
 EOF
-  sudo chown -R "$USER:$USER" /var/lib/prox-mds || true
+  sudo chown -R "$USER:$USER" /var/lib/vtpm-mds || true
 }
 
 main() {

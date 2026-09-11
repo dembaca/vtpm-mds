@@ -8,7 +8,7 @@ cd "$ROOT"
 chmod +x scripts/qemu-lab/*.sh
 ./scripts/qemu-lab/setup-host.sh
 
-# Do not auto-start the guest or prox-mds here: agents start them on demand.
+# Do not auto-start the guest or vtpm-mds here: agents start them on demand.
 # Verify bridge exists and exits successfully.
 ip -br link show br-imds >/dev/null
 ip -br addr show br-imds | grep -q 169.254.169.1

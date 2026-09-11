@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dembaca/prox-mds/internal/config"
-	"github.com/dembaca/prox-mds/internal/server"
+	"github.com/dembaca/vtpm-mds/internal/config"
+	"github.com/dembaca/vtpm-mds/internal/server"
 )
 
 // Version is set via ldflags during build
@@ -22,7 +22,7 @@ func main() {
 	debug := flag.Bool("debug", false, "Enable debug logging")
 	flag.Parse()
 
-	log.Printf("prox-mds version %s", Version)
+	log.Printf("vtpm-mds version %s", Version)
 
 	// Load configuration
 	var cfg *config.Config

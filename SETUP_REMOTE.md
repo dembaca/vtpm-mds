@@ -1,6 +1,6 @@
 # Remote Development Setup für hogan (10.7.10.5)
 
-Projekt: **qemu-mds** / **prox-mds** (IMDS + TPM attestation + DevID).  
+Projekt: **vtpm-mds** (IMDS + TPM attestation + DevID).  
 Lokales QEMU-Lab ohne Proxmox: siehe `scripts/qemu-lab/README.md` und Root-`README.md`.
 
 ## Schritt 1: SSH-Konfiguration auf dem Mac
@@ -28,8 +28,8 @@ ssh hogan
 
 # Projekt klonen (oder von lokal pushen)
 cd /opt
-git clone https://github.com/dembaca/prox-mds.git
-cd prox-mds
+git clone https://github.com/dembaca/vtpm-mds.git
+cd vtpm-mds
 
 # Go installieren (falls nicht vorhanden)
 apt-get update
@@ -53,7 +53,7 @@ make deps
 
 3. **Workspace öffnen:**
    - Im Remote-Fenster: `File → Open Folder`
-   - Wähle `/opt/prox-mds`
+   - Wähle `/opt/vtpm-mds`
    - Fertig! 🎉
 
 ## Schritt 4: Go Extension installieren (im Remote-Fenster)
@@ -75,7 +75,7 @@ make test
 1. **Entwickeln:** Direkt in Cursor auf hogan
 2. **Testen:** `make test` im Terminal
 3. **Builden:** `make build`
-4. **Ausführen:** `sudo ./bin/prox-mds`
+4. **Ausführen:** `sudo ./bin/vtpm-mds`
 
 ## Tipps
 

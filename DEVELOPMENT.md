@@ -32,8 +32,8 @@ Host hogan
 # Auf hogan (10.7.10.5)
 ssh hogan
 cd /opt
-git clone https://github.com/dembaca/prox-mds.git
-cd prox-mds
+git clone https://github.com/dembaca/vtpm-mds.git
+cd vtpm-mds
 ```
 
 4. **Go installieren (falls nicht vorhanden):**
@@ -54,7 +54,7 @@ git push
 
 # Auf Proxmox: Pullen und testen
 ssh proxmox-dev
-cd /opt/prox-mds
+cd /opt/vtpm-mds
 git pull
 make build
 make test
@@ -91,14 +91,14 @@ make run       # Lokal starten (benötigt sudo)
 2. **Via Git pushen**
 3. **Auf Proxmox pullen und testen:**
 ```bash
-ssh proxmox-dev "cd /opt/prox-mds && git pull && make build && sudo ./bin/prox-mds"
+ssh proxmox-dev "cd /opt/vtpm-mds && git pull && make build && sudo ./bin/vtpm-mds"
 ```
 
 ### Oder mit rsync (schneller für Tests):
 ```bash
 # Von Mac aus
-rsync -avz --exclude '.git' --exclude 'bin' ./ proxmox-dev:/opt/prox-mds/
-ssh proxmox-dev "cd /opt/prox-mds && make build"
+rsync -avz --exclude '.git' --exclude 'bin' ./ proxmox-dev:/opt/vtpm-mds/
+ssh proxmox-dev "cd /opt/vtpm-mds && make build"
 ```
 
 ## TPM Development
@@ -110,7 +110,7 @@ Für TPM-Entwicklung benötigst du Zugriff auf:
 **DevID-Client (Guest):**
 ```bash
 make build   # erzeugt auch bin/devid-enroll
-# Guest-Oneshot (Lab) authentifiziert mit MAC + Header X-qemu-mds-ek-cert
+# Guest-Oneshot (Lab) authentifiziert mit MAC + Header X-vtpm-mds-ek-cert
 sudo ./scripts/qemu-lab/e2e-devid-guest.sh
 ```
 
@@ -123,7 +123,7 @@ Cloud-Agent-Lab: nested KVM ist oft kaputt → TCG; IMDS-Smoke über `e2e-netns.
 ```bash
 # Auf Proxmox / Lab-Host
 go install github.com/go-delve/delve/cmd/dlv@latest
-dlv debug . --headless --listen=:2345 --api-version=2 -- -config /etc/prox-mds/config.yaml
+dlv debug . --headless --listen=:2345 --api-version=2 -- -config /etc/vtpm-mds/config.yaml
 ```
 
 ## Empfohlene Extensions (Cursor/VS Code)
