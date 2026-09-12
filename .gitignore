@@ -39,15 +39,28 @@ config.local.yaml
 
 # Debian build artifacts
 debian/prox-mds
+debian/vtpm-mds
+debian/.debhelper
+debian/.gocache
+debian/.gomod
+debian/.gopath
 debian/*.substvars
 debian/files
 debian/*.debhelper.log
 debian/*.debhelper
+dist/
+.deb-build/
 ../prox-mds*.deb
 ../prox-mds*.changes
 ../prox-mds*.dsc
 ../prox-mds*.tar.gz
 ../prox-mds_*.buildinfo
 ../prox-mds_*.build
+../vtpm-mds*.deb
+../vtpm-mds*.changes
+../vtpm-mds*.dsc
+../vtpm-mds*.tar.gz
+../vtpm-mds_*.buildinfo
+../vtpm-mds_*.build
 ../deb-packages/
 

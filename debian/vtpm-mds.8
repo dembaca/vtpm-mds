@@ -1,0 +1,45 @@
+.TH VTPM-MDS 8 "September 2026" "vtpm-mds 0.1.0" "System Manager's Manual"
+.SH NAME
+vtpm-mds \- QEMU/Proxmox IMDS and TPM attestation service
+.SH SYNOPSIS
+.B vtpm-mds
+.RB [ \-config
+.IR path ]
+.RB [ \-debug ]
+.SH DESCRIPTION
+.B vtpm-mds
+serves EC2-IMDSv2-compatible instance metadata and TPM DevID enrollment
+for QEMU guests. On Hogan it listens on
+.B 169.254.169.1:80
+so the IMDS bridge (vmbr_imds) and nftables DNAT of
+.B 169.254.169.254:80
+reach this process. Empty
+.I inventory_path
+falls back to Proxmox
+.IR /etc/pve .
+.PP
+Legacy command names
+.B prox-mds
+and
+.B qemu-mds
+are aliases of this binary.
+.SH OPTIONS
+.TP
+.BI \-config " path"
+YAML configuration file. The package installs
+.IR /etc/vtpm-mds/config.yaml .
+.TP
+.B \-debug
+Log the loaded configuration.
+.SH FILES
+.TP
+.I /etc/vtpm-mds/config.yaml
+Daemon configuration (dpkg conffile).
+.TP
+.I /var/lib/vtpm-mds
+Runtime state (JWKS, signing key).
+.TP
+.I /lib/systemd/system/vtpm-mds.service
+systemd unit.
+.SH SEE ALSO
+.BR devid-enroll (1)

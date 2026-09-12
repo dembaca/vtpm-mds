@@ -26,6 +26,19 @@ make build
 # also builds aliases bin/qemu-mds, bin/prox-mds and guest client bin/devid-enroll
 ```
 
+### Debian package
+
+Requires Go 1.24+ and `debhelper`. `make deb` runs `dpkg-buildpackage` and copies the artifact to `dist/`:
+
+```bash
+make deb
+# artifact: dist/vtpm-mds_<version>_<arch>.deb   (currently dist/vtpm-mds_0.1.0_amd64.deb)
+sudo dpkg -i dist/vtpm-mds_*.deb
+sudo systemctl start vtpm-mds   # enabled on install, not auto-started
+```
+
+The unit listens on `169.254.169.1:80` (Hogan IMDS bridge). Packaged config points at Ansible-managed Hogan PKI under `/etc/ssl`. See `debian/README.Debian`.
+
 ### Configuration
 
 Create `/etc/vtpm-mds/config.yaml` (see `config.yaml` for the full template):
