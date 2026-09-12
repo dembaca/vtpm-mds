@@ -4,9 +4,16 @@ export DH_VERBOSE = 1
 export GO111MODULE = on
 export GOTOOLCHAIN = auto
 export GOPROXY ?= https://proxy.golang.org,direct
-export GOCACHE = $(CURDIR)/debian/.gocache
-export GOMODCACHE = $(CURDIR)/debian/.gomod
 export CGO_ENABLED = 0
+
+# Rules-Requires-Root: no redirects HOME into debian/.debhelper. Go then
+# writes a mode-0555 module cache that dh_clean cannot delete. Keep caches
+# in the source tree but outside debian/.
+GO_WORKDIR := $(CURDIR)/.go-workdir
+export HOME := $(GO_WORKDIR)
+export GOPATH := $(GO_WORKDIR)
+export GOCACHE := $(GO_WORKDIR)/cache
+export GOMODCACHE := $(GO_WORKDIR)/mod
 
 VERSION := $(shell dpkg-parsechangelog -S Version)
 
@@ -14,8 +21,9 @@ VERSION := $(shell dpkg-parsechangelog -S Version)
 	dh $@
 
 override_dh_auto_clean:
-	rm -rf bin debian/.gocache debian/.gomod debian/.gopath
-	dh_auto_clean
+	rm -rf bin
+	# Skip dh_auto_clean (`make clean` → `go clean`); it would download
+	# modules into HOME before dh_clean runs.
 
 override_dh_auto_configure:
 

@@ -50,12 +50,13 @@ DEB_DIST := $(CURDIR)/dist
 deb: ## Build Debian package (dpkg-buildpackage → dist/*.deb)
 	@test -d debian
 	@chmod +x debian/rules debian/postinst debian/prerm debian/postrm
+	@# Go module cache dirs are mode 555; make them writable before rm.
+	@if [ -d "$(DEB_STAGE)" ]; then chmod -R u+w "$(DEB_STAGE)"; fi
 	@rm -rf $(DEB_STAGE)
 	@mkdir -p $(DEB_STAGE)/src $(DEB_DIST)
 	@tar -C $(CURDIR) \
 		--exclude=.deb-build --exclude=dist --exclude=.git --exclude=bin \
-		--exclude=debian/.gocache --exclude=debian/.gomod --exclude=debian/.gopath \
-		--exclude=debian/.debhelper --exclude=debian/vtpm-mds \
+		--exclude=.go-workdir --exclude=debian/.debhelper --exclude=debian/vtpm-mds \
 		-cf - . | tar -C $(DEB_STAGE)/src -xf -
 	@cd $(DEB_STAGE)/src && dpkg-buildpackage -b -us -uc
 	@cp -f $(DEB_STAGE)/*.deb $(DEB_STAGE)/*.changes $(DEB_STAGE)/*.buildinfo $(DEB_DIST)/
@@ -63,7 +64,9 @@ deb: ## Build Debian package (dpkg-buildpackage → dist/*.deb)
 	@ls -lh $(DEB_DIST)/*.deb
 
 deb-clean: ## Clean Debian build artifacts
-	@rm -rf debian/prox-mds debian/vtpm-mds debian/.debhelper debian/.gocache debian/.gomod debian/.gopath
+	@if [ -d "$(DEB_STAGE)" ]; then chmod -R u+w "$(DEB_STAGE)"; fi
+	@if [ -d .go-workdir ]; then chmod -R u+w .go-workdir; fi
+	@rm -rf debian/prox-mds debian/vtpm-mds debian/.debhelper debian/.gocache debian/.gomod debian/.gopath .go-workdir
 	@rm -f debian/*.substvars debian/files debian/*.debhelper.log debian/*.debhelper
 	@rm -rf $(DEB_STAGE) $(DEB_DIST)
 	@rm -f ../prox-mds*.deb ../vtpm-mds*.deb ../prox-mds*.changes ../vtpm-mds*.changes ../prox-mds*.dsc ../vtpm-mds*.dsc

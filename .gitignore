@@ -50,6 +50,7 @@ debian/*.debhelper.log
 debian/*.debhelper
 dist/
 .deb-build/
+.go-workdir/
 ../prox-mds*.deb
 ../prox-mds*.changes
 ../prox-mds*.dsc

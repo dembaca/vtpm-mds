@@ -1,2 +1,4 @@
 usr/sbin/vtpm-mds usr/sbin/prox-mds
 usr/sbin/vtpm-mds usr/sbin/qemu-mds
+usr/share/man/man8/vtpm-mds.8 usr/share/man/man8/prox-mds.8
+usr/share/man/man8/vtpm-mds.8 usr/share/man/man8/qemu-mds.8
