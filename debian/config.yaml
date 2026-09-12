@@ -1,0 +1,26 @@
+# Hogan-oriented packaged default. Lab/QEMU hosts should use
+# /etc/vtpm-mds/config.lab.yaml from the source tree instead.
+#
+# Host PKI is installed by Ansible role proxmox-swtpm (not this package):
+#   /etc/ssl/certs/proxmox_tpm_ca.crt
+#   /etc/ssl/certs/proxmox_devid_ca.crt
+#   /etc/ssl/private/proxmox_devid_ca.*  (key; adjust suffix if needed)
+# Inventory: empty path → Proxmox /etc/pve (correct on Hogan).
+# Listen address matches vmbr_imds + nftables DNAT 169.254.169.254:80 → :80.
+
+mds:
+  listen_addr: "169.254.169.1:80"
+  jwks_path: "/var/lib/vtpm-mds/jwks.json"
+  attestation_ca: "/etc/ssl/certs/proxmox_tpm_ca.crt"
+  ek_ca_chain: "/etc/ssl/certs/proxmox_tpm_ca.crt"
+  devid_ca_cert: "/etc/ssl/certs/proxmox_devid_ca.crt"
+  devid_ca_key: "/etc/ssl/private/proxmox_devid_ca.key"
+  token_ttl: "60s"
+  jwt_ttl: "5m"
+  enable_ec2_compat: true
+  enable_tpm_attestation: true
+  tpm_device: "/dev/tpm0"
+  host_tpm_device: "/dev/tpmrm0"
+  signing_key_path: "/var/lib/vtpm-mds/signing-key.pem"
+  # Empty → parse /etc/pve. Set a YAML path only on non-Proxmox lab hosts.
+  # inventory_path: "/var/lib/mds-lab/inventory/lab.yaml"

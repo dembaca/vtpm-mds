@@ -1,0 +1,11 @@
+vtpm-mds (0.1.0) unstable; urgency=medium
+
+  * Initial Debian packaging. debian/ was referenced by `make deb` /
+    dpkg-buildpackage but never committed; this restores a native package
+    with a systemd unit and Hogan-oriented install layout.
+  * Install /usr/sbin/vtpm-mds (aliases prox-mds, qemu-mds),
+    /usr/bin/devid-enroll, /etc/vtpm-mds/config.yaml (listen
+    169.254.169.1:80, Proxmox /etc/pve inventory, Hogan swTPM PKI paths),
+    and /lib/systemd/system/vtpm-mds.service.
+
+ -- Andreas Dembach <andreas.dembach@dg-i.net>  Sat, 12 Sep 2026 08:47:00 +0000

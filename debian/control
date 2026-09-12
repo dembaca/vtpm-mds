@@ -1,0 +1,31 @@
+Source: vtpm-mds
+Section: net
+Priority: optional
+Maintainer: Andreas Dembach <andreas.dembach@dg-i.net>
+Build-Depends: debhelper-compat (= 13), golang-go, ca-certificates
+Standards-Version: 4.6.2
+Homepage: https://github.com/dembaca/vtpm-mds
+Vcs-Git: https://github.com/dembaca/vtpm-mds.git
+Vcs-Browser: https://github.com/dembaca/vtpm-mds
+Rules-Requires-Root: no
+
+Package: vtpm-mds
+Architecture: any
+Depends: ${misc:Depends}
+Recommends: swtpm
+Provides: prox-mds, qemu-mds
+Conflicts: prox-mds
+Replaces: prox-mds
+Description: QEMU/Proxmox IMDS and TPM attestation service
+ vtpm-mds provides an EC2-IMDSv2-compatible metadata service and
+ TPM-anchored workload identity for QEMU guests (Proxmox VE is a
+ first-class inventory backend).
+ .
+ The daemon listens on 169.254.169.1:80 by default so it matches the
+ Hogan IMDS bridge (vmbr_imds) and nftables DNAT of 169.254.169.254:80.
+ Empty inventory_path falls back to Proxmox /etc/pve.
+ .
+ This package ships the vtpm-mds daemon, legacy aliases prox-mds and
+ qemu-mds, the devid-enroll guest client, a systemd unit, and a Hogan-
+ oriented default config. Host swTPM PKI and the IMDS network are
+ provided separately (Ansible roles proxmox-swtpm / proxmox-imds-network).

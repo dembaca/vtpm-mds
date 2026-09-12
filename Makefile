@@ -42,13 +42,35 @@ install: build ## Install binary to system
 	@sudo cp $(BUILD_DIR)/$(DEVID_CLIENT) /usr/local/bin/$(DEVID_CLIENT)
 	@echo "Installed $(BINARY_NAME) (+ aliases) and $(DEVID_CLIENT) to /usr/local/bin/"
 
-deb: ## Build Debian package natively
-	@chmod +x debian/postinst debian/prerm
-	@dpkg-buildpackage -b -us -uc
+# Stage a copy so dpkg-buildpackage can write the .deb to a writable parent
+# (the source tree's real parent is often not writable in Cloud Agent VMs).
+DEB_STAGE := $(CURDIR)/.deb-build
+DEB_DIST := $(CURDIR)/dist
+
+deb: ## Build Debian package (dpkg-buildpackage → dist/*.deb)
+	@test -d debian
+	@chmod +x debian/rules debian/postinst debian/prerm debian/postrm
+	@# Go module cache dirs are mode 555; make them writable before rm.
+	@if [ -d "$(DEB_STAGE)" ]; then chmod -R u+w "$(DEB_STAGE)"; fi
+	@rm -rf $(DEB_STAGE)
+	@mkdir -p $(DEB_STAGE)/src $(DEB_DIST)
+	@tar -C $(CURDIR) \
+		--exclude=.deb-build --exclude=dist --exclude=.git --exclude=bin \
+		--exclude=.go-workdir --exclude=debian/.debhelper --exclude=debian/vtpm-mds \
+		-cf - . | tar -C $(DEB_STAGE)/src -xf -
+	@cd $(DEB_STAGE)/src && dpkg-buildpackage -b -us -uc
+	@cp -f $(DEB_STAGE)/*.deb $(DEB_STAGE)/*.changes $(DEB_STAGE)/*.buildinfo $(DEB_DIST)/
+	@echo "Built Debian package(s):"
+	@ls -lh $(DEB_DIST)/*.deb
 
 deb-clean: ## Clean Debian build artifacts
-	@rm -rf debian/prox-mds debian/vtpm-mds debian/*.substvars debian/files
+	@if [ -d "$(DEB_STAGE)" ]; then chmod -R u+w "$(DEB_STAGE)"; fi
+	@if [ -d .go-workdir ]; then chmod -R u+w .go-workdir; fi
+	@rm -rf debian/prox-mds debian/vtpm-mds debian/.debhelper debian/.gocache debian/.gomod debian/.gopath .go-workdir
+	@rm -f debian/*.substvars debian/files debian/*.debhelper.log debian/*.debhelper
+	@rm -rf $(DEB_STAGE) $(DEB_DIST)
 	@rm -f ../prox-mds*.deb ../vtpm-mds*.deb ../prox-mds*.changes ../vtpm-mds*.changes ../prox-mds*.dsc ../vtpm-mds*.dsc
+	@rm -f ../prox-mds_*.buildinfo ../vtpm-mds_*.buildinfo ../prox-mds_*.build ../vtpm-mds_*.build
 	@rm -f ../deb-packages/*.deb ../deb-packages/*.changes ../deb-packages/*.dsc
 
 lab-setup: ## Prepare QEMU/netns MDS lab host networking

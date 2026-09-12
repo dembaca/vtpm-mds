@@ -1,0 +1,7 @@
+tar-ignore = .git
+tar-ignore = .deb-build
+tar-ignore = dist
+tar-ignore = bin
+tar-ignore = .go-workdir
+tar-ignore = debian/.debhelper
+tar-ignore = debian/vtpm-mds

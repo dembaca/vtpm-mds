@@ -1,0 +1,38 @@
+vtpm-mds for Hogan
+------------------
+
+This package installs only the daemon, aliases, devid-enroll client, and
+systemd unit. It does not configure the IMDS bridge, nftables DNAT, or
+swtpm PKI — those already come from bgl-infra Ansible on Hogan:
+
+  proxmox-imds-network  vmbr_imds 169.254.169.1/32 + DNAT 169.254.169.254:80
+  proxmox-swtpm         EK/DevID CAs under /etc/ssl/certs and /etc/ssl/private
+
+Default listen address is 169.254.169.1:80. Inventory is empty, so the
+daemon parses /etc/pve. Packaged config.yaml points at:
+
+  ek_ca_chain / attestation_ca  /etc/ssl/certs/proxmox_tpm_ca.crt
+  devid_ca_cert                 /etc/ssl/certs/proxmox_devid_ca.crt
+  devid_ca_key                  /etc/ssl/private/proxmox_devid_ca.key
+
+If the Ansible role uses a different key suffix (e.g. .pem), edit the
+conffile. Missing CA files disable DevID routes but IMDS still starts.
+
+The unit is enabled on install but not started (so dpkg -i succeeds on
+hosts without vmbr_imds). On Hogan:
+
+  systemctl start vtpm-mds
+  systemctl status vtpm-mds
+  curl -sS http://169.254.169.1/health
+
+Build
+-----
+
+  make deb
+  # artifact: dist/vtpm-mds_<version>_<arch>.deb
+
+Requires Go 1.24+ on PATH (go.mod toolchain) and debhelper. Equivalent:
+
+  dpkg-buildpackage -b -us -uc
+  # writes the .deb to the parent of the source tree when that directory
+  # is writable; `make deb` always stages into dist/.

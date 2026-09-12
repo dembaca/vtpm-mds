@@ -1,0 +1,52 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE = 1
+export GO111MODULE = on
+export GOTOOLCHAIN = auto
+export GOPROXY ?= https://proxy.golang.org,direct
+export CGO_ENABLED = 0
+
+# Rules-Requires-Root: no redirects HOME into debian/.debhelper. Go then
+# writes a mode-0555 module cache that dh_clean cannot delete. Keep caches
+# in the source tree but outside debian/.
+GO_WORKDIR := $(CURDIR)/.go-workdir
+export HOME := $(GO_WORKDIR)
+export GOPATH := $(GO_WORKDIR)
+export GOCACHE := $(GO_WORKDIR)/cache
+export GOMODCACHE := $(GO_WORKDIR)/mod
+
+VERSION := $(shell dpkg-parsechangelog -S Version)
+
+%:
+	dh $@
+
+override_dh_auto_clean:
+	rm -rf bin
+	# Skip dh_auto_clean (`make clean` → `go clean`); it would download
+	# modules into HOME before dh_clean runs.
+
+override_dh_auto_configure:
+
+override_dh_auto_build:
+	mkdir -p bin "$(GOCACHE)" "$(GOMODCACHE)"
+	go build -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/vtpm-mds .
+	go build -trimpath -ldflags "-s -w" -o bin/devid-enroll ./cmd/devid-enroll
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	go test ./...
+endif
+
+override_dh_auto_install:
+	install -d debian/vtpm-mds/usr/sbin debian/vtpm-mds/usr/bin
+	install -m 0755 bin/vtpm-mds debian/vtpm-mds/usr/sbin/vtpm-mds
+	install -m 0755 bin/devid-enroll debian/vtpm-mds/usr/bin/devid-enroll
+
+override_dh_dwz:
+	# Go binaries are not compatible with dh_dwz.
+
+override_dh_installsystemd:
+	# Enable for next boot (Hogan IMDS bridge is already provisioned by
+	# Ansible) but do not start during dpkg -i — bind 169.254.169.1:80
+	# fails on build/lab hosts that lack vmbr_imds.
+	dh_installsystemd --no-start

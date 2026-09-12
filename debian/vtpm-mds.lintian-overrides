@@ -1,0 +1,2 @@
+# Built with CGO_ENABLED=0; Go runtime looks statically linked to lintian.
+vtpm-mds: statically-linked-binary

@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+if [ -d /run/systemd/system ]; then
+    case "$1" in
+        remove|deconfigure)
+            deb-systemd-invoke stop vtpm-mds.service >/dev/null || true
+            ;;
+    esac
+fi
+
+#DEBHELPER#
+
+exit 0
