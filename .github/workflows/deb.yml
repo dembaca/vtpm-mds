@@ -51,14 +51,20 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # golang-go satisfies debian/control Build-Depends (dpkg-checkbuilddeps).
+      # setup-go stays first on PATH so the build uses go.mod's 1.24 toolchain,
+      # not Ubuntu's older /usr/bin/go.
       - name: Install Debian packaging tools
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential debhelper dpkg-dev fakeroot lintian
+            build-essential ca-certificates debhelper dpkg-dev fakeroot \
+            golang-go lintian
 
       - name: Build package
-        run: make deb
+        run: |
+          echo "go=$(command -v go) $(go version)"
+          make deb
 
       - name: Record package metadata
         id: meta
