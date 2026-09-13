@@ -36,3 +36,8 @@ Requires Go 1.24+ on PATH (go.mod toolchain) and debhelper. Equivalent:
   dpkg-buildpackage -b -us -uc
   # writes the .deb to the parent of the source tree when that directory
   # is writable; `make deb` always stages into dist/.
+
+GitHub Release (Linux amd64 only; tag v<changelog-version>):
+
+  gh release download v0.1.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds_*_amd64.deb'
+  # https://github.com/dembaca/vtpm-mds/releases/download/v0.1.0/vtpm-mds_0.1.0_amd64.deb

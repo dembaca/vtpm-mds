@@ -1,0 +1,154 @@
+# Build the Hogan amd64 .deb on Linux and, on a version tag or an
+# explicit workflow_dispatch, attach it to a GitHub Release.
+#
+# Ansible / operator fetch (private repo needs GitHub auth):
+#   gh release download v0.1.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds_*_amd64.deb'
+#   https://github.com/dembaca/vtpm-mds/releases/download/v0.1.0/vtpm-mds_0.1.0_amd64.deb
+#
+# Tag must be v<debian-changelog-version>, e.g. v0.1.0 → vtpm-mds_0.1.0_amd64.deb
+
+name: Debian package
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Create GitHub Release tag v<debian-version> and attach the amd64 .deb
+        type: boolean
+        default: false
+
+concurrency:
+  group: deb-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build-deb:
+    name: Build amd64 .deb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      deb-version: ${{ steps.meta.outputs.deb-version }}
+      deb-basename: ${{ steps.meta.outputs.deb-basename }}
+    steps:
+      - name: Require Linux amd64
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          test "$(dpkg --print-architecture)" = amd64
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Debian packaging tools
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential debhelper dpkg-dev fakeroot lintian
+
+      - name: Build package
+        run: make deb
+
+      - name: Record package metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          VERSION=$(dpkg-parsechangelog -S Version)
+          shopt -s nullglob
+          debs=(dist/vtpm-mds_*_amd64.deb)
+          test "${#debs[@]}" -eq 1
+          BASENAME=$(basename "${debs[0]}")
+          test "$BASENAME" = "vtpm-mds_${VERSION}_amd64.deb"
+          {
+            echo "deb-version=${VERSION}"
+            echo "deb-basename=${BASENAME}"
+          } >> "$GITHUB_OUTPUT"
+          ls -lh dist/*.deb
+          dpkg-deb -I "dist/${BASENAME}"
+
+      - name: Lintian
+        run: lintian --fail-on error,warning "dist/${{ steps.meta.outputs.deb-basename }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.deb-basename }}
+          path: dist/${{ steps.meta.outputs.deb-basename }}
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: build-deb
+    if: >-
+      startsWith(github.ref, 'refs/tags/v')
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      DEB_VERSION: ${{ needs.build-deb.outputs.deb-version }}
+      DEB_BASENAME: ${{ needs.build-deb.outputs.deb-basename }}
+    steps:
+      - name: Resolve release tag
+        id: tag
+        run: |
+          set -euo pipefail
+          EXPECTED="v${DEB_VERSION}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            if [[ "$TAG" != "$EXPECTED" ]]; then
+              echo "Tag ${TAG} must be ${EXPECTED} (debian/changelog Version ${DEB_VERSION})"
+              exit 1
+            fi
+          else
+            TAG="$EXPECTED"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.DEB_BASENAME }}
+          path: dist
+
+      - name: Publish GitHub Release
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          DEB="dist/${DEB_BASENAME}"
+          test -f "$DEB"
+          NOTES="Debian package \`${DEB_BASENAME}\` (Linux amd64).
+
+          Ansible:
+
+          \`\`\`
+          gh release download ${TAG} --repo dembaca/vtpm-mds --pattern 'vtpm-mds_*_amd64.deb'
+          \`\`\`
+
+          Direct URL (private repo: authenticate):
+
+          https://github.com/dembaca/vtpm-mds/releases/download/${TAG}/${DEB_BASENAME}
+          "
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$DEB" --clobber
+            gh release edit "$TAG" --notes "$NOTES"
+          else
+            gh release create "$TAG" "$DEB" \
+              --title "$TAG" \
+              --notes "$NOTES" \
+              --target "${GITHUB_SHA}"
+          fi
+          gh release view "$TAG"
+          echo "Download: https://github.com/dembaca/vtpm-mds/releases/download/${TAG}/${DEB_BASENAME}"

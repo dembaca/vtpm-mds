@@ -37,6 +37,16 @@ sudo dpkg -i dist/vtpm-mds_*.deb
 sudo systemctl start vtpm-mds   # enabled on install, not auto-started
 ```
 
+CI builds that same amd64 `.deb` on Linux (`ubuntu-24.04`, not Darwin). A GitHub Release is created when you push tag `v<debian-version>` (for example `v0.1.0`) or run **Actions → Debian package → Run workflow** with **Publish GitHub Release**.
+
+Ansible / Hogan download (private repo: GitHub auth required):
+
+```bash
+gh release download v0.1.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds_*_amd64.deb'
+# or
+# https://github.com/dembaca/vtpm-mds/releases/download/v0.1.0/vtpm-mds_0.1.0_amd64.deb
+```
+
 The unit listens on `169.254.169.1:80` (Hogan IMDS bridge). Packaged config points at Ansible-managed Hogan PKI under `/etc/ssl`. See `debian/README.Debian`.
 
 ### Configuration
