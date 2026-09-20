@@ -46,7 +46,7 @@ override_dh_dwz:
 	# Go binaries are not compatible with dh_dwz.
 
 override_dh_installsystemd:
-	# Enable for next boot (Hogan IMDS bridge is already provisioned by
+	# Enable for next boot (the IMDS bridge is already provisioned by
 	# Ansible) but do not start during dpkg -i — bind 169.254.169.1:80
 	# fails on build/lab hosts that lack vmbr_imds.
 	dh_installsystemd --no-start

@@ -1,4 +1,4 @@
-# Build the Hogan amd64 .deb on Linux and, on a version tag or an
+# Build the amd64 .deb on Linux and, on a version tag or an
 # explicit workflow_dispatch, attach it to a GitHub Release.
 #
 # Ansible / operator fetch (private repo needs GitHub auth):

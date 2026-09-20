@@ -1,9 +1,9 @@
-vtpm-mds for Hogan
-------------------
+vtpm-mds for Proxmox / lab hosts
+--------------------------------
 
 This package installs only the daemon, aliases, devid-enroll client, and
 systemd unit. It does not configure the IMDS bridge, nftables DNAT, or
-swtpm PKI — those already come from bgl-infra Ansible on Hogan:
+swtpm PKI — those typically come from site Ansible on the lab host:
 
   proxmox-imds-network  vmbr_imds 169.254.169.1/32 + DNAT 169.254.169.254:80
   proxmox-swtpm         EK/DevID CAs under /etc/ssl/certs and /etc/ssl/private
@@ -19,7 +19,7 @@ If the Ansible role uses a different key suffix (e.g. .pem), edit the
 conffile. Missing CA files disable DevID routes but IMDS still starts.
 
 The unit is enabled on install but not started (so dpkg -i succeeds on
-hosts without vmbr_imds). On Hogan:
+hosts without vmbr_imds). On the lab host:
 
   systemctl start vtpm-mds
   systemctl status vtpm-mds

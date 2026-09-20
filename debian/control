@@ -22,10 +22,10 @@ Description: QEMU/Proxmox IMDS and TPM attestation service
  first-class inventory backend).
  .
  The daemon listens on 169.254.169.1:80 by default so it matches the
- Hogan IMDS bridge (vmbr_imds) and nftables DNAT of 169.254.169.254:80.
+ IMDS bridge (vmbr_imds) and nftables DNAT of 169.254.169.254:80.
  Empty inventory_path falls back to Proxmox /etc/pve.
  .
  This package ships the vtpm-mds daemon, legacy aliases prox-mds and
- qemu-mds, the devid-enroll guest client, a systemd unit, and a Hogan-
- oriented default config. Host swTPM PKI and the IMDS network are
+ qemu-mds, the devid-enroll guest client, a systemd unit, and a
+ Proxmox-oriented default config. Host swTPM PKI and the IMDS network are
  provided separately (Ansible roles proxmox-swtpm / proxmox-imds-network).

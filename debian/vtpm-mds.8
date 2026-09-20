@@ -9,7 +9,7 @@ vtpm-mds \- QEMU/Proxmox IMDS and TPM attestation service
 .SH DESCRIPTION
 .B vtpm-mds
 serves EC2-IMDSv2-compatible instance metadata and TPM DevID enrollment
-for QEMU guests. On Hogan it listens on
+for QEMU guests. On a Proxmox lab host it listens on
 .B 169.254.169.1:80
 so the IMDS bridge (vmbr_imds) and nftables DNAT of
 .B 169.254.169.254:80

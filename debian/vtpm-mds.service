@@ -14,7 +14,7 @@ RestartSec=5s
 StartLimitIntervalSec=60
 StartLimitBurst=12
 
-# Hogan: bind the IMDS bridge address (Ansible vmbr_imds / nftables DNAT).
+# Bind the IMDS bridge address (Ansible vmbr_imds / nftables DNAT).
 # Root is required to read /etc/pve, /proc/net/arp, and DevID CA private keys.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 LimitNOFILE=65536

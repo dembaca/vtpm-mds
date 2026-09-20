@@ -1,11 +1,11 @@
-# Hogan-oriented packaged default. Lab/QEMU hosts should use
+# Proxmox-oriented packaged default. Lab/QEMU hosts should use
 # /etc/vtpm-mds/config.lab.yaml from the source tree instead.
 #
 # Host PKI is installed by Ansible role proxmox-swtpm (not this package):
 #   /etc/ssl/certs/proxmox_tpm_ca.crt
 #   /etc/ssl/certs/proxmox_devid_ca.crt
 #   /etc/ssl/private/proxmox_devid_ca.*  (key; adjust suffix if needed)
-# Inventory: empty path → Proxmox /etc/pve (correct on Hogan).
+# Inventory: empty path → Proxmox /etc/pve (correct on a Proxmox host).
 # Listen address matches vmbr_imds + nftables DNAT 169.254.169.254:80 → :80.
 
 mds:
