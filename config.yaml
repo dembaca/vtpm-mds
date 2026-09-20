@@ -16,5 +16,15 @@ mds:
   tpm_device: "/dev/tpm0"
   host_tpm_device: "/dev/tpmrm0"
   signing_key_path: "/var/lib/vtpm-mds/signing-key.pem"
+  # Refuse a caller the inventory could not bind to a VM record at the
+  # endpoints that report its instance identity: /latest/meta-data/instance-id,
+  # both /latest/dynamic/instance-identity/ endpoints and /latest/identity.
+  # The refusal is a 404 indistinguishable from an unknown route, and is
+  # logged with the caller's peer address. The rest of the metadata tree,
+  # PUT /latest/api/token and /health stay available to an unbound caller.
+  # Default true. Setting it to false is a migration aid while an inventory is
+  # completed: unbound callers are then served an id synthesized from their
+  # peer address, which names the connection and is not an identity.
+  require_vm_identity: true
   # Optional YAML inventory (preferred). When empty, falls back to Proxmox /etc/pve.
   # inventory_path: "/var/lib/mds-lab/inventory/lab.yaml"

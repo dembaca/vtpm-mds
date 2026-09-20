@@ -35,6 +35,37 @@ Log the loaded configuration.
 .TP
 .B \-version
 Print the package/build version and exit.
+.SH CONFIGURATION
+Settings live under
+.B mds
+in the configuration file.
+.TP
+.B require_vm_identity
+Default
+.BR true .
+A caller whose connection the VM inventory could not bind to a VM record is
+refused at the endpoints that report its instance identity:
+.IR /latest/meta\-data/instance\-id ,
+.IR /latest/dynamic/instance\-identity/document ,
+.I /latest/dynamic/instance\-identity/signature
+and
+.IR /latest/identity .
+The refusal is
+.B 404
+with the body an unknown route returns, so the caller cannot tell the two
+apart; each one is logged with the caller's peer address, so an operator can.
+The rest of the metadata tree,
+.B PUT /latest/api/token
+and
+.I /health
+are served to an unbound caller either way.
+.IP
+Setting it to
+.B false
+is a migration aid for a deployment whose inventory is incomplete: unbound
+callers are then served an instance id synthesized from their peer address.
+That id names the connection, not an instance, and is not an identity. Add the
+missing guests to the inventory and remove the setting.
 .SH FILES
 .TP
 .I /etc/vtpm-mds/config.yaml
