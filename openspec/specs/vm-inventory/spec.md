@@ -63,7 +63,9 @@ NOT validate MAC syntax, SHALL NOT reject a MAC that appears under more than
 one `id`, and SHALL NOT require any entry to have a MAC at all.
 
 A file that cannot be read, or whose contents are not valid YAML of this
-shape, SHALL produce an error rather than a partial inventory.
+shape, SHALL produce an error rather than a partial inventory. A file that
+parses but declares no usable entry SHALL produce an empty inventory without
+an error.
 
 #### Scenario: A lab inventory entry is loaded
 
@@ -150,9 +152,10 @@ fails, leaving the connection bound to no VM record:
    rendered as an IP address string. A remote address that is not a TCP
    address, or that carries no IP, SHALL end resolution.
 2. `/proc/net/arp` SHALL be read and scanned for a line whose first field
-   equals that IP string exactly and whose hardware address is not
-   `00:00:00:00:00:00`. A read failure, no matching line, or a match that is
-   only an incomplete ARP entry SHALL end resolution.
+   equals that IP string exactly. A line whose hardware address is
+   `00:00:00:00:00:00` is an incomplete entry and SHALL be skipped. A read
+   failure, or reaching the end of the table with no complete matching line,
+   SHALL end resolution.
 3. The hardware address of the matching line, lowercased, SHALL be looked up
    in the cached inventory. A MAC that no cached record claims SHALL end
    resolution.
@@ -274,8 +277,9 @@ from the caller's IP address with every `.` replaced by `-` and prefixed with
 used for that fallback SHALL be the first entry of the `X-Forwarded-For`
 request header when that header is present, and the connection's remote
 address otherwise, so a caller that is in no inventory can choose the instance
-ID it is served. The fallback applies wherever an instance ID is derived,
-including the instance identity document.
+ID it is served. The fallback SHALL apply to every EC2-compatible handler that
+derives an instance ID, including
+`/latest/dynamic/instance-identity/document`.
 
 #### Scenario: An unknown caller receives a synthesised instance ID
 
