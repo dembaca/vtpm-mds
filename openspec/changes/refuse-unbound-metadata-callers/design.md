@@ -29,7 +29,8 @@ test expects a bound caller and is unaffected.
 
 **Goals:**
 
-- Being in the inventory is what gets a caller instance data.
+- Being in the inventory is what gets a caller an instance identity.
+- A caller is never refused information that is already its own.
 - No request header can name the caller, anywhere.
 - An operator whose inventory is incomplete has a way to keep a deployment
   running while they fix it, and that way is visible in the configuration file.
@@ -91,14 +92,38 @@ unbound caller with no token still sees `401`. The identity check then runs
 before any instance value is computed, so a refused request never reads the
 inventory, the ARP table or the peer address for a value it will not send.
 
-### Wrap the routes at registration rather than checking in each handler
+### Refuse only the endpoints that assert an identity
 
-The handlers that report instance data are registered together in
-`server.New`, already behind `cfg.MDS.EnableEC2Compat` and
-`cfg.MDS.EnableTPMAttestation`. The check is applied by wrapping those
-registrations, so the configuration value reaches it without a package-level
-variable, and a handler added to that group inherits the check instead of
-needing to remember it.
+An unbound caller is refused `instance-id`, the instance identity document and
+its signature, and `/latest/identity`. It keeps `local-hostname`, `local-ipv4`,
+`public-ipv4`, `placement/availability-zone`, `services/domain` and the index.
+
+Refusing the whole `/latest/meta-data/` tree was considered and rejected. Those
+remaining values are not claims the service makes about the caller: two of them
+are the caller's own request echoed back, two are constants identical for every
+VM, one is always unavailable, and the index is static. Withholding them buys
+no confidentiality — the caller already knows its own address and the `Host`
+header it sent — while breaking guest tooling that reads `local-hostname` or
+`local-ipv4` during boot before anything needs an instance id.
+
+The signature endpoint is refused together with the document even though it
+serves a constant, because the two are one feature and a detached signature
+over an unobtainable document is not a value worth serving separately.
+
+### Wrap a named set of routes at registration
+
+The refused paths are registered in `server.New`, already behind
+`cfg.MDS.EnableEC2Compat` and `cfg.MDS.EnableTPMAttestation`. The check is
+applied by wrapping exactly those registrations, so the configuration value
+reaches it without a package-level variable and the refused set is visible in
+one place rather than spread across handler bodies.
+
+The trade-off against wrapping the whole group is that a future
+identity-bearing handler has to be added to the set deliberately. That is
+accepted because the set is small, enumerated in normative text in the spec,
+and pinned by a test that asserts both which paths refuse and which do not — so
+a handler added to the wrong side of the line fails the test rather than
+shipping.
 
 Per-handler calls were rejected for the reason the current defect exists:
 `identity/handlers.go` is a second copy of the same logic that was never
@@ -120,8 +145,8 @@ point: two copies is how this endpoint came to ignore the inventory.
 
 ## Risks / Trade-offs
 
-- **[Risk] A deployment with an incomplete inventory loses metadata for its
-  unlisted guests on upgrade** → Mitigation: `require_vm_identity: false`
+- **[Risk] A deployment with an incomplete inventory loses the instance id for
+  its unlisted guests on upgrade** → Mitigation: `require_vm_identity: false`
   restores service while the inventory is completed, and the refusal is logged
   per caller with its address, so the list of guests to add is in the journal.
   The proposal marks the change BREAKING so it reaches the changelog.
@@ -130,7 +155,7 @@ point: two copies is how this endpoint came to ignore the inventory.
   `vm-inventory` resolves through `/proc/net/arp`, which holds IPv4 neighbours
   only; that limitation is already specified, and extending it is separate
   work. Such a caller was previously served an id derived from its own headers,
-  which was not an identity either.
+  which was not an identity either, and it keeps the rest of the metadata tree.
 - **[Risk] `require_vm_identity: false` reads as a supported mode and becomes
   permanent** → Mitigation: the spec says in normative text that the
   synthesized id names the connection and is not an identity, and the setting

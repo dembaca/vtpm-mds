@@ -2,16 +2,32 @@
 
 ## ADDED Requirements
 
-### Requirement: Refuse Instance Data To Callers With No VM Identity
+### Requirement: Refuse An Instance Identity To Callers With No VM Record
 
 The service SHALL read `mds.require_vm_identity`, whose built-in default is
 true.
 
-When it is true, every handler that reports instance data SHALL require the
-request's connection to be bound to a VM record by the `vm-inventory`
-capability, and SHALL refuse the request when it is not. This covers every path
-under `/latest/meta-data/`, including the index, and both
-`/latest/dynamic/instance-identity/` endpoints.
+When it is true, every handler that reports the caller's *instance identity*
+SHALL require the request's connection to be bound to a VM record by the
+`vm-inventory` capability, and SHALL refuse the request when it is not. Exactly
+these paths SHALL be refused:
+
+- `GET /latest/meta-data/instance-id`
+- `GET /latest/dynamic/instance-identity/document`
+- `GET /latest/dynamic/instance-identity/signature`
+- `GET /latest/identity`, as specified by `workload-identity`
+
+The signature endpoint is refused with the document although it serves a
+constant: the two form one feature, and a detached signature over a document
+the caller cannot obtain reports nothing.
+
+The remaining metadata paths SHALL NOT be refused, because none of them asserts
+an identity the service vouches for. `local-hostname` echoes the caller's own
+`Host` header, `local-ipv4` reports the caller's own peer address,
+`placement/availability-zone` and `services/domain` are fixed strings,
+`public-ipv4` is always unavailable, and the index is a static listing. An
+unbound caller SHALL continue to be served all of them, and the index SHALL
+continue to list `instance-id` even though reading it will be refused.
 
 The refusal SHALL be checked after the session token is validated and before
 any instance value is derived, and SHALL be answered `404` with the body
@@ -23,8 +39,9 @@ refusal with the caller's peer address, so an operator can.
 `PUT /latest/api/token` and `GET /health` SHALL NOT be affected: both remain
 unauthenticated and are served to any caller, bound or not.
 
-When `mds.require_vm_identity` is false the handlers SHALL serve an unbound
-caller as specified by `Derive The Instance Id From The Bound VM Record`.
+When `mds.require_vm_identity` is false none of these paths SHALL be refused,
+and the instance identity SHALL be derived as specified by
+`Derive The Instance Id From The Bound VM Record`.
 
 #### Scenario: Unbound caller is refused the instance id
 
@@ -40,14 +57,25 @@ caller as specified by `Derive The Instance Id From The Bound VM Record`.
   `GET /latest/no-such-thing`
 - **THEN** both responses are `404` with the body `404 page not found`
 
-#### Scenario: Unbound caller is refused the whole metadata tree
+#### Scenario: Unbound caller is refused both instance identity endpoints
 
 - **GIVEN** `mds.require_vm_identity` is true and an unbound caller with a
   valid session token
+- **WHEN** it sends `GET /latest/dynamic/instance-identity/document` and
+  `GET /latest/dynamic/instance-identity/signature`
+- **THEN** both responses are `404`
+
+#### Scenario: Unbound caller keeps the caller-derived metadata
+
+- **GIVEN** `mds.require_vm_identity` is true and an unbound caller from
+  `10.0.0.5` with a valid session token
 - **WHEN** it sends `GET /latest/meta-data/`,
-  `GET /latest/meta-data/local-ipv4` and
-  `GET /latest/dynamic/instance-identity/document`
-- **THEN** every response is `404`
+  `GET /latest/meta-data/local-hostname`,
+  `GET /latest/meta-data/local-ipv4`,
+  `GET /latest/meta-data/placement/availability-zone` and
+  `GET /latest/meta-data/services/domain`
+- **THEN** every response is `200`, `local-ipv4` is `10.0.0.5`, and the index
+  still lists `instance-id`
 
 #### Scenario: Bound caller is unaffected
 
@@ -82,7 +110,7 @@ caller's address.
 
 When no VM record is bound and `mds.require_vm_identity` is true, the request
 SHALL be refused as specified by
-`Refuse Instance Data To Callers With No VM Identity`.
+`Refuse An Instance Identity To Callers With No VM Record`.
 
 When no VM record is bound and `mds.require_vm_identity` is false, the handler
 SHALL synthesize an id as `i-` followed by the peer address of the connection
@@ -141,6 +169,8 @@ by caller.
 
 `instanceId` SHALL be derived exactly as `GET /latest/meta-data/instance-id` is,
 so a caller with no bound VM record is refused rather than served a document.
+The signature endpoint SHALL be refused on the same terms, so the pair is
+available or refused together.
 
 `privateIp` SHALL be the IPv4 address of the connection's peer, derived exactly
 as `local-ipv4` is. When the peer has no IPv4 address `privateIp` SHALL be the

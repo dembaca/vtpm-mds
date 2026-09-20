@@ -14,11 +14,13 @@
 
 ## 3. Refuse unbound callers
 
-- [ ] 3.1 Wrap the EC2-compat and identity route registrations in `internal/server/server.go` with a check that refuses a request whose connection has no bound VM record, and verify `PUT /latest/api/token` and `GET /health` are not wrapped
+- [ ] 3.1 Wrap exactly the four identity-bearing route registrations in `internal/server/server.go` — `instance-id`, the instance identity document, its signature and `/latest/identity` — with a check that refuses a request whose connection has no bound VM record, and verify no other route is wrapped
 - [ ] 3.2 Verify the refusal runs after token validation: an unbound caller with no token gets `401` with `IMDSv2 token required`, and with a valid token gets `404`
 - [ ] 3.3 Verify the refused response body is exactly `404 page not found`, identical to a request for an unregistered route
-- [ ] 3.4 Verify the whole tree is covered: `/latest/meta-data/`, `/latest/meta-data/local-ipv4`, `/latest/dynamic/instance-identity/document` and `/latest/identity` all return `404` for an unbound caller
-- [ ] 3.5 Verify a bound caller is served every metadata value exactly as before, by running the existing `imds` handler tests unchanged
+- [ ] 3.4 Verify all four refused paths return `404` for an unbound caller: `/latest/meta-data/instance-id`, `/latest/dynamic/instance-identity/document`, `/latest/dynamic/instance-identity/signature` and `/latest/identity`
+- [ ] 3.5 Verify the paths that are deliberately not refused still return `200` to an unbound caller — `/latest/meta-data/`, `local-hostname`, `local-ipv4`, `placement/availability-zone`, `services/domain` — with a table-driven test that pins both sides of the line, so a handler added to the wrong side fails rather than ships
+- [ ] 3.6 Verify `PUT /latest/api/token` and `GET /health` are served to an unbound caller
+- [ ] 3.7 Verify a bound caller is served every metadata value exactly as before, by running the existing `imds` handler tests unchanged
 
 ## 4. Stop headers from naming the caller
 
@@ -35,5 +37,5 @@
 
 - [ ] 6.1 Run `go vet ./...` and `go test ./...` and verify both pass, reporting the output
 - [ ] 6.2 Run `scripts/qemu-lab/e2e-netns.sh` and verify it still reports `i-100`, since its netns MAC is in the lab inventory — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
-- [ ] 6.3 Verify an unbound caller is refused on the running service by requesting the instance id from a netns whose MAC is not in the inventory and confirming `404` plus the log line from task 5.1 — needs root, record who ran it
+- [ ] 6.3 Verify an unbound caller is refused on the running service by requesting the instance id from a netns whose MAC is not in the inventory and confirming `404` plus the log line from task 5.1, and that the same caller still gets `200` on `local-ipv4` — needs root, record who ran it
 - [ ] 6.4 Verify DevID enrollment still refuses an unbound caller with `401` and `VM identity required (MAC not in inventory)`, so this change did not flatten the two refusals into one
