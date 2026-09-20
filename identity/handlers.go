@@ -148,12 +148,11 @@ func getClientIP(r *http.Request) string {
 	if forwarded != "" {
 		return strings.Split(forwarded, ",")[0]
 	}
-	ip := r.RemoteAddr
-	parts := strings.Split(ip, ":")
-	if len(parts) > 0 {
-		return parts[0]
+	ip := imds.PeerIP(r.RemoteAddr)
+	if ip == nil {
+		return "127.0.0.1"
 	}
-	return "127.0.0.1"
+	return ip.String()
 }
 
 
