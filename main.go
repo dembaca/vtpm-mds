@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -72,6 +74,12 @@ func main() {
 	go func() {
 		log.Printf("Starting server on %s", cfg.MDS.ListenAddr)
 		if err := srv.Start(); err != nil {
+			if errors.Is(err, http.ErrServerClosed) {
+				// Expected result of a requested shutdown closing the
+				// listener; the main goroutine owns the exit path below.
+				log.Printf("Listener stopped: %v", err)
+				return
+			}
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
