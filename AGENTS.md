@@ -75,6 +75,50 @@ Tests and vet must pass: `go vet ./...` and `go test ./...`.
 - Tell each subagent to commit on its own branch and not to push, so the
   coordinator merges and verifies the combined tree.
 
+## Known gaps, and the queue as of 2026-09-20
+
+`openspec/changes/` is empty: everything specified has shipped. The work below is
+known, reproduced, and **not yet written up as changes**. Write a proposal, design,
+tasks and spec delta for each before touching code — do not fix them inline.
+
+Ordered by severity. The first four are recorded as current behaviour in
+`openspec/specs/`, so read the requirement before proposing a change to it.
+
+1. **The EK certificate is not bound to the endorsement key used for credential
+   activation** (`internal/devid/verify.go`, `_ = pub`). An EK certificate minted
+   over an unrelated key, chaining to `ek_ca_chain`, enrolls successfully — verified
+   against a software TPM. The EK factor proves possession of a public certificate,
+   not of the certified TPM, and `ek_sha256` pinning inherits the same weakness.
+   See `openspec/specs/devid-enrollment/spec.md`, "Trust The EK Certificate".
+2. **The LDevID subject is guest-controlled** (`internal/devid/enroll.go`,
+   `subjectCNFromRequest`): the CSR's CN wins over the authenticated VM id.
+3. **Unbound callers are served an identity instead of refused**
+   (`imds/handlers.go`, `getInstanceID` fallback): `i-<caller-ip>`, with
+   `X-Forwarded-For` taking precedence, so the caller picks its own id. It also
+   lands in the instance identity document. `/latest/identity`
+   (`identity/handlers.go`) ignores inventory entirely.
+4. **A clean stop leaves the unit failed**: `main.go` calls `log.Fatalf` on the
+   error from `srv.Start()`, including `http.ErrServerClosed`, so every
+   `systemctl stop`/`restart` exits 1 and ends in `failed`. Verified on 0.2.0.
+   This belongs to the `operability` capability.
+5. Smaller, from writing the specs: `token_ttl` parse errors are discarded (a typo
+   yields a zero TTL, so every metadata read 401s); `config.Load` never merges
+   defaults, so omitting `enable_ec2_compat` silently disables the metadata tree
+   while `/health` still reports ok; `local-ipv4` splits `RemoteAddr` on every
+   `:` and returns `[fe80` for an IPv6 peer.
+6. Long-standing and unspecified: TPM quote verification, and real signing keys
+   for the identity JWTs.
+
+Two things need root on the lab host, so they need the maintainer:
+
+- `/usr/local/sbin/hogan-lab` whitelists only `dist/vtpm-mds_*.deb` for
+  `dpkg-install`, so the guest package cannot be installed through the wrapper.
+- `openspec init` has never been run here, which is why the `/opsx:*` commands the
+  README advertises do not exist. Run it as `openspec init --tools cursor` and
+  reconcile deliberately: keep the rules in this file and in
+  `.cursor/rules/openspec-workflow.mdc`, and let the generated files own only the
+  command definitions.
+
 ## Lab host facts
 
 The Proxmox lab host is `hogan.bgl.dembach.org`; the checkout is
