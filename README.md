@@ -124,6 +124,7 @@ See [`scripts/qemu-lab/README.md`](scripts/qemu-lab/README.md) for the nested-gu
 
 Architecture and trust model: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 Remote/Proxmox development workflows: [`DEVELOPMENT.md`](DEVELOPMENT.md).
+Copy-paste checks for IMDS / DevID / TPM / SPIRE: [E2E verification cheat sheet](#e2e-verification-cheat-sheet).
 
 ### Spec-driven workflow
 
@@ -145,6 +146,141 @@ In an OpenSpec-aware agent: `/opsx:propose`, `/opsx:apply`, `/opsx:verify`, `/op
 ```bash
 go test ./...
 go test ./internal/devid/ ./internal/inventory/ -count=1
+```
+
+## E2E verification cheat sheet
+
+Human (and agent) crib for “did DevID + SPIRE actually work?”. Paths below are the **Hogan lab**: host = Proxmox hypervisor, guest = VM **399** (`vtpm-pilot`). Nested QEMU-lab materials instead live under `/var/lib/mds-lab/vms/guest100/shared/devid-out/`.
+
+As `cursor-agent` on Hogan: `ssh vtpm-pilot` (or `qm guest exec 399 -- …`). Guest has **python3**, often **no curl**.
+
+**Green** means all of: MDS `instance-id=i-399`; guest DevID PEM issued by `CN=BGL Proxmox DevID CA`; `devid.{priv,pub}.blob` non-empty; `spire-agent` healthy; `spire-server agent list` shows a `tpm_devid` agent. `spire-agent api fetch x509` may still say `no identity issued` until you create registration entries — that is SPIRE policy, not enroll failure.
+
+### Host — package, MDS, IMDS DNAT
+
+```bash
+# What is running?
+dpkg -l vtpm-mds
+vtpm-mds -version          # must match dpkg Version
+systemctl is-active vtpm-mds
+curl -fsS http://169.254.169.1/health
+journalctl -u vtpm-mds -n 50 --no-pager | grep -E 'version |DevID |enroll/'
+
+# Guest IMDS NIC on the bridge
+qm status 399; qm config 399 | grep -E 'net1|tpmstate'
+ip neigh show dev vmbr_imds | grep 169.254.169.10
+
+# DNAT 169.254.169.254 → :80 (use iifname, table inet vtpm_mds)
+nft list table inet vtpm_mds
+```
+
+### Guest — IMDS (from inside the VM)
+
+```bash
+ssh vtpm-pilot
+python3 - <<'PY'
+import json, urllib.request
+IMDS = "http://169.254.169.254"
+print(urllib.request.urlopen(IMDS + "/health", timeout=5).read().decode())
+req = urllib.request.Request(IMDS + "/latest/api/token", method="PUT",
+    headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"})
+token = urllib.request.urlopen(req, timeout=5).read().decode()
+h = {"X-aws-ec2-metadata-token": token}
+iid = urllib.request.urlopen(urllib.request.Request(
+    IMDS + "/latest/meta-data/instance-id", headers=h), timeout=5).read().decode()
+print("instance-id", iid)          # expect i-399
+print(urllib.request.urlopen(urllib.request.Request(
+    IMDS + "/latest/dynamic/instance-identity/document", headers=h), timeout=5).read().decode())
+PY
+```
+
+### Guest — TPM 2.0
+
+```bash
+ls -l /dev/tpm0 /dev/tpmrm0
+tpm2_getcap properties-fixed | grep -E 'FAMILY|MANUFACTURER|VENDOR_STRING'
+tpm2_getcap handles-persistent          # DevID/EK typically 0x81010001 / 0x81010016
+tpm2_pcrread sha256:0,1,2,3,4,5,6,7
+
+# EK certificate in NV (swtpm may or may not implement this NV index)
+tpm2_getekcertificate -o /tmp/ek.der && \
+  openssl x509 -inform DER -in /tmp/ek.der -noout -subject -issuer -dates
+```
+
+### Guest — DevID materials (SPIRE `tpm_devid` files)
+
+```bash
+ls -l /var/lib/spire/agent/devid.crt.pem \
+      /var/lib/spire/agent/devid.priv.blob \
+      /var/lib/spire/agent/devid.pub.blob
+wc -c /var/lib/spire/agent/devid.priv.blob /var/lib/spire/agent/devid.pub.blob
+# Hogan today: priv=222 pub=280 bytes (TPM2B_PRIVATE / TPM2B_PUBLIC)
+
+openssl x509 -in /var/lib/spire/agent/devid.crt.pem -noout -subject -issuer -dates
+# subject=CN=vtpm-pilot   issuer=CN=BGL Proxmox DevID CA
+openssl x509 -in /var/lib/spire/agent/devid.crt.pem -noout -text | less
+devid-enroll -version
+```
+
+(Re)enroll against MDS — writes a **new** cert into `-out` (use `/tmp` so you do not clobber SPIRE’s files until you mean to):
+
+```bash
+# guest; default MDS URL is http://169.254.169.254
+sudo devid-enroll -cn vtpm-pilot -tpm /dev/tpmrm0 -out /tmp/devid-e2e
+openssl x509 -in /tmp/devid-e2e/devid.crt.pem -noout -subject -issuer -dates
+```
+
+Install a host-matching client after a `dpkg -i` on Hogan:
+
+```bash
+# HOST as cursor-agent
+scp /usr/bin/devid-enroll vtpm-pilot:/tmp/devid-enroll.new
+ssh vtpm-pilot 'sudo install -m 0755 /tmp/devid-enroll.new /usr/local/bin/devid-enroll && devid-enroll -version'
+```
+
+### Host — verify the guest cert against the DevID CA
+
+```bash
+ssh vtpm-pilot cat /var/lib/spire/agent/devid.crt.pem > /tmp/devid.crt.pem
+openssl x509 -in /etc/ssl/certs/proxmox_devid_ca.crt -noout -subject -issuer -dates
+# issuer is the org root; -partial_chain if you only have the issuing CA file
+openssl verify -partial_chain -CAfile /etc/ssl/certs/proxmox_devid_ca.crt /tmp/devid.crt.pem
+# expect: /tmp/devid.crt.pem: OK
+```
+
+### Guest — SPIRE agent
+
+```bash
+systemctl is-active spire-agent
+grep -A6 'NodeAttestor "tpm_devid"' /etc/spire/agent.conf
+# devid_*_path should be /var/lib/spire/agent/devid.{crt.pem,priv.blob,pub.blob}
+
+spire-agent healthcheck -socketPath /tmp/spire-agent/public/api.sock
+# expect: Agent is healthy.
+
+journalctl -u spire-agent -n 80 --no-pager | grep -Ei 'tpm_devid|attested|error'
+```
+
+### Host — SPIRE server (attested nodes)
+
+```bash
+systemctl is-active spire-server
+grep -A6 'NodeAttestor "tpm_devid"' /etc/spire/server.conf
+# devid_ca_path = /etc/ssl/certs/proxmox_devid_ca.crt
+# endorsement_ca_path = /etc/ssl/certs/proxmox_tpm_ca.crt
+
+spire-server agent list
+# look for Attestation type: tpm_devid
+# SPIFFE ID …/spire/agent/tpm_devid/<fingerprint>
+# Can re-attest: true
+```
+
+MDS enroll logs on the host while a guest enroll runs:
+
+```bash
+journalctl -u vtpm-mds -f --no-pager | grep -E 'enroll/|VMID=399'
+# POST /latest/devid/enroll/start 200
+# POST /latest/devid/enroll/finish 200
 ```
 
 ## License
