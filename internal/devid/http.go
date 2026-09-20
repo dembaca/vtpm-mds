@@ -79,7 +79,7 @@ func (e *Enroller) HandleStart(w http.ResponseWriter, r *http.Request) {
 	}
 	ekFP := EKFingerprint(ekCert)
 
-	result, err := e.Start(requestData, sig, vmid, vmid, ekFP)
+	result, err := e.Start(requestData, sig, vmid, ekFP)
 	if err != nil {
 		log.Printf("devid enroll/start: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)

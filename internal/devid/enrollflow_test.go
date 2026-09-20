@@ -9,8 +9,10 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -211,4 +213,60 @@ func postFinish(t *testing.T, e *Enroller, vmID string, headerCert *x509.Certifi
 	rec := httptest.NewRecorder()
 	e.HandleFinish(rec, req)
 	return rec
+}
+
+// sessionNonce peeks at a stored session's nonce, standing in for the
+// credential activation a real TPM performs.
+func sessionNonce(t *testing.T, s *SessionStore, id string) []byte {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[id]
+	if !ok {
+		t.Fatalf("no session %q", id)
+	}
+	return sess.Nonce
+}
+
+// enrollOnce runs both legs for a guest holding its own EK certificate and
+// returns the issued certificate.
+func enrollOnce(t *testing.T, e *Enroller, f *fakeTPM, ekCert *x509.Certificate, vmID string, platform pkix.RDNSequence) *x509.Certificate {
+	t.Helper()
+	_, data, sig := f.signingRequest(t, ekCert, platform)
+
+	rec := postStart(t, e, vmID, ekCert, data, sig)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enroll/start code=%d body=%q, want 200", rec.Code, rec.Body.String())
+	}
+	var start EnrollStartResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &start); err != nil {
+		t.Fatal(err)
+	}
+
+	fin := postFinish(t, e, vmID, ekCert, start.SessionID, sessionNonce(t, e.Sessions, start.SessionID))
+	if fin.Code != http.StatusOK {
+		t.Fatalf("enroll/finish code=%d body=%q, want 200", fin.Code, fin.Body.String())
+	}
+	var finish EnrollFinishResponse
+	if err := json.Unmarshal(fin.Body.Bytes(), &finish); err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode([]byte(finish.DevIDCertPEM))
+	if block == nil || block.Type != "CERTIFICATE" {
+		t.Fatalf("devid_cert_pem is not a certificate: %q", finish.DevIDCertPEM)
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cert
+}
+
+func findExtension(cert *x509.Certificate, oid asn1.ObjectIdentifier) (pkix.Extension, bool) {
+	for _, ext := range cert.Extensions {
+		if ext.Id.Equal(oid) {
+			return ext, true
+		}
+	}
+	return pkix.Extension{}, false
 }

@@ -150,16 +150,18 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 	devTPM.RSAParameters.Symmetric = nil
 
 	sr := &SigningRequest{
-		EndorsementKey: &ekTPM,
-		DevIDKey:       &devTPM,
+		EndorsementKey:   &ekTPM,
+		DevIDKey:         &devTPM,
 		PlatformIdentity: pkix.Name{CommonName: "vm-100"}.ToRDNSequence(),
 	}
 
-	cert, err := ca.IssueDevID(sr, "fallback", time.Now().UTC())
+	// The platform identity's common name is ignored: the authenticated VM id
+	// passed in is the subject common name.
+	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("IssueDevID: %v", err)
 	}
-	if cert.Subject.CommonName != "vm-100" {
+	if cert.Subject.CommonName != "100" {
 		t.Fatalf("CN=%q", cert.Subject.CommonName)
 	}
 	if cert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
@@ -176,7 +178,7 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 	}
 
 	enroller := NewEnroller(ca, x509.NewCertPool(), NewSessionStore(time.Minute))
-	sid, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "vm-100", "100", "ekfp")
+	sid, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "100", "ekfp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +186,7 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 		t.Fatal("expected nonce mismatch error")
 	}
 
-	sid2, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "vm-100", "100", "ekfp")
+	sid2, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "100", "ekfp")
 	if err != nil {
 		t.Fatal(err)
 	}

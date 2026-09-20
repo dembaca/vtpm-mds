@@ -144,7 +144,7 @@ func TestFinishRejectsIdentityMismatch(t *testing.T) {
 	pub.RSAParameters.Symmetric = nil
 	sr := SigningRequest{DevIDKey: &pub}
 
-	sid, err := enroller.Sessions.Put([]byte("nonce"), sr, "100", "100", "fp-a")
+	sid, err := enroller.Sessions.Put([]byte("nonce"), sr, "100", "fp-a")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestFinishRejectsIdentityMismatch(t *testing.T) {
 		t.Fatal("expected VM mismatch")
 	}
 
-	sid, err = enroller.Sessions.Put([]byte("nonce"), sr, "100", "100", "fp-a")
+	sid, err = enroller.Sessions.Put([]byte("nonce"), sr, "100", "fp-a")
 	if err != nil {
 		t.Fatal(err)
 	}

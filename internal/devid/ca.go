@@ -130,9 +130,11 @@ func (ca *CA) uniqueSerial(template *x509.Certificate) (*big.Int, error) {
 	return new(big.Int).SetBytes(h.Sum(nil)), nil
 }
 
-// IssueDevID builds and signs an LDevID certificate for sr.
-// subjectCN is used when PlatformIdentity has no CN.
-func (ca *CA) IssueDevID(sr *SigningRequest, subjectCN string, notBefore time.Time) (*x509.Certificate, error) {
+// IssueDevID builds and signs an LDevID certificate for sr. commonName is the
+// authenticated VM id bound to the enroll session and always becomes the
+// subject common name; any common name in sr.PlatformIdentity is ignored,
+// because the guest must not choose the identity its certificate asserts.
+func (ca *CA) IssueDevID(sr *SigningRequest, commonName string, notBefore time.Time) (*x509.Certificate, error) {
 	if sr == nil || sr.DevIDKey == nil {
 		return nil, errors.New("missing DevID key")
 	}
@@ -141,12 +143,11 @@ func (ca *CA) IssueDevID(sr *SigningRequest, subjectCN string, notBefore time.Ti
 		return nil, err
 	}
 
-	var subj pkix.Name
-	subj.FillFromRDNSequence(&sr.PlatformIdentity)
-	if subj.CommonName == "" && subjectCN != "" {
-		subj.CommonName = subjectCN
-	}
+	subj := subjectFromPlatformIdentity(sr.PlatformIdentity, commonName)
 
+	// Unreachable in the enroll path: authentication requires a non-empty VM
+	// id and that id is always the common name, so the subject is never empty.
+	// Kept as a guard because RFC 5280 requires a critical SAN in that case.
 	subjectIsEmpty := len(subj.ToRDNSequence()) == 0
 	sanExt, err := buildDevIDSAN(subjectIsEmpty, sr)
 	if err != nil {
@@ -174,6 +175,33 @@ func (ca *CA) IssueDevID(sr *SigningRequest, subjectCN string, notBefore time.Ti
 		return nil, err
 	}
 	return x509.ParseCertificate(der)
+}
+
+// oidCommonName is id-at-commonName (2.5.4.3).
+var oidCommonName = asn1.ObjectIdentifier{2, 5, 4, 3}
+
+// subjectFromPlatformIdentity carries the platform identity's relative
+// distinguished names into the certificate subject, dropping any common name
+// it holds and setting commonName instead. Filtering at the RDN level keeps
+// the other attributes exactly as the guest sent them.
+func subjectFromPlatformIdentity(platform pkix.RDNSequence, commonName string) pkix.Name {
+	kept := make(pkix.RDNSequence, 0, len(platform))
+	for _, rdn := range platform {
+		attrs := make([]pkix.AttributeTypeAndValue, 0, len(rdn))
+		for _, atv := range rdn {
+			if atv.Type.Equal(oidCommonName) {
+				continue
+			}
+			attrs = append(attrs, atv)
+		}
+		if len(attrs) > 0 {
+			kept = append(kept, attrs)
+		}
+	}
+	var subj pkix.Name
+	subj.FillFromRDNSequence(&kept)
+	subj.CommonName = commonName
+	return subj
 }
 
 func buildDevIDSAN(subjectIsEmpty bool, sr *SigningRequest) (pkix.Extension, error) {

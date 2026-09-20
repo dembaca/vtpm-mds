@@ -36,6 +36,10 @@ type permanentIdentifier struct {
 	Assigner        asn1.ObjectIdentifier `asn1:"optional"`
 }
 
+// buildSAN marks the extension critical when the subject is empty, as RFC 5280
+// requires. Issued LDevIDs always carry the authenticated VM id as their common
+// name, so subjectIsEmpty is never true for them and the TCG SAN is never
+// critical; the branch is kept as a guard for other callers.
 func buildSAN(subjectIsEmpty bool, hwSerialNum []byte, permanentID string) (pkix.Extension, error) {
 	names := []generalName{
 		{
