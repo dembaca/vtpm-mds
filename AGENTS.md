@@ -14,10 +14,11 @@ behaviour without a change record is the thing this project most wants to avoid.
 2. Read `openspec/specs/` for the capabilities you touch, when they exist.
 3. Work task by task. Tick a checkbox only after running the verification that
    the task states, and say what the output was.
-4. Validate before opening a PR:
-   - `openspec validate --all --strict` where the CLI exists.
-   - Otherwise `scripts/openspec-validate.py --strict` — the lab hosts have no
-     node/npm, so the CLI cannot be installed there.
+4. Validate before opening a PR with `openspec validate --all --strict`. The
+   CLI is installed on `hogan` (see "Lab host facts"), so that is the check to
+   run here and it is authoritative. On a host without node, fall back to
+   `scripts/openspec-validate.py --strict`, which covers the same structure but
+   is a floor rather than a replacement.
 5. When a change ships, archive it: move each `specs/<capability>/spec.md` delta
    into `openspec/specs/<capability>/spec.md`, move the change directory under
    `openspec/changes/archive/`, and update the status table in `README.md`.
@@ -160,3 +161,9 @@ The Proxmox lab host is `hogan.bgl.dembach.org`; the checkout is
 package (`make deb-local`, then `dpkg -i --force-confold`), never from
 `make build`, so `dpkg -l vtpm-mds` and `vtpm-mds -version` identify exactly
 which tree is running. There is no passwordless sudo for the agent user.
+
+The OpenSpec CLI is installed here — `/usr/local/bin/openspec` with node in
+`/usr/bin/node` — so `openspec validate --all --strict` runs on this host. An
+earlier version of this file claimed the lab hosts had neither, and that the
+CLI therefore could not be installed; that was wrong, and it sent agents to the
+fallback script first.

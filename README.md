@@ -173,9 +173,9 @@ never drift from what shipped.
 ```bash
 openspec list            # active changes
 openspec list --specs    # capability inventory
-openspec validate --all
+openspec validate --all --strict
 
-# Lab hosts have no node/npm, so the CLI cannot run there:
+# Fallback for a host without node; a floor, not a replacement:
 scripts/openspec-validate.py --strict
 ```
 
