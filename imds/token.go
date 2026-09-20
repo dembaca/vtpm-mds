@@ -25,7 +25,10 @@ type TokenStore struct {
 	cleanup  *time.Ticker
 }
 
-// NewTokenStore creates a new token store
+// NewTokenStore creates a new token store. cfg.MDS.TokenTTL is assumed to
+// already be a valid Go duration: config.Load validates it at load time and
+// config.DefaultConfig() ships a constant that parses cleanly, so the error
+// here is intentionally discarded rather than re-validated.
 func NewTokenStore(cfg *config.Config) *TokenStore {
 	ttl, _ := time.ParseDuration(cfg.MDS.TokenTTL)
 	
