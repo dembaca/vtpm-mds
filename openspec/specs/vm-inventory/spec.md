@@ -47,9 +47,9 @@ backend SHALL NOT cause the other backend to be tried.
 
 ### Requirement: Load VM Records From The YAML Inventory
 
-The YAML inventory SHALL be a mapping with a single top-level `vms` sequence.
-Each entry SHALL support `id`, `name`, `macs` and `ek_sha256`; keys outside
-that set SHALL be ignored.
+The YAML inventory SHALL be a mapping whose `vms` key holds the sequence of
+entries; other top-level keys SHALL be ignored. Each entry SHALL support `id`,
+`name`, `macs` and `ek_sha256`, and keys outside that set SHALL be ignored.
 
 `id` SHALL be the record key, and an entry with an empty or missing `id` SHALL
 be skipped silently. `name`, `macs` and `ek_sha256` SHALL all be optional. Each
