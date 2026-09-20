@@ -5,3 +5,4 @@ tar-ignore = bin
 tar-ignore = .go-workdir
 tar-ignore = debian/.debhelper
 tar-ignore = debian/vtpm-mds
+tar-ignore = debian/devid-enroll
