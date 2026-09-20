@@ -119,6 +119,15 @@ guest hits neither.
 - **[Trade-off] The binding is proven only at start, so a session is only as
   good as the fingerprint it stores** → Accepted; sessions are single use and
   expire in five minutes.
+- **[Risk] `Enroller.Start` performs no binding check of its own, because the
+  binding lives in `AuthenticateEnrollCaller`. A caller that invokes `Start`
+  directly — as `enroll_swtpm_test.go` does — therefore gets chain-only
+  verification** → Accepted, and a consequence of deciding that the binding is
+  an authentication concern rather than a signing-request one. Mitigation: the
+  only production path to `Start` is `HandleStart`, which authenticates first;
+  the swtpm test calls `VerifyEKCertificateBinding` explicitly before it calls
+  `Start`. Anyone adding a second caller of `Start` outside the HTTP handler
+  must authenticate first, and this paragraph is where that is written down.
 
 ## Migration Plan
 
