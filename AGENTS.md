@@ -77,12 +77,23 @@ Tests and vet must pass: `go vet ./...` and `go test ./...`.
 
 ## Known gaps, and the queue as of 2026-09-20
 
-`openspec/changes/` is empty: everything specified has shipped. The work below is
-known, reproduced, and **not yet written up as changes**. Write a proposal, design,
-tasks and spec delta for each before touching code — do not fix them inline.
+Items 1 to 5 below are now written up as changes in `openspec/changes/`, with a
+proposal, design, tasks and spec delta each. **None of them is implemented**:
+every `tasks.md` is unticked. Read the change before touching the code it names,
+and work task by task as "Always start here" describes.
+
+Item 6 is still unwritten. Write a proposal, design, tasks and spec delta for it
+before touching code — do not fix it inline.
 
 Ordered by severity. The first four are recorded as current behaviour in
-`openspec/specs/`, so read the requirement before proposing a change to it.
+`openspec/specs/`, so read the requirement before implementing the change that
+replaces it.
+
+Apply order matters in two places, and each change says so in its own proposal:
+`refuse-unbound-metadata-callers` comes after both
+`parse-peer-address-correctly` (they modify the same requirement) and
+`fail-fast-on-unusable-configuration` (its secure default needs the defaults
+merge). Everything else is independent.
 
 1. **The EK certificate is not bound to the endorsement key used for credential
    activation** (`internal/devid/verify.go`, `_ = pub`). An EK certificate minted
@@ -90,34 +101,57 @@ Ordered by severity. The first four are recorded as current behaviour in
    against a software TPM. The EK factor proves possession of a public certificate,
    not of the certified TPM, and `ek_sha256` pinning inherits the same weakness.
    See `openspec/specs/devid-enrollment/spec.md`, "Trust The EK Certificate".
+   → `openspec/changes/bind-ek-certificate-to-endorsement-key/`
 2. **The LDevID subject is guest-controlled** (`internal/devid/enroll.go`,
    `subjectCNFromRequest`): the CSR's CN wins over the authenticated VM id.
+   → `openspec/changes/enforce-authenticated-ldevid-subject/`
 3. **Unbound callers are served an identity instead of refused**
    (`imds/handlers.go`, `getInstanceID` fallback): `i-<caller-ip>`, with
    `X-Forwarded-For` taking precedence, so the caller picks its own id. It also
    lands in the instance identity document. `/latest/identity`
    (`identity/handlers.go`) ignores inventory entirely.
+   → `openspec/changes/refuse-unbound-metadata-callers/`, which adds
+   `mds.require_vm_identity` (default true) and a new `workload-identity`
+   capability for `/latest/identity`.
 4. **A clean stop leaves the unit failed**: `main.go` calls `log.Fatalf` on the
    error from `srv.Start()`, including `http.ErrServerClosed`, so every
    `systemctl stop`/`restart` exits 1 and ends in `failed`. Verified on 0.2.0.
    This belongs to the `operability` capability.
+   → `openspec/changes/exit-cleanly-on-server-shutdown/`
 5. Smaller, from writing the specs: `token_ttl` parse errors are discarded (a typo
    yields a zero TTL, so every metadata read 401s); `config.Load` never merges
    defaults, so omitting `enable_ec2_compat` silently disables the metadata tree
    while `/health` still reports ok; `local-ipv4` splits `RemoteAddr` on every
    `:` and returns `[fe80` for an IPv6 peer.
+   → split in two: `openspec/changes/fail-fast-on-unusable-configuration/`
+   (the two config defects) and `openspec/changes/parse-peer-address-correctly/`
+   (the address defect).
 6. Long-standing and unspecified: TPM quote verification, and real signing keys
-   for the identity JWTs.
+   for the identity JWTs. Still unwritten. The `workload-identity` capability
+   added by `refuse-unbound-metadata-callers` records the placeholder HS256
+   secret, the placeholder JWKS and the ignored `mds.jwt_ttl` as current
+   behaviour, so this can now be proposed against a written contract.
 
-Two things need root on the lab host, so they need the maintainer:
+One more gap was found while writing those changes and has its own record:
+`scripts/openspec-validate.py` demands a `#### Scenario:` from every
+`### Requirement:` block regardless of section, so it rejects every `REMOVED`
+requirement — which correctly carries **Reason** and **Migration** instead — and
+therefore fails six of the seven changes that the OpenSpec CLI passes. See
+`openspec/changes/fix-fallback-openspec-validator/`. Until it is fixed, trust
+`openspec validate --all --strict`, which is installed here (see "Lab host
+facts"), and read the script's output with that in mind.
+
+One thing needs root on the lab host, so it needs the maintainer:
 
 - `/usr/local/sbin/hogan-lab` whitelists only `dist/vtpm-mds_*.deb` for
   `dpkg-install`, so the guest package cannot be installed through the wrapper.
-- `openspec init` has never been run here, which is why the `/opsx:*` commands the
-  README advertises do not exist. Run it as `openspec init --tools cursor` and
-  reconcile deliberately: keep the rules in this file and in
-  `.cursor/rules/openspec-workflow.mdc`, and let the generated files own only the
-  command definitions.
+
+`openspec init` has been run — see
+`openspec/changes/initialize-openspec-agent-tooling/`. It needed no root: the
+checkout root grants `coding-agent` write access through an ACL. The generated
+files under `.cursor/` and `.claude/` own only the command and skill
+definitions; the rules in this file and in
+`.cursor/rules/openspec-workflow.mdc` keep precedence and were not touched.
 
 ## Lab host facts
 
