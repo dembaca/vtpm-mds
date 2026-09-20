@@ -4,6 +4,8 @@ Documentation=https://github.com/dembaca/vtpm-mds
 Documentation=file:///usr/share/doc/vtpm-mds/README.Debian
 After=network-online.target pve-cluster.service
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=12
 
 [Service]
 Type=simple
@@ -11,8 +13,6 @@ ExecStart=/usr/sbin/vtpm-mds -config /etc/vtpm-mds/config.yaml
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s
-StartLimitIntervalSec=60
-StartLimitBurst=12
 
 # Bind the IMDS bridge address (Ansible vmbr_imds / nftables DNAT).
 # Root is required to read /etc/pve, /proc/net/arp, and DevID CA private keys.

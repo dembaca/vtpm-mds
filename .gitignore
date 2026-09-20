@@ -40,6 +40,7 @@ config.local.yaml
 # Debian build artifacts
 debian/prox-mds
 debian/vtpm-mds
+debian/devid-enroll
 debian/.debhelper
 debian/.gocache
 debian/.gomod
@@ -63,5 +64,10 @@ dist/
 ../vtpm-mds*.tar.gz
 ../vtpm-mds_*.buildinfo
 ../vtpm-mds_*.build
+../devid-enroll*.deb
+../devid-enroll*.changes
+../devid-enroll*.dsc
+../devid-enroll_*.buildinfo
+../devid-enroll_*.build
 ../deb-packages/
 

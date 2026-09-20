@@ -47,32 +47,39 @@ install: build ## Install binary to system
 DEB_STAGE := $(CURDIR)/.deb-build
 DEB_DIST := $(CURDIR)/dist
 
-deb: ## Build Debian package (dpkg-buildpackage → dist/*.deb)
+deb: ## Build host + guest Debian packages (dpkg-buildpackage → dist/*.deb)
 	@test -d debian
 	@if [ -d "$(DEB_STAGE)" ]; then find "$(DEB_STAGE)" -type f -exec setfacl -m mask::rwx {} + 2>/dev/null || true; fi
+	@if [ -d "$(DEB_STAGE)" ]; then chmod -R u+w "$(DEB_STAGE)" 2>/dev/null || true; fi
 	@rm -rf $(DEB_STAGE)
 	@mkdir -p $(DEB_STAGE)/src $(DEB_DIST)
 	@tar -C $(CURDIR) \
 		--exclude=.deb-build --exclude=dist --exclude=.git --exclude=bin \
 		--exclude=.go-workdir --exclude=debian/.debhelper --exclude=debian/vtpm-mds \
+		--exclude=debian/devid-enroll \
 		-cf - . | tar -C $(DEB_STAGE)/src -xf -
 	@cd $(DEB_STAGE)/src && dpkg-buildpackage -b -us -uc
 	@cp -f $(DEB_STAGE)/*.deb $(DEB_STAGE)/*.changes $(DEB_STAGE)/*.buildinfo $(DEB_DIST)/
-	@echo "Built Debian package(s):"
+	@echo "Built Debian packages (host $(BINARY_NAME), guest $(DEVID_CLIENT)):"
 	@ls -lh $(DEB_DIST)/*.deb
 
-deb-local: ## Build a git-stamped local .deb (version 0.1.0+git<date>.<sha>[.dirty])
+deb-local: ## Build git-stamped local .debs (version <changelog>+git<date>.<sha>[.dirty])
 	@test -d debian
 	@./scripts/deb-local.sh
 
 deb-clean: ## Clean Debian build artifacts
 	@if [ -d "$(DEB_STAGE)" ]; then find "$(DEB_STAGE)" -type f -exec setfacl -m mask::rwx {} + 2>/dev/null || true; fi
 	@if [ -d .go-workdir ]; then find .go-workdir -type f -exec setfacl -m mask::rwx {} + 2>/dev/null || true; fi
-	@rm -rf debian/prox-mds debian/vtpm-mds debian/.debhelper debian/.gocache debian/.gomod debian/.gopath .go-workdir
+	@# Go leaves the module cache mode 0555, including directories, so rm -rf
+	@# fails until the write bit is back on the directories themselves.
+	@for d in "$(DEB_STAGE)" .go-workdir; do [ -d "$$d" ] && chmod -R u+w "$$d" 2>/dev/null || true; done
+	@rm -rf debian/prox-mds debian/vtpm-mds debian/devid-enroll debian/.debhelper debian/.gocache debian/.gomod debian/.gopath .go-workdir
 	@rm -f debian/*.substvars debian/files debian/*.debhelper.log debian/*.debhelper
 	@rm -rf $(DEB_STAGE) $(DEB_DIST)
 	@rm -f ../prox-mds*.deb ../vtpm-mds*.deb ../prox-mds*.changes ../vtpm-mds*.changes ../prox-mds*.dsc ../vtpm-mds*.dsc
+	@rm -f ../devid-enroll*.deb ../devid-enroll*.changes ../devid-enroll*.dsc
 	@rm -f ../prox-mds_*.buildinfo ../vtpm-mds_*.buildinfo ../prox-mds_*.build ../vtpm-mds_*.build
+	@rm -f ../devid-enroll_*.buildinfo ../devid-enroll_*.build
 	@rm -f ../deb-packages/*.deb ../deb-packages/*.changes ../deb-packages/*.dsc
 
 lab-setup: ## Prepare QEMU/netns MDS lab host networking

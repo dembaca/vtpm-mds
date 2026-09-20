@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build a local .deb whose Version encodes the git commit so Hogan (and
-# other lab hosts) can tell exactly which tree is installed.
+# Build the local host and guest .debs with a Version that encodes the git
+# commit, so Hogan (and other lab hosts) can tell exactly which tree is
+# installed.
 # Does not rewrite debian/changelog in the working tree.
 set -euo pipefail
 
@@ -60,15 +61,21 @@ restore() {
 }
 trap 'restore; rm -f "$tmp"' EXIT
 
-echo "Building local package version ${local_ver}"
+echo "Building local packages at version ${local_ver}"
 make deb
 restore
 trap 'rm -f "$tmp"' EXIT
 
+host_deb="dist/vtpm-mds_${local_ver}_amd64.deb"
+guest_deb="dist/devid-enroll_${local_ver}_amd64.deb"
+
 echo
-echo "Local lab package:"
-ls -lh dist/vtpm-mds_${local_ver}_amd64.deb
-echo "Install with:"
-echo "  dpkg -i --force-confold dist/vtpm-mds_${local_ver}_amd64.deb"
+echo "Local lab packages:"
+ls -lh "$host_deb" "$guest_deb"
+echo "Install the host daemon on the lab host with:"
+echo "  dpkg -i --force-confold ${host_deb}"
 echo "  systemctl start vtpm-mds"
 echo "  vtpm-mds -version"
+echo "Install the guest client in a VM image with:"
+echo "  dpkg -i ${guest_deb}"
+echo "  devid-enroll -version"

@@ -6,6 +6,7 @@ vtpm-mds \- QEMU/Proxmox IMDS and TPM attestation service
 .RB [ \-config
 .IR path ]
 .RB [ \-debug ]
+.RB [ \-version ]
 .SH DESCRIPTION
 .B vtpm-mds
 serves EC2-IMDSv2-compatible instance metadata and TPM DevID enrollment
@@ -31,6 +32,9 @@ YAML configuration file. The package installs
 .TP
 .B \-debug
 Log the loaded configuration.
+.TP
+.B \-version
+Print the package/build version and exit.
 .SH FILES
 .TP
 .I /etc/vtpm-mds/config.yaml

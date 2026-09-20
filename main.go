@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -20,7 +21,13 @@ var Version = "dev"
 func main() {
 	configPath := flag.String("config", "", "Path to configuration file (if not provided, defaults are used)")
 	debug := flag.Bool("debug", false, "Enable debug logging")
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("vtpm-mds %s\n", Version)
+		os.Exit(0)
+	}
 
 	log.Printf("vtpm-mds version %s", Version)
 
