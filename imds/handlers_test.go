@@ -357,6 +357,30 @@ func TestInvalidToken(t *testing.T) {
 	}
 }
 
+// TestHandleInstanceID_UnboundCallerForwardedFor reproduces the defect that
+// refuse-unbound-metadata-callers fixes (task 1.1): a caller that
+// vm-inventory could not bind to any VM record is served an instance id
+// anyway, and it picks that id itself through X-Forwarded-For.
+func TestHandleInstanceID_UnboundCallerForwardedFor(t *testing.T) {
+	setupTestStore()
+	req := httptest.NewRequest("GET", "/latest/meta-data/instance-id", nil)
+	req.RemoteAddr = "192.168.1.100:12345"
+	req.Header.Set("X-Forwarded-For", "10.9.9.9")
+
+	token, _ := store.GenerateToken()
+	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
+
+	rec := httptest.NewRecorder()
+	HandleInstanceID(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("baseline: expected status 200, got %d", rec.Code)
+	}
+	if body := rec.Body.String(); body != "i-10-9-9-9" {
+		t.Errorf("baseline: expected body 'i-10-9-9-9', got %q", body)
+	}
+}
+
 func setupTestStore() {
 	cfg := config.DefaultConfig()
 	store = NewTokenStore(cfg)

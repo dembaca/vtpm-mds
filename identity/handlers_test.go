@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/dembaca/vtpm-mds/imds"
 	"github.com/dembaca/vtpm-mds/internal/config"
+	"github.com/dembaca/vtpm-mds/internal/inventory"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -161,6 +163,44 @@ func TestIdentityClaims_Structure(t *testing.T) {
 	}
 	if !claims.Attest {
 		t.Error("Expected Attest to be true")
+	}
+}
+
+// TestHandleIdentity_IgnoresInventory reproduces the defect that
+// refuse-unbound-metadata-callers fixes (task 1.2): /latest/identity has its
+// own getInstanceID that consults no inventory at all, so a caller bound to
+// VM 100 is named by its own X-Forwarded-For header instead.
+func TestHandleIdentity_IgnoresInventory(t *testing.T) {
+	store := setupTestStore()
+
+	req := httptest.NewRequest("GET", "/latest/identity", nil)
+	req.RemoteAddr = "192.168.1.100:12345"
+	req.Header.Set("X-Forwarded-For", "10.9.9.9")
+	req = req.WithContext(context.WithValue(req.Context(),
+		inventory.VMConfigContextKey, &inventory.VMConfig{VMID: "100"}))
+
+	token, _ := store.GenerateToken()
+	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
+
+	rec := httptest.NewRecorder()
+	HandleIdentity(store)(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("baseline: expected status 200, got %d", rec.Code)
+	}
+
+	var response struct {
+		Claims IdentityClaims `json:"claims"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if response.Claims.InstanceID != "i-10-9-9-9" {
+		t.Errorf("baseline: expected instance_id 'i-10-9-9-9', got %q", response.Claims.InstanceID)
+	}
+	if response.Claims.Subject != "i-10-9-9-9" {
+		t.Errorf("baseline: expected sub 'i-10-9-9-9', got %q", response.Claims.Subject)
 	}
 }
 
