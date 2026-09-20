@@ -65,9 +65,11 @@ None.
   error moves to load time.
 - `main.go`: a `config.Load` failure already aborts startup, so the new error
   needs no new handling — only a message an operator can act on.
-- `internal/config/config_test.go` asserts today that a file omitting
-  `enable_ec2_compat` yields `false`. That assertion encodes the defect and is
-  replaced.
+- `internal/config/config_test.go` gains coverage for the omission case, which
+  nothing tested. Note that the existing `TestLoadValidFile` does **not** encode
+  the defect, contrary to what an earlier draft of this proposal claimed: it
+  states `enable_ec2_compat: false` explicitly, so it asserts that an explicit
+  zero value wins — which stays true after the change and is worth keeping.
 - The `devid-enrollment` capability inherits the defaults merge: a file that
   omits `enable_tpm_attestation` or the DevID CA paths now gets the built-in
   values rather than empty ones. Its requirements are written against the
