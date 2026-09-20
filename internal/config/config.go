@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -54,15 +55,18 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Load reads configuration from file
+// Load reads configuration from file. It starts from DefaultConfig() and
+// overlays the file's values on top, so a setting the file omits keeps its
+// built-in default and a setting the file states explicitly — including a
+// zero value — wins.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
@@ -71,6 +75,10 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("listen_addr is required")
 	}
 
-	return &cfg, nil
+	if _, err := time.ParseDuration(cfg.MDS.TokenTTL); err != nil {
+		return nil, fmt.Errorf("invalid token_ttl %q: %w", cfg.MDS.TokenTTL, err)
+	}
+
+	return cfg, nil
 }
 
