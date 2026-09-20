@@ -1,3 +1,20 @@
+vtpm-mds (0.2.0) unstable; urgency=medium
+
+  * Split the source into two binary packages: vtpm-mds (hypervisor daemon,
+    legacy aliases prox-mds and qemu-mds, systemd unit, /etc/vtpm-mds
+    config and /var/lib/vtpm-mds state) and devid-enroll (guest DevID
+    enrollment client and its man page only).
+  * BREAKING: upgrading vtpm-mds no longer leaves /usr/bin/devid-enroll on
+    the host. Guests install devid-enroll_*.deb instead; hypervisors keep
+    installing vtpm-mds_*.deb only.
+  * devid-enroll declares Breaks/Replaces: vtpm-mds (<< 0.2.0) so the move
+    of /usr/bin/devid-enroll off the host package unpacks cleanly. Neither
+    package depends on or recommends the other.
+  * devid-enroll installs no systemd unit and no IMDS listener, so it is
+    safe to install inside guest images.
+
+ -- Andreas Dembach <andreas.dembach@dg-i.net>  Sun, 20 Sep 2026 12:15:57 +0200
+
 vtpm-mds (0.1.0) unstable; urgency=medium
 
   * Initial Debian packaging. debian/ was referenced by `make deb` /
