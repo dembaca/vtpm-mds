@@ -31,6 +31,15 @@ type MDSConfig struct {
 	// InventoryPath is a YAML VM inventory (MAC → VM ID). When set, it is
 	// preferred over Proxmox /etc/pve parsing so the service can run on plain QEMU.
 	InventoryPath string `yaml:"inventory_path"`
+	// RequireVMIdentity makes a caller the VM inventory could not bind to a
+	// VM record be refused at the endpoints that report its instance
+	// identity. Its built-in default is true; it is only effective because
+	// Load starts from DefaultConfig(), so a file that omits the key keeps
+	// the secure value. Setting it false is a migration aid for a deployment
+	// whose inventory is incomplete: unbound callers are then served an id
+	// synthesized from their peer address, which names the connection and is
+	// not an identity.
+	RequireVMIdentity bool `yaml:"require_vm_identity"`
 }
 
 // DefaultConfig returns a configuration with default values
@@ -51,6 +60,7 @@ func DefaultConfig() *Config {
 			HostTPMDevice:     "/dev/tpmrm0",
 			SigningKeyPath:    "/var/lib/vtpm-mds/signing-key.pem",
 			InventoryPath:     "",
+			RequireVMIdentity: true,
 		},
 	}
 }

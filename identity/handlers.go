@@ -59,18 +59,25 @@ func HandleIdentity(store *imds.TokenStore) http.HandlerFunc {
 		// TODO: Check if this request has completed attestation
 		// For now, issue a basic identity
 
-		clientIP := getClientIP(r)
+		// The claims name the VM record bound to the connection, derived
+		// exactly as GET /latest/meta-data/instance-id derives its value, and
+		// the "ip" claim is the connection's peer address. No claim is taken
+		// from a request header that names the caller. An unbound caller is
+		// refused before this handler runs, by the imds.RequireVMIdentity
+		// wrapper the route is registered with.
+		instanceID := imds.InstanceID(r)
+		clientIP := imds.LocalIPv4(r)
 		hostname := getHostname(r)
 
 		claims := IdentityClaims{
 			RegisteredClaims: jwt.RegisteredClaims{
 				Issuer:    "vtpm-mds",
-				Subject:   getInstanceID(r),
+				Subject:   instanceID,
 				IssuedAt:  jwt.NewNumericDate(time.Now()),
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
 				ID:        fmt.Sprintf("%d", time.Now().Unix()),
 			},
-			InstanceID: getInstanceID(r),
+			InstanceID: instanceID,
 			Hostname:   hostname,
 			IP:         clientIP,
 			Level:      "unattested", // TODO: Set based on attestation status
@@ -129,30 +136,19 @@ func validateToken(r *http.Request) bool {
 	return tokenStore.ValidateToken(token)
 }
 
-// Helper functions to extract metadata (shared with imds package logic)
-func getInstanceID(r *http.Request) string {
-	clientIP := getClientIP(r)
-	return fmt.Sprintf("i-%s", strings.ReplaceAll(clientIP, ".", "-"))
-}
-
+// getHostname returns the Host header the caller used, truncated at the first
+// colon. It is the address the caller reached the service on, not the guest's
+// own hostname, which the service does not know.
+//
+// The instance id and the peer address are not derived here: they come from
+// imds.InstanceID and imds.LocalIPv4, so there is one implementation rather
+// than the second copy that let this endpoint ignore the inventory.
 func getHostname(r *http.Request) string {
 	host := r.Host
 	if host == "" {
 		return "localhost.localdomain"
 	}
 	return strings.Split(host, ":")[0]
-}
-
-func getClientIP(r *http.Request) string {
-	forwarded := r.Header.Get("X-Forwarded-For")
-	if forwarded != "" {
-		return strings.Split(forwarded, ",")[0]
-	}
-	ip := imds.PeerIP(r.RemoteAddr)
-	if ip == nil {
-		return "127.0.0.1"
-	}
-	return ip.String()
 }
 
 

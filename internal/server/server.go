@@ -54,28 +54,46 @@ func New(cfg *config.Config) (*Server, error) {
 
 	mux := http.NewServeMux()
 
-	// IMDSv2 token endpoint
+	// handle registers a route, wrapping it in the unbound-caller refusal
+	// when — and only when — its path is one of imds.IdentityBearingPaths,
+	// the enumerated set of handlers that report the caller's own instance
+	// identity. Registering through it is what puts a handler on the right
+	// side of that line: the set is data, not a decision repeated per route.
+	handle := func(pattern string, h http.HandlerFunc) {
+		path := pattern
+		if i := strings.IndexByte(pattern, ' '); i >= 0 {
+			path = pattern[i+1:]
+		}
+		if imds.RequiresVMIdentity(path) {
+			mux.Handle(pattern, imds.RequireVMIdentity(cfg.MDS.RequireVMIdentity, srv.tokenStore, h))
+			return
+		}
+		mux.HandleFunc(pattern, h)
+	}
+
+	// IMDSv2 token endpoint. Deliberately unauthenticated and never refused:
+	// an unbound caller can still mint a token.
 	mux.HandleFunc("PUT /latest/api/token", imds.HandleCreateToken(srv.tokenStore))
 
 	// Metadata endpoints (with token middleware)
 	if cfg.MDS.EnableEC2Compat {
-		mux.HandleFunc("GET /latest/meta-data/instance-id", imds.HandleInstanceID)
-		mux.HandleFunc("GET /latest/meta-data/local-hostname", imds.HandleHostname)
-		mux.HandleFunc("GET /latest/meta-data/public-ipv4", imds.HandlePublicIPv4)
-		mux.HandleFunc("GET /latest/meta-data/local-ipv4", imds.HandleLocalIPv4)
-		mux.HandleFunc("GET /latest/meta-data/placement/availability-zone", imds.HandleAvailabilityZone)
-		mux.HandleFunc("GET /latest/meta-data/services/domain", imds.HandleDomain)
-		mux.HandleFunc("GET /latest/meta-data/", imds.HandleMetaDataIndex)
-		mux.HandleFunc("GET /latest/dynamic/instance-identity/document", imds.HandleInstanceIdentityDocument)
-		mux.HandleFunc("GET /latest/dynamic/instance-identity/signature", imds.HandleInstanceIdentitySignature)
+		handle("GET /latest/meta-data/instance-id", imds.HandleInstanceID)
+		handle("GET /latest/meta-data/local-hostname", imds.HandleHostname)
+		handle("GET /latest/meta-data/public-ipv4", imds.HandlePublicIPv4)
+		handle("GET /latest/meta-data/local-ipv4", imds.HandleLocalIPv4)
+		handle("GET /latest/meta-data/placement/availability-zone", imds.HandleAvailabilityZone)
+		handle("GET /latest/meta-data/services/domain", imds.HandleDomain)
+		handle("GET /latest/meta-data/", imds.HandleMetaDataIndex)
+		handle("GET /latest/dynamic/instance-identity/document", imds.HandleInstanceIdentityDocument)
+		handle("GET /latest/dynamic/instance-identity/signature", imds.HandleInstanceIdentitySignature)
 	}
 
 	// TPM attestation endpoints
 	if cfg.MDS.EnableTPMAttestation {
 		mux.HandleFunc("GET /latest/attest/nonce", attest.HandleNonce)
 		mux.HandleFunc("POST /latest/attest", attest.HandleAttest)
-		mux.HandleFunc("GET /latest/identity", identity.HandleIdentity(srv.tokenStore))
-		mux.HandleFunc("GET /.well-known/jwks.json", identity.HandleJWKS)
+		handle("GET /latest/identity", identity.HandleIdentity(srv.tokenStore))
+		handle("GET /.well-known/jwks.json", identity.HandleJWKS)
 
 		if enroller, err := loadDevIDEnroller(cfg); err != nil {
 			log.Printf("Warning: DevID enrollment disabled: %v", err)

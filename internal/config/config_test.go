@@ -20,6 +20,77 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.MDS.EnableTPMAttestation {
 		t.Error("EnableTPMAttestation should be true by default")
 	}
+
+	// The refusal of unbound callers is on unless an operator turns it off
+	// (task 2.1).
+	if !cfg.MDS.RequireVMIdentity {
+		t.Error("RequireVMIdentity should be true by default")
+	}
+}
+
+// TestLoadOmittedRequireVMIdentityDefaultsToTrue pins the secure default
+// against the defaults merge being lost (task 2.2). If Load ever stops
+// starting from DefaultConfig(), a configuration file that does not mention
+// require_vm_identity would load it as the Go zero value — false — and
+// silently serve unbound callers an instance identity again. That is the
+// defect this repository already shipped once with enable_ec2_compat.
+func TestLoadOmittedRequireVMIdentityDefaultsToTrue(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// Deliberately says nothing about require_vm_identity. Everything Load
+	// validates is stated, so that a lost defaults merge fails on the
+	// setting under test rather than earlier.
+	configData := `mds:
+  listen_addr: "127.0.0.1:8080"
+  token_ttl: "60s"
+  enable_ec2_compat: true`
+
+	if _, err := tmpFile.WriteString(configData); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if !cfg.MDS.RequireVMIdentity {
+		t.Error("RequireVMIdentity must keep its built-in default (true) when the file omits it")
+	}
+}
+
+// TestLoadExplicitRequireVMIdentityFalse verifies an operator can state the
+// zero value and have it win over the default, which is what makes the
+// migration aid usable (task 2.3).
+func TestLoadExplicitRequireVMIdentityFalse(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	configData := `mds:
+  listen_addr: "127.0.0.1:8080"
+  require_vm_identity: false`
+
+	if _, err := tmpFile.WriteString(configData); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if cfg.MDS.RequireVMIdentity {
+		t.Error("RequireVMIdentity should be false when the file states it explicitly")
+	}
 }
 
 func TestLoadMissingFile(t *testing.T) {
