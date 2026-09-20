@@ -50,6 +50,7 @@ DEB_DIST := $(CURDIR)/dist
 deb: ## Build host + guest Debian packages (dpkg-buildpackage → dist/*.deb)
 	@test -d debian
 	@if [ -d "$(DEB_STAGE)" ]; then find "$(DEB_STAGE)" -type f -exec setfacl -m mask::rwx {} + 2>/dev/null || true; fi
+	@if [ -d "$(DEB_STAGE)" ]; then chmod -R u+w "$(DEB_STAGE)" 2>/dev/null || true; fi
 	@rm -rf $(DEB_STAGE)
 	@mkdir -p $(DEB_STAGE)/src $(DEB_DIST)
 	@tar -C $(CURDIR) \
@@ -69,6 +70,9 @@ deb-local: ## Build git-stamped local .debs (version <changelog>+git<date>.<sha>
 deb-clean: ## Clean Debian build artifacts
 	@if [ -d "$(DEB_STAGE)" ]; then find "$(DEB_STAGE)" -type f -exec setfacl -m mask::rwx {} + 2>/dev/null || true; fi
 	@if [ -d .go-workdir ]; then find .go-workdir -type f -exec setfacl -m mask::rwx {} + 2>/dev/null || true; fi
+	@# Go leaves the module cache mode 0555, including directories, so rm -rf
+	@# fails until the write bit is back on the directories themselves.
+	@for d in "$(DEB_STAGE)" .go-workdir; do [ -d "$$d" ] && chmod -R u+w "$$d" 2>/dev/null || true; done
 	@rm -rf debian/prox-mds debian/vtpm-mds debian/devid-enroll debian/.debhelper debian/.gocache debian/.gomod debian/.gopath .go-workdir
 	@rm -f debian/*.substvars debian/files debian/*.debhelper.log debian/*.debhelper
 	@rm -rf $(DEB_STAGE) $(DEB_DIST)

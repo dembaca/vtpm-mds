@@ -25,7 +25,7 @@
 
 ## 5. Verify package contents
 
-- [ ] 5.1 Build with `make deb` and verify `dist/` contains both `.deb` files with identical versions (`dpkg-deb -f … Version`)
-- [ ] 5.2 Inspect `vtpm-mds` contents with `dpkg-deb -c` and verify it includes `/usr/sbin/vtpm-mds`, aliases, the systemd unit, and `/etc/vtpm-mds`, and does not include `/usr/bin/devid-enroll`
-- [ ] 5.3 Inspect `devid-enroll` contents with `dpkg-deb -c` and verify it includes `/usr/bin/devid-enroll` plus its man page, and does not include `/usr/sbin/vtpm-mds`, a systemd unit, `/etc/vtpm-mds`, or `/var/lib/vtpm-mds`
-- [ ] 5.4 Run `dpkg-deb -I` on both packages and verify neither Depends/Recommends the other, and that `devid-enroll` has Breaks/Replaces on old `vtpm-mds`
+- [x] 5.1 Build with `make deb` and verify `dist/` contains both `.deb` files with identical versions (`dpkg-deb -f … Version`)
+- [x] 5.2 Inspect `vtpm-mds` contents with `dpkg-deb -c` and verify it includes `/usr/sbin/vtpm-mds`, aliases, the systemd unit, and `/etc/vtpm-mds`, and does not include `/usr/bin/devid-enroll`
+- [x] 5.3 Inspect `devid-enroll` contents with `dpkg-deb -c` and verify it includes `/usr/bin/devid-enroll` plus its man page, and does not include `/usr/sbin/vtpm-mds`, a systemd unit, `/etc/vtpm-mds`, or `/var/lib/vtpm-mds`
+- [x] 5.4 Run `dpkg-deb -I` on both packages and verify neither Depends/Recommends the other, and that `devid-enroll` has Breaks/Replaces on old `vtpm-mds`
