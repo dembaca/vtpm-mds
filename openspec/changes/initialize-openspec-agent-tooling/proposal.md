@@ -27,9 +27,13 @@ have no node/npm, which `fix-fallback-openspec-validator` corrects.
   `.claude/commands/opsx/` and `.claude/skills/`.
 - Cursor gets `/opsx-propose` and friends; Claude Code gets `/opsx:propose` and
   friends, which is the spelling `README.md` already documents.
-- **`README.md` line 182 is corrected** to name the commands that exist. The
-  core profile ships propose, apply, archive, explore, sync and update — it does
-  not ship `verify`, which the line currently promises.
+- The `verify` workflow is added to the six of the core profile, so all four
+  commands `README.md` names exist. It is not in the core profile, but it is
+  installable without an interactive picker by appending it to the `workflows`
+  list in the OpenSpec global config and switching that config to the `custom`
+  profile.
+- **`README.md` line 182 is corrected** to name all seven installed commands and
+  to say how the five that are not installed can be added.
 - Nothing already in the repository is overwritten. `AGENTS.md`,
   `.cursor/rules/openspec-workflow.mdc` and `openspec/config.yaml` are left as
   they are, so the project's own rules keep precedence and the generated files
@@ -51,8 +55,8 @@ behaviour of the service changes, so `.openspec.yaml` sets `skip_specs: true`.
 
 ## Impact
 
-- New: `.cursor/commands/` (6 files), `.cursor/skills/` (6 directories),
-  `.claude/commands/opsx/` (6 files), `.claude/skills/` (6 directories).
+- New: `.cursor/commands/` (7 files), `.cursor/skills/` (7 directories),
+  `.claude/commands/opsx/` (7 files), `.claude/skills/` (7 directories).
 - `README.md`: one line.
 - `AGENTS.md`: the maintainer bullet about `openspec init`.
 - `.gitignore` does not exclude `.claude/` or `.cursor/`, so all generated

@@ -47,18 +47,30 @@ wrong.
 neither constrains the other, and a third agent can be added later without
 touching what is there.
 
-### Take the core profile and correct the README, not the other way round
+### Install `verify` alongside the core six
 
 The core profile ships six workflows: propose, apply, archive, explore, sync
-and update. `README.md` promises `verify`, which is one of six further
-workflows the CLI offers only through an interactive picker —
-`openspec config profile` rejects every preset but `core` non-interactively.
+and update. `README.md` promises `verify` as well, and `verify` is worth having
+here — `AGENTS.md` step 4 is a validation gate before every PR, and the
+workflow wraps exactly that.
 
-Rather than drive an interactive picker to make a documentation line true, the
-line is corrected to the commands that exist. Adding the extra workflows stays
-available to a maintainer at a terminal, and costs nothing to defer: the
-verification step they wrap is `openspec validate --all --strict`, which this
-project already runs directly and names in `AGENTS.md`.
+`openspec config profile` is an interactive picker and rejects every preset but
+`core` non-interactively, which is not the only way in. The workflow set is a
+plain configuration key:
+
+```
+openspec config set workflows '["propose","explore","apply","update","sync","archive","verify"]'
+openspec config set profile custom
+```
+
+`profile: core` overrides an explicit `workflows` list, so both settings are
+needed; with only the first, `openspec config list` still reports the six "from
+core profile". After both, `openspec init` generates `verify` for each
+configured tool.
+
+The other five workflows (`new`, `continue`, `ff`, `bulk-archive`, `onboard`)
+are left out. They are installable the same way whenever someone wants one, and
+nothing in this project's documented process refers to them.
 
 ### Commit the generated files
 
@@ -88,9 +100,13 @@ are kept as separate changes because they fix different things, and both say so.
   newer CLI's versions, silently changing how agents behave** → Accepted, and
   visible: they are tracked, so the diff appears in review. That is the reason
   to commit them rather than generate them per contributor.
-- **[Risk] `/opsx:verify` stays absent and the next reader looks for it** →
-  Mitigation: the README line is corrected in this change, so it no longer
-  promises it.
+- **[Risk] The workflow set lives in the OpenSpec *global* config, which is
+  per-machine and not in the repository, so a contributor who re-runs
+  `openspec init` has only the core six configured** → Mitigation: the
+  generated files are committed, and a core-profile `init` was observed to add
+  files without removing any — a re-run on a core-profile machine leaves
+  `verify` in place. The README records how to configure it, for anyone who
+  wants the command on a fresh checkout before the first commit.
 - **[Trade-off] Twenty-four generated files enter the repository for tooling
   that is not the product** → Accepted; `.cursor/rules/openspec-workflow.mdc`
   set that precedent and the project is explicitly spec-driven.
