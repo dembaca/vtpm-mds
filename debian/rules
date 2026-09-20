@@ -29,8 +29,8 @@ override_dh_auto_configure:
 
 override_dh_auto_build:
 	mkdir -p bin "$(GOCACHE)" "$(GOMODCACHE)"
-	go build -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/vtpm-mds .
-	go build -trimpath -ldflags "-s -w" -o bin/devid-enroll ./cmd/devid-enroll
+	go build -buildvcs=false -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/vtpm-mds .
+	go build -buildvcs=false -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/devid-enroll ./cmd/devid-enroll
 
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))

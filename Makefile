@@ -1,4 +1,4 @@
-.PHONY: build clean test run deps deb deb-clean install help lab-setup lab-e2e lab-devid-e2e
+.PHONY: build clean test run deps deb deb-local deb-clean install help lab-setup lab-e2e lab-devid-e2e
 
 BINARY_NAME=vtpm-mds
 LEGACY_ALIAS=prox-mds
@@ -22,7 +22,7 @@ build: ## Build vtpm-mds (+ legacy aliases) and devid-enroll client
 	@go build -ldflags "-X main.Version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME) .
 	@cp -f $(BUILD_DIR)/$(BINARY_NAME) $(BUILD_DIR)/$(LEGACY_ALIAS)
 	@cp -f $(BUILD_DIR)/$(BINARY_NAME) $(BUILD_DIR)/$(QEMU_ALIAS)
-	@go build -o $(BUILD_DIR)/$(DEVID_CLIENT) ./cmd/devid-enroll
+	@go build -ldflags "-X main.Version=$(VERSION)" -o $(BUILD_DIR)/$(DEVID_CLIENT) ./cmd/devid-enroll
 	@echo "Built $(BUILD_DIR)/$(BINARY_NAME) (aliases: $(LEGACY_ALIAS), $(QEMU_ALIAS)) $(BUILD_DIR)/$(DEVID_CLIENT)"
 
 clean: ## Remove build artifacts
@@ -49,9 +49,7 @@ DEB_DIST := $(CURDIR)/dist
 
 deb: ## Build Debian package (dpkg-buildpackage → dist/*.deb)
 	@test -d debian
-	@chmod +x debian/rules debian/postinst debian/prerm debian/postrm
-	@# Go module cache dirs are mode 555; make them writable before rm.
-	@if [ -d "$(DEB_STAGE)" ]; then chmod -R u+w "$(DEB_STAGE)"; fi
+	@if [ -d "$(DEB_STAGE)" ]; then find "$(DEB_STAGE)" -type f -exec setfacl -m mask::rwx {} + 2>/dev/null || true; fi
 	@rm -rf $(DEB_STAGE)
 	@mkdir -p $(DEB_STAGE)/src $(DEB_DIST)
 	@tar -C $(CURDIR) \
@@ -63,9 +61,13 @@ deb: ## Build Debian package (dpkg-buildpackage → dist/*.deb)
 	@echo "Built Debian package(s):"
 	@ls -lh $(DEB_DIST)/*.deb
 
+deb-local: ## Build a git-stamped local .deb (version 0.1.0+git<date>.<sha>[.dirty])
+	@test -d debian
+	@./scripts/deb-local.sh
+
 deb-clean: ## Clean Debian build artifacts
-	@if [ -d "$(DEB_STAGE)" ]; then chmod -R u+w "$(DEB_STAGE)"; fi
-	@if [ -d .go-workdir ]; then chmod -R u+w .go-workdir; fi
+	@if [ -d "$(DEB_STAGE)" ]; then find "$(DEB_STAGE)" -type f -exec setfacl -m mask::rwx {} + 2>/dev/null || true; fi
+	@if [ -d .go-workdir ]; then find .go-workdir -type f -exec setfacl -m mask::rwx {} + 2>/dev/null || true; fi
 	@rm -rf debian/prox-mds debian/vtpm-mds debian/.debhelper debian/.gocache debian/.gomod debian/.gopath .go-workdir
 	@rm -f debian/*.substvars debian/files debian/*.debhelper.log debian/*.debhelper
 	@rm -rf $(DEB_STAGE) $(DEB_DIST)
