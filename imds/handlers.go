@@ -3,6 +3,7 @@ package imds
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 
@@ -99,7 +100,11 @@ func HandleLocalIPv4(w http.ResponseWriter, r *http.Request) {
 	ip := getLocalIP(r)
 
 	w.Header().Set("Content-Type", "text/plain")
-	fmt.Fprint(w, ip)
+	if ip != "" {
+		fmt.Fprint(w, ip)
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+	}
 }
 
 // HandlePublicIPv4 returns the public IPv4 address
@@ -221,14 +226,34 @@ func getHostname(r *http.Request) string {
 	return strings.Split(host, ":")[0]
 }
 
-func getLocalIP(r *http.Request) string {
-	// Get from incoming connection
-	ip := r.RemoteAddr
-	parts := strings.Split(ip, ":")
-	if len(parts) > 0 {
-		return parts[0]
+// PeerIP parses a RemoteAddr-shaped string (as set by net/http on
+// http.Request.RemoteAddr) into the connection's peer IP. It uses
+// net.SplitHostPort first, since RemoteAddr for a TCP peer is "host:port"
+// with an IPv6 host bracketed; when that fails (no port present, which
+// tests and some non-TCP callers may produce) it falls back to treating the
+// whole value as a bare host. The result is validated with net.ParseIP, so a
+// value that is neither shape yields nil rather than a text fragment.
+//
+// This is the one place RemoteAddr-style values are parsed; imds and
+// identity both call it rather than splitting on the first colon.
+func PeerIP(remoteAddr string) net.IP {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
 	}
-	return "127.0.0.1"
+	return net.ParseIP(host)
+}
+
+func getLocalIP(r *http.Request) string {
+	ip := PeerIP(r.RemoteAddr)
+	if ip == nil {
+		return ""
+	}
+	v4 := ip.To4()
+	if v4 == nil {
+		return ""
+	}
+	return v4.String()
 }
 
 func getPublicIP(r *http.Request) string {
@@ -255,10 +280,9 @@ func getClientIP(r *http.Request) string {
 	if forwarded != "" {
 		return strings.Split(forwarded, ",")[0]
 	}
-	ip := r.RemoteAddr
-	parts := strings.Split(ip, ":")
-	if len(parts) > 0 {
-		return parts[0]
+	ip := PeerIP(r.RemoteAddr)
+	if ip == nil {
+		return "127.0.0.1"
 	}
-	return "127.0.0.1"
+	return ip.String()
 }
