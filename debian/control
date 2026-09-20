@@ -26,6 +26,26 @@ Description: QEMU/Proxmox IMDS and TPM attestation service
  Empty inventory_path falls back to Proxmox /etc/pve.
  .
  This package ships the vtpm-mds daemon, legacy aliases prox-mds and
- qemu-mds, the devid-enroll guest client, a systemd unit, and a
- Proxmox-oriented default config. Host swTPM PKI and the IMDS network are
- provided separately (Ansible roles proxmox-swtpm / proxmox-imds-network).
+ qemu-mds, a systemd unit, and a Proxmox-oriented default config. It is
+ meant for hypervisors only. The guest-side enrollment client is packaged
+ separately as devid-enroll and belongs in VM images, not on the host.
+ Host swTPM PKI and the IMDS network are provided separately (Ansible
+ roles proxmox-swtpm / proxmox-imds-network).
+
+Package: devid-enroll
+Architecture: any
+Depends: ${misc:Depends}
+Breaks: vtpm-mds (<< 0.2.0)
+Replaces: vtpm-mds (<< 0.2.0)
+Description: Guest DevID enrollment client for vtpm-mds
+ devid-enroll runs inside a QEMU guest and enrolls the guest vTPM with the
+ hypervisor metadata service reachable at 169.254.169.254, obtaining a TPM
+ DevID/LDevID certificate for the guest identity.
+ .
+ It writes the SPIRE tpm_devid node attestor materials (DevID certificate,
+ private and public key blobs) so a SPIRE agent in the guest can attest
+ with its vTPM.
+ .
+ This package contains the client binary and its man page only. It ships
+ no daemon, no systemd unit, and no IMDS listener, and it does not require
+ the vtpm-mds package.

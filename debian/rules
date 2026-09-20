@@ -38,9 +38,10 @@ ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 endif
 
 override_dh_auto_install:
-	install -d debian/vtpm-mds/usr/sbin debian/vtpm-mds/usr/bin
+	install -d debian/vtpm-mds/usr/sbin
 	install -m 0755 bin/vtpm-mds debian/vtpm-mds/usr/sbin/vtpm-mds
-	install -m 0755 bin/devid-enroll debian/vtpm-mds/usr/bin/devid-enroll
+	install -d debian/devid-enroll/usr/bin
+	install -m 0755 bin/devid-enroll debian/devid-enroll/usr/bin/devid-enroll
 
 override_dh_dwz:
 	# Go binaries are not compatible with dh_dwz.
