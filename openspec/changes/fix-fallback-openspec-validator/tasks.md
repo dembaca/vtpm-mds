@@ -26,3 +26,4 @@
 ## 5. Correct the contributor instructions
 
 - [ ] 5.1 Update `AGENTS.md` step 4 and the "Lab host facts" section to record that the OpenSpec CLI is installed on `hogan` and is the check to run there, keeping the script as the fallback for a host without node, and verify the file no longer claims the CLI cannot be installed on lab hosts
+- [ ] 5.2 Correct the same claim in `README.md`, where it appears as a comment above the `scripts/openspec-validate.py` invocation, and verify `grep -rn 'no node/npm' README.md AGENTS.md` returns nothing

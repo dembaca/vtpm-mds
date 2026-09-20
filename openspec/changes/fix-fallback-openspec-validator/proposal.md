@@ -34,9 +34,10 @@ the fallback script first is wrong about its own premise.
   must not drop a scenario the living spec still has, which is the rule the
   upstream CLI enforces and the one most likely to lose behaviour at archive
   time.
-- `AGENTS.md` records that the CLI is installed on `hogan` and that
-  `openspec validate --all --strict` is the check to run there, with the script
-  as the fallback for a host without node — which is what it was written for.
+- `AGENTS.md` and `README.md` record that the CLI is installed on `hogan` and
+  that `openspec validate --all --strict` is the check to run there, with the
+  script as the fallback for a host without node — which is what it was written
+  for.
 - No change to the daemon, the client, the packaging, or any spec.
 
 ## Capabilities
@@ -55,5 +56,7 @@ instruction; no behaviour of the service changes, so `.openspec.yaml` sets
 
 - `scripts/openspec-validate.py`.
 - `AGENTS.md`, the "Always start here" step 4 and the "Lab host facts" section.
+- `README.md`, the comment above the `scripts/openspec-validate.py` invocation,
+  which repeats the same wrong claim that lab hosts cannot run the CLI.
 - Anyone running the fallback validator, and the six changes proposed on
   2026-09-20 that it currently rejects.

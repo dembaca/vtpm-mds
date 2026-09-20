@@ -179,7 +179,11 @@ openspec validate --all
 scripts/openspec-validate.py --strict
 ```
 
-In an OpenSpec-aware agent: `/opsx:propose`, `/opsx:apply`, `/opsx:verify`, `/opsx:archive`.
+In an OpenSpec-aware agent: `/opsx:propose`, `/opsx:apply`, `/opsx:archive`,
+`/opsx:explore`, `/opsx:sync` and `/opsx:update`. Cursor spells the same six
+`/opsx-propose` and so on. Six further workflows, including `verify`, ship with
+the CLI but not with the core profile; `openspec validate --all --strict` is the
+verification this project runs.
 Agents working in this repo must follow [`AGENTS.md`](AGENTS.md), which covers the scope
 rule (behaviour changes need their own change record) and what to verify before a PR.
 

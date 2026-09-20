@@ -141,15 +141,17 @@ therefore fails six of the seven changes that the OpenSpec CLI passes. See
 `openspec validate --all --strict`, which is installed here (see "Lab host
 facts"), and read the script's output with that in mind.
 
-Two things need root on the lab host, so they need the maintainer:
+One thing needs root on the lab host, so it needs the maintainer:
 
 - `/usr/local/sbin/hogan-lab` whitelists only `dist/vtpm-mds_*.deb` for
   `dpkg-install`, so the guest package cannot be installed through the wrapper.
-- `openspec init` has never been run here, which is why the `/opsx:*` commands the
-  README advertises do not exist. Run it as `openspec init --tools cursor` and
-  reconcile deliberately: keep the rules in this file and in
-  `.cursor/rules/openspec-workflow.mdc`, and let the generated files own only the
-  command definitions.
+
+`openspec init` has been run — see
+`openspec/changes/initialize-openspec-agent-tooling/`. It needed no root: the
+checkout root grants `coding-agent` write access through an ACL. The generated
+files under `.cursor/` and `.claude/` own only the command and skill
+definitions; the rules in this file and in
+`.cursor/rules/openspec-workflow.mdc` keep precedence and were not touched.
 
 ## Lab host facts
 
