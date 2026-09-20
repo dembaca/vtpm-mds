@@ -118,43 +118,6 @@ thereafter unknown.
 - **WHEN** it presents that token on a metadata read
 - **THEN** the service responds `401`
 
-### Requirement: Expire Session Tokens On The Configured TTL
-
-The token store SHALL take its lifetime from `mds.token_ttl`, parsed as a Go
-duration once when the store is constructed, and SHALL stamp each token with an
-expiry of its creation time plus that lifetime. The shipped default is `60s`.
-
-Validation SHALL compare the current time against the stored expiry, so a token
-stops being accepted the moment it expires. A background sweep SHALL run every
-minute and delete expired entries from the store; that sweep is a memory
-reclaim and SHALL NOT be what makes an expired token invalid.
-
-A `mds.token_ttl` that is empty or does not parse as a Go duration SHALL yield a
-zero lifetime, with the parse error discarded and the service still starting.
-Every token minted by such a store SHALL be expired at the instant it is
-returned, so `PUT /latest/api/token` SHALL still respond `200` while every
-subsequent metadata read SHALL respond `401`.
-
-#### Scenario: Token is accepted inside its lifetime
-
-- **GIVEN** `mds.token_ttl` is `60s`
-- **WHEN** a guest presents a token it minted a moment earlier
-- **THEN** the service responds `200` with the metadata value
-
-#### Scenario: Token is refused after its lifetime
-
-- **GIVEN** `mds.token_ttl` is `1ms`
-- **WHEN** a guest presents a token 10 milliseconds after minting it
-- **THEN** the token no longer validates and the metadata read responds `401`
-
-#### Scenario: Unparseable TTL makes every token dead on arrival
-
-- **GIVEN** `mds.token_ttl` is absent from the configuration file, or is set to
-  a value such as `sixty` that is not a Go duration
-- **WHEN** a guest mints a token and immediately presents it
-- **THEN** `PUT /latest/api/token` responds `200` and the metadata read responds
-  `401`
-
 ### Requirement: Serve The EC2 Metadata Tree
 
 With `mds.enable_ec2_compat` enabled, the service SHALL serve the following
@@ -168,10 +131,13 @@ and no trailing newline unless stated otherwise:
   header truncated at the first colon, or `localhost.localdomain` when `Host` is
   empty. It SHALL NOT return the guest's own hostname, which the service does
   not know.
-- `GET /latest/meta-data/local-ipv4` SHALL return the peer address of the
-  connection truncated at the first colon. The truncation is textual rather
-  than address-aware, so a caller connecting over IPv6 from `[fe80::1]:5000`
-  is served the body `[fe80`.
+- `GET /latest/meta-data/local-ipv4` SHALL return the IPv4 address of the
+  connection's peer. The peer address SHALL be parsed as a host and port pair
+  rather than truncated at the first colon, so a caller connecting from
+  `[fe80::1]:5000` is not served a fragment of its own address. A peer whose
+  address is an IPv4-mapped IPv6 address SHALL be served the IPv4 form. When
+  the peer has no IPv4 address, the service SHALL respond `404` with an empty
+  body and `Content-Type: text/plain`, as it does for `public-ipv4`.
 - `GET /latest/meta-data/placement/availability-zone` SHALL return the fixed
   string `proxmox`.
 - `GET /latest/meta-data/services/domain` SHALL return the fixed string
@@ -200,6 +166,21 @@ includes the `placement/` and `services/` prefixes that the index advertises.
 #### Scenario: Local address reflects the connection
 
 - **GIVEN** a valid session token and a guest connecting from `10.0.0.5`
+- **WHEN** it sends `GET /latest/meta-data/local-ipv4`
+- **THEN** the service responds `200` with the body `10.0.0.5`
+
+#### Scenario: IPv6 peer is not served a fragment of its address
+
+- **GIVEN** a valid session token and a guest whose peer address is
+  `[fe80::1]:5000`
+- **WHEN** it sends `GET /latest/meta-data/local-ipv4`
+- **THEN** the service responds `404` with an empty body, and in particular
+  never responds `200` with the body `[fe80`
+
+#### Scenario: IPv4-mapped peer is served its IPv4 address
+
+- **GIVEN** a valid session token and a guest whose peer address is
+  `[::ffff:10.0.0.5]:5000`
 - **WHEN** it sends `GET /latest/meta-data/local-ipv4`
 - **THEN** the service responds `200` with the body `10.0.0.5`
 
@@ -278,8 +259,13 @@ With `mds.enable_ec2_compat` enabled,
 SHALL be `local`, `availabilityZone` SHALL be `proxmox`, `version` SHALL be
 `2017-09-30`, `accountId` SHALL be `012345678901`, and `devpayProductCodes` and
 `billingProducts` SHALL both be `null`. Only `instanceId` and `privateIp` vary
-by caller. `privateIp` SHALL be the peer address of the connection and SHALL
-NOT honour `X-Forwarded-For`, even though `instanceId` does.
+by caller.
+
+`privateIp` SHALL be the IPv4 address of the connection's peer, derived exactly
+as `local-ipv4` is, and SHALL NOT honour `X-Forwarded-For`, even though
+`instanceId` does. When the peer has no IPv4 address `privateIp` SHALL be the
+empty string; the key SHALL remain present, so the document keeps its fixed key
+set.
 
 `GET /latest/dynamic/instance-identity/signature` SHALL respond `200` with
 `Content-Type: text/plain` and the fixed placeholder string
@@ -295,49 +281,19 @@ document's authenticity.
   the document reports `imageId` `proxmox-unknown`, `instanceType` `vm`,
   `region` `local`, `availabilityZone` `proxmox` and `privateIp` `10.0.0.5`
 
+#### Scenario: Identity document for a peer with no IPv4 address
+
+- **GIVEN** a valid session token and a caller whose peer address is
+  `[fe80::1]:5000`
+- **WHEN** it sends `GET /latest/dynamic/instance-identity/document`
+- **THEN** the response is `200`, the `privateIp` key is present with the empty
+  string as its value, and it is in particular not `[fe80`
+
 #### Scenario: Identity signature is a constant placeholder
 
 - **GIVEN** a valid session token
 - **WHEN** any guest sends `GET /latest/dynamic/instance-identity/signature`
 - **THEN** the service responds `200` with the body `dGVzdC1zaWduYXR1cmU=`
-
-### Requirement: Gate The EC2 Metadata Surface On Configuration
-
-The service SHALL register the `/latest/meta-data/` tree and the
-`/latest/dynamic/instance-identity/` endpoints only when
-`mds.enable_ec2_compat` is true. When it is false those routes SHALL NOT be
-registered, and requests for them SHALL fall through to the catch-all handler,
-which SHALL log the unmatched route and respond `404` with the body
-`404 page not found`.
-
-Disabling EC2 compatibility SHALL NOT affect `PUT /latest/api/token` or
-`GET /health`, both of which are registered unconditionally.
-
-Configuration loaded from a file SHALL NOT inherit the service's built-in
-defaults: the file is unmarshalled into a zero-valued configuration and only
-`listen_addr` is validated. A configuration file that omits
-`enable_ec2_compat` SHALL therefore leave it false and disable the entire
-metadata tree, even though the built-in default used when no `-config` file is
-given has it true.
-
-#### Scenario: Metadata tree is absent when compatibility is off
-
-- **GIVEN** `mds.enable_ec2_compat` is false
-- **WHEN** a guest sends `GET /latest/meta-data/instance-id` with a valid token
-- **THEN** the service responds `404` with the body `404 page not found`
-
-#### Scenario: Token and health endpoints survive the gate
-
-- **GIVEN** `mds.enable_ec2_compat` is false
-- **WHEN** a guest sends `PUT /latest/api/token` and `GET /health`
-- **THEN** both respond `200`
-
-#### Scenario: Omitting the setting from a config file disables the tree
-
-- **GIVEN** a configuration file that sets `listen_addr` but does not mention
-  `enable_ec2_compat`
-- **WHEN** the service is started with that file
-- **THEN** the metadata tree is not registered and metadata reads respond `404`
 
 ### Requirement: Answer Health Checks Without A Token
 
@@ -360,3 +316,106 @@ handler and receive `404`.
 
 - **WHEN** a caller sends `POST /health`
 - **THEN** the service responds `404` with the body `404 page not found`
+
+### Requirement: Expire Session Tokens On A Validated TTL
+
+The token store SHALL take its lifetime from `mds.token_ttl`, parsed as a Go
+duration once when the store is constructed, and SHALL stamp each token with an
+expiry of its creation time plus that lifetime. The shipped default is `60s`.
+
+Validation SHALL compare the current time against the stored expiry, so a token
+stops being accepted the moment it expires. A background sweep SHALL run every
+minute and delete expired entries from the store; that sweep is a memory
+reclaim and SHALL NOT be what makes an expired token invalid.
+
+A `mds.token_ttl` that is present but does not parse as a Go duration SHALL be
+a fatal configuration error. Loading the configuration SHALL fail, the error
+SHALL name the setting and the offending value, and the service SHALL NOT
+start. The service SHALL NOT start with a zero token lifetime.
+
+A configuration file that omits `token_ttl` SHALL take the built-in default,
+so omission is not a way to reach a zero lifetime either.
+
+#### Scenario: Token is accepted inside its lifetime
+
+- **GIVEN** `mds.token_ttl` is `60s`
+- **WHEN** a guest presents a token it minted a moment earlier
+- **THEN** the service responds `200` with the metadata value
+
+#### Scenario: Token is refused after its lifetime
+
+- **GIVEN** `mds.token_ttl` is `1ms`
+- **WHEN** a guest presents a token 10 milliseconds after minting it
+- **THEN** the token no longer validates and the metadata read responds `401`
+
+#### Scenario: Unparseable TTL stops the service from starting
+
+- **GIVEN** a configuration file whose `mds.token_ttl` is a value such as `60`
+  or `sixty` that is not a Go duration
+- **WHEN** the service is started with that file
+- **THEN** it exits non-zero with an error naming `token_ttl` and the offending
+  value, and never binds its listen address
+
+#### Scenario: Omitted TTL takes the built-in default
+
+- **GIVEN** a configuration file that does not mention `mds.token_ttl`
+- **WHEN** a guest mints a token and immediately presents it on a metadata read
+- **THEN** the read responds `200`, because the store was built with the
+  built-in `60s` lifetime
+
+### Requirement: Gate The EC2 Metadata Surface On The Effective Configuration
+
+The service SHALL register the `/latest/meta-data/` tree and the
+`/latest/dynamic/instance-identity/` endpoints only when
+`mds.enable_ec2_compat` is true. When it is false those routes SHALL NOT be
+registered, and requests for them SHALL fall through to the catch-all handler,
+which SHALL log the unmatched route and respond `404` with the body
+`404 page not found`.
+
+Disabling EC2 compatibility SHALL NOT affect `PUT /latest/api/token` or
+`GET /health`, both of which are registered unconditionally.
+
+Configuration loaded from a file SHALL start from the service's built-in
+defaults and overlay the file's values on top. A setting the file does not
+mention SHALL keep its built-in default; a setting the file states explicitly
+SHALL win, including one stated as the zero value. A configuration file that
+omits `enable_ec2_compat` SHALL therefore leave the metadata tree registered,
+because the built-in default is true, and only an explicit
+`enable_ec2_compat: false` SHALL disable it.
+
+`listen_addr` SHALL continue to be validated as non-empty. Because it now has
+a built-in default, that validation SHALL reject only a value the file states
+explicitly as empty.
+
+#### Scenario: Metadata tree is absent when compatibility is off
+
+- **GIVEN** `mds.enable_ec2_compat` is false
+- **WHEN** a guest sends `GET /latest/meta-data/instance-id` with a valid token
+- **THEN** the service responds `404` with the body `404 page not found`
+
+#### Scenario: Token and health endpoints survive the gate
+
+- **GIVEN** `mds.enable_ec2_compat` is false
+- **WHEN** a guest sends `PUT /latest/api/token` and `GET /health`
+- **THEN** both respond `200`
+
+#### Scenario: Omitting the setting keeps the tree registered
+
+- **GIVEN** a configuration file that sets `listen_addr` but does not mention
+  `enable_ec2_compat`
+- **WHEN** the service is started with that file
+- **THEN** the metadata tree is registered and a metadata read with a valid
+  token responds `200`
+
+#### Scenario: An explicit false still disables the tree
+
+- **GIVEN** a configuration file that sets `enable_ec2_compat: false`
+- **WHEN** the service is started with that file
+- **THEN** the metadata tree is not registered and metadata reads respond `404`
+
+#### Scenario: An explicitly empty listen address is rejected
+
+- **GIVEN** a configuration file that sets `listen_addr: ""`
+- **WHEN** the service is started with that file
+- **THEN** loading fails with the `listen_addr is required` error and the
+  service does not start

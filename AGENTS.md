@@ -78,10 +78,21 @@ Tests and vet must pass: `go vet ./...` and `go test ./...`.
 
 ## Known gaps, and the queue as of 2026-09-20
 
-Items 1 to 5 below are now written up as changes in `openspec/changes/`, with a
-proposal, design, tasks and spec delta each. **None of them is implemented**:
-every `tasks.md` is unticked. Read the change before touching the code it names,
-and work task by task as "Always start here" describes.
+Items 1 to 5 below are written up as changes and **implemented on `main`**.
+Four of them are **not yet archived**, because each still has tasks that need
+root on the lab host or a software TPM, and archiving a change whose
+verification never ran would put an unchecked claim into the living spec:
+
+| Change | Open tasks | What is missing |
+|---|---|---|
+| `exit-cleanly-on-server-shutdown` | 4.1-4.4 | the packaged `systemctl stop`/`restart` run; only a foreground SIGTERM was measured |
+| `bind-ek-certificate-to-endorsement-key` | 4.2, 4.3, 5.1 | `TestEnrollAgainstSwtpm` **skipped**, no swtpm socket; guest e2e needs root; 5.1 is the archive-time Purpose edit |
+| `enforce-authenticated-ldevid-subject` | 4.2, 4.3 | same swtpm skip and guest e2e |
+| `refuse-unbound-metadata-callers` | 6.2, 6.3 | the netns runs, which need root and a git-stamped package |
+
+Run those, tick the boxes with the output, then `openspec archive <change>`.
+Until then `openspec validate --all --strict` passes but
+`scripts/openspec-validate.py --strict` correctly reports the unticked tasks.
 
 Item 6 is still unwritten. Write a proposal, design, tasks and spec delta for it
 before touching code — do not fix it inline.
@@ -133,14 +144,20 @@ merge). Everything else is independent.
    secret, the placeholder JWKS and the ignored `mds.jwt_ttl` as current
    behaviour, so this can now be proposed against a written contract.
 
-One more gap was found while writing those changes and has its own record:
-`scripts/openspec-validate.py` demands a `#### Scenario:` from every
-`### Requirement:` block regardless of section, so it rejects every `REMOVED`
-requirement — which correctly carries **Reason** and **Migration** instead — and
-therefore fails six of the seven changes that the OpenSpec CLI passes. See
-`openspec/changes/fix-fallback-openspec-validator/`. Until it is fixed, trust
-`openspec validate --all --strict`, which is installed here (see "Lab host
-facts"), and read the script's output with that in mind.
+Two smaller defects surfaced while implementing the above. Both are
+pre-existing and unspecified, so each needs its own change before anyone
+touches them:
+
+- `GET /latest/meta-data/public-ipv4` always answers `404` because
+  `getPublicIP` in `imds/handlers.go` is an unimplemented `TODO`. The
+  `instance-metadata` spec records that as current behaviour, so this is a
+  missing feature rather than a contradiction — but it means the key is listed
+  in the index and never has a value.
+- `imds.getClientIP` falls back to the literal `"127.0.0.1"` when `PeerIP`
+  cannot parse `RemoteAddr`. With `mds.require_vm_identity: false`, an
+  unparseable peer address is therefore served the instance id `i-127-0-0-1`
+  — a made-up identity, in the one mode where unbound callers are served at
+  all.
 
 One thing needs root on the lab host, so it needs the maintainer:
 
