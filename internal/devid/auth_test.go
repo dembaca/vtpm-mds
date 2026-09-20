@@ -17,7 +17,9 @@ import (
 	"github.com/google/go-tpm/legacy/tpm2"
 )
 
-func testEKCert(t *testing.T) (*x509.Certificate, *x509.CertPool) {
+// testEKCert returns a self-signed EK certificate, the TPM public area of the
+// endorsement key it certifies, and a root pool trusting it.
+func testEKCert(t *testing.T) (*x509.Certificate, *tpm2.Public, *x509.CertPool) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -40,11 +42,12 @@ func testEKCert(t *testing.T) (*x509.Certificate, *x509.CertPool) {
 	}
 	roots := x509.NewCertPool()
 	roots.AddCert(cert)
-	return cert, roots
+	pub := rsaPublicToTPM(key, true)
+	return cert, &pub, roots
 }
 
 func TestParseEKCertHeader(t *testing.T) {
-	cert, _ := testEKCert(t)
+	cert, _, _ := testEKCert(t)
 	hdr := EncodeEKCertHeader(cert)
 	got, err := ParseEKCertHeader(hdr)
 	if err != nil {
@@ -64,35 +67,55 @@ func TestParseEKCertHeader(t *testing.T) {
 }
 
 func TestAuthenticateEnrollCaller(t *testing.T) {
-	cert, roots := testEKCert(t)
-	other, _ := testEKCert(t)
+	cert, certPub, roots := testEKCert(t)
+	other, otherPub, _ := testEKCert(t)
 	enroller := NewEnroller(&CA{}, roots, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/latest/devid/enroll/start", nil)
 	req.Header.Set(HeaderEKCert, EncodeEKCertHeader(cert))
 
-	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ""); !isUnauthorized(err) {
+	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, certPub, ""); !isUnauthorized(err) {
 		t.Fatalf("expected unauthorized without VM, got %v", err)
 	}
 
 	vm := &inventory.VMConfig{VMID: "100", MACs: []string{"52:54:00:a1:b2:c3"}}
 	req = req.WithContext(context.WithValue(req.Context(), inventory.VMConfigContextKey, vm))
 
-	vmid, ek, err := enroller.AuthenticateEnrollCaller(req, cert, "")
+	vmid, ek, err := enroller.AuthenticateEnrollCaller(req, cert, certPub, "")
 	if err != nil || vmid != "100" || ek == nil {
 		t.Fatalf("auth failed: vmid=%q err=%v", vmid, err)
 	}
 
-	if _, _, err := enroller.AuthenticateEnrollCaller(req, other, ""); !isUnauthorized(err) {
+	// A signing request naming another certificate: the header certificate
+	// still certifies certPub, so this is the DER equality check failing.
+	_, _, err = enroller.AuthenticateEnrollCaller(req, other, certPub, "")
+	if !isUnauthorized(err) || err.Error() != "EK certificate header does not match signing request" {
 		t.Fatalf("expected CSR mismatch unauthorized, got %v", err)
 	}
 
+	// A signing request carrying another TPM's endorsement key.
+	_, _, err = enroller.AuthenticateEnrollCaller(req, cert, otherPub, "")
+	if !isUnauthorized(err) || err.Error() != MsgEKCertKeyMismatch {
+		t.Fatalf("expected EK binding failure, got %v", err)
+	}
+
+	// The same answer when the signing request carries no endorsement key.
+	_, _, err = enroller.AuthenticateEnrollCaller(req, cert, nil, "")
+	if !isUnauthorized(err) || err.Error() != MsgEKCertKeyMismatch {
+		t.Fatalf("expected EK binding failure for a missing key, got %v", err)
+	}
+
+	// enroll/finish has no signing request and verifies the chain only.
+	if _, _, err := enroller.AuthenticateEnrollCaller(req, nil, nil, ""); err != nil {
+		t.Fatalf("finish leg auth failed: %v", err)
+	}
+
 	vm.EKSHA256 = EKFingerprint(other)
-	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ""); !isUnauthorized(err) {
+	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, certPub, ""); !isUnauthorized(err) {
 		t.Fatalf("expected pin mismatch, got %v", err)
 	}
 	vm.EKSHA256 = EKFingerprint(cert)
-	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ""); err != nil {
+	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, certPub, ""); err != nil {
 		t.Fatal(err)
 	}
 }

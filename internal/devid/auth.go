@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/dembaca/vtpm-mds/internal/inventory"
+	"github.com/google/go-tpm/legacy/tpm2"
 )
 
 // HeaderEKCert is sent by the guest enroll client. Value is base64(DER) of the
@@ -58,14 +59,24 @@ func EncodeEKCertHeader(cert *x509.Certificate) string {
 	return base64.StdEncoding.EncodeToString(cert.Raw)
 }
 
+// MsgEKCertKeyMismatch is the enroll/start response body for an EK certificate
+// that does not certify the endorsement key carried in the signing request. A
+// missing endorsement key public area is answered the same way, so an
+// unauthorised caller is not told which half of its forgery was detected.
+const MsgEKCertKeyMismatch = "EK certificate does not match the endorsement key in the signing request"
+
 // AuthenticateEnrollCaller requires:
 //  1. VM identity from MAC (inventory via request context)
 //  2. A trusted EK certificate in HeaderEKCert
 //
 // If expectedFP is non-empty (session- or inventory-pinned), the header EK
 // fingerprint must match. If csrEK is non-nil (enroll/start), header EK must
-// equal the CSR endorsement certificate.
-func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certificate, expectedFP string) (vmID string, ekCert *x509.Certificate, err error) {
+// equal the CSR endorsement certificate and must certify csrEKPub, the
+// endorsement key the caller is enrolling with — otherwise the EK factor would
+// prove possession of a certificate rather than of the certified TPM.
+// enroll/finish carries no signing request and so verifies the chain only; the
+// session binds the fingerprint of the certificate bound at start.
+func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certificate, csrEKPub *tpm2.Public, expectedFP string) (vmID string, ekCert *x509.Certificate, err error) {
 	vm := inventory.GetVMConfigFromRequest(r)
 	if vm == nil || vm.VMID == "" {
 		return "", nil, errUnauthorized("VM identity required (MAC not in inventory)")
@@ -76,7 +87,15 @@ func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certifi
 	if err != nil {
 		return "", nil, errUnauthorized(err.Error())
 	}
-	if err := VerifyEKCertificate(e.EKRoots, nil, ekCert); err != nil {
+	if csrEK != nil {
+		err = VerifyEKCertificateBinding(e.EKRoots, ekCert, csrEKPub)
+	} else {
+		err = VerifyEKCertificateChain(e.EKRoots, ekCert)
+	}
+	if err != nil {
+		if errors.Is(err, errEKKeyMismatch) {
+			return "", nil, errUnauthorized(MsgEKCertKeyMismatch)
+		}
 		return "", nil, errUnauthorized(fmt.Sprintf("EK certificate not trusted: %v", err))
 	}
 

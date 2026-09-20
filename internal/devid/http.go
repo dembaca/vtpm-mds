@@ -72,7 +72,7 @@ func (e *Enroller) HandleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vmid, ekCert, err := e.AuthenticateEnrollCaller(r, sr.EndorsementCertificate, "")
+	vmid, ekCert, err := e.AuthenticateEnrollCaller(r, sr.EndorsementCertificate, sr.EndorsementKey, "")
 	if err != nil {
 		writeEnrollAuthError(w, err)
 		return
@@ -107,7 +107,7 @@ func (e *Enroller) HandleFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vmid, ekCert, err := e.AuthenticateEnrollCaller(r, nil, "")
+	vmid, ekCert, err := e.AuthenticateEnrollCaller(r, nil, nil, "")
 	if err != nil {
 		writeEnrollAuthError(w, err)
 		return

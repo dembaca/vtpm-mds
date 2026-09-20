@@ -47,7 +47,7 @@ func (e *Enroller) Start(requestData, signature []byte, subjectCN, vmid, ekFP st
 	if err := CheckSignature(sr.DevIDKey, requestData, signature); err != nil {
 		return nil, fmt.Errorf("invalid request signature: %w", err)
 	}
-	if err := VerifyEKCertificate(e.EKRoots, sr.EndorsementKey, sr.EndorsementCertificate); err != nil {
+	if err := VerifyEKCertificateChain(e.EKRoots, sr.EndorsementCertificate); err != nil {
 		return nil, err
 	}
 	if err := VerifyDevIDResidency(sr.AttestationKey, sr.DevIDKey, sr.CertifyData, sr.CertifySignature); err != nil {

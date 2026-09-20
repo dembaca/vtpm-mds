@@ -38,7 +38,7 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 	if !roots.AppendCertsFromPEM(ekPEM) {
 		t.Fatal("ek roots")
 	}
-	if err := VerifyEKCertificate(roots, sr.EndorsementKey, sr.EndorsementCertificate); err != nil {
+	if err := VerifyEKCertificateBinding(roots, sr.EndorsementCertificate, sr.EndorsementKey); err != nil {
 		t.Fatalf("ek cert: %v", err)
 	}
 
