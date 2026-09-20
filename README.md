@@ -16,8 +16,8 @@ Binary: `vtpm-mds` (aliases: `qemu-mds`, `prox-mds`). Module path: `github.com/d
 | **Dual enroll auth** — MAC → inventory **and** TPM EK certificate header | implemented |
 | **Inventory backends** — YAML inventory (plain QEMU lab) or Proxmox `/etc/pve` | implemented |
 | **Host-anchored trust** — EK CA chain + optional DevID CA | implemented |
-| **TPM attestation** — verify VM identity using vTPM (swtpm) quotes | endpoints present, quote verification [in progress](openspec/changes/implement-tpm-quote-verification/) |
-| **Short-lived identity documents (JWT/JWS)** | endpoints present, real signing keys [in progress](openspec/changes/sign-identity-documents-with-real-keys/) |
+| **TPM attestation** — verify VM identity using vTPM (swtpm) quotes | endpoints present, quote verification not implemented (unspecified) |
+| **Short-lived identity documents (JWT/JWS)** | endpoints present, real signing keys not implemented (unspecified) |
 
 ## Quick Start
 
@@ -129,6 +129,12 @@ specified in [`openspec/specs/`](openspec/specs/):**
 - [`instance-metadata`](openspec/specs/instance-metadata/spec.md) — IMDSv2 token flow and the metadata tree
 - [`devid-enrollment`](openspec/specs/devid-enrollment/spec.md) — the two-leg enroll protocol and its dual-factor auth
 - [`vm-inventory`](openspec/specs/vm-inventory/spec.md) — how callers are identified and inventory is loaded
+- [`debian-packaging`](openspec/specs/debian-packaging/spec.md) — the host and guest `.deb` split
+- [`operability`](openspec/specs/operability/spec.md) — `-version` reporting and service supervision
+
+These specs describe what the code does **today**, including where it is weaker than
+the trust model in `ARCHITECTURE.md` implies. Read `devid-enrollment` before relying on
+enrollment for tenant isolation.
 
 DevID enroll routes are registered when `devid_ca_cert` / `devid_ca_key` are set and
 TPM attestation is enabled. The guest client is `bin/devid-enroll` (a cloud-init
@@ -160,16 +166,22 @@ Copy-paste checks for IMDS / DevID / TPM / SPIRE: [E2E verification cheat sheet]
 
 This project uses [OpenSpec](https://openspec.dev). `openspec/specs/` is the living
 description of current behaviour; `openspec/changes/` holds in-flight work, each with a
-proposal, design and task breakdown. A change merges into the specs when it lands, so
-the specs never drift from what shipped.
+proposal, design and task breakdown. When a change lands, its delta moves into
+`openspec/specs/` and the change moves to `openspec/changes/archive/`, so the specs
+never drift from what shipped.
 
 ```bash
 openspec list            # active changes
 openspec list --specs    # capability inventory
 openspec validate --all
+
+# Lab hosts have no node/npm, so the CLI cannot run there:
+scripts/openspec-validate.py --strict
 ```
 
 In an OpenSpec-aware agent: `/opsx:propose`, `/opsx:apply`, `/opsx:verify`, `/opsx:archive`.
+Agents working in this repo must follow [`AGENTS.md`](AGENTS.md), which covers the scope
+rule (behaviour changes need their own change record) and what to verify before a PR.
 
 ## Testing
 

@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PROPOSAL_HEADINGS = ("## Why", "## What Changes", "## Capabilities", "## Impact")
 DELTA_SECTION = re.compile(r"^## (ADDED|MODIFIED|REMOVED|RENAMED) Requirements", re.M)
+SPEC_SECTION = re.compile(r"^## Requirements", re.M)
 
 failures: list[str] = []
 
@@ -29,10 +30,26 @@ def check(cond: bool, msg: str) -> None:
         failures.append(msg)
 
 
-def check_delta(path: Path) -> None:
+def check_requirements(path: Path, delta: bool) -> None:
+    """Check a spec document.
+
+    A change delta groups requirements under `## ADDED Requirements` (or
+    MODIFIED/REMOVED/RENAMED); a living spec under `openspec/specs/` states
+    current behaviour under a plain `## Requirements`.
+    """
     capability = path.parent.name
     text = path.read_text()
-    check(bool(DELTA_SECTION.search(text)), f"{capability}: has an ADDED/MODIFIED/REMOVED section")
+    if delta:
+        check(
+            bool(DELTA_SECTION.search(text)),
+            f"{capability}: has an ADDED/MODIFIED/REMOVED section",
+        )
+    else:
+        check(bool(SPEC_SECTION.search(text)), f"{capability}: has a '## Requirements' section")
+        check(
+            not DELTA_SECTION.search(text),
+            f"{capability}: is a living spec, not a delta (no ADDED/MODIFIED/REMOVED heading)",
+        )
     check("SHALL" in text, f"{capability}: uses normative SHALL")
     blocks = re.split(r"^### Requirement: ", text, flags=re.M)[1:]
     check(bool(blocks), f"{capability}: has '### Requirement:' headers")
@@ -68,7 +85,7 @@ def check_change(change: Path, strict: bool) -> None:
     deltas = sorted((change / "specs").rglob("spec.md")) if (change / "specs").exists() else []
     check(bool(deltas), "has at least one spec delta under specs/<capability>/spec.md")
     for delta in deltas:
-        check_delta(delta)
+        check_requirements(delta, delta=True)
 
 
 def main() -> int:
@@ -86,10 +103,10 @@ def main() -> int:
     if specs_dir.is_dir():
         for spec in sorted(specs_dir.rglob("spec.md")):
             print(f"--- spec: {spec.parent.name}")
-            check_delta(spec)
+            check_requirements(spec, delta=False)
     else:
-        print("--- spec: openspec/specs/ is missing")
-        print("NOTE  no capability specs yet; README.md links to specs that do not exist")
+        print("FAIL  openspec/specs/ does not exist; README.md links to specs that are missing")
+        failures.append("openspec/specs/ does not exist")
 
     print()
     if failures:

@@ -1,4 +1,4 @@
-# Spec Delta
+# Debian Packaging
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Ship the hypervisor daemon and the guest DevID enrollment client as two
 independently installable Debian packages from the same source, so guests can
 install the client without enabling a host IMDS service.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Two Binary Packages From One Source
 

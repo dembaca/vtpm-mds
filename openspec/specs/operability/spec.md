@@ -1,4 +1,4 @@
-# Spec Delta
+# Operability
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Let an operator determine which build of the daemon and of the guest client is
 installed, without starting the service or reaching a TPM, and make the host
 service's restart rate limit effective.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Both Binaries Report Their Build Version
 
