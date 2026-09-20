@@ -1,8 +1,14 @@
 vtpm-mds for Proxmox / lab hosts
 --------------------------------
 
-This package installs only the daemon, aliases, devid-enroll client, and
-systemd unit. It does not configure the IMDS bridge, nftables DNAT, or
+This package installs only the daemon (/usr/sbin/vtpm-mds), the aliases
+prox-mds and qemu-mds, the systemd unit, /etc/vtpm-mds/config.yaml and
+/var/lib/vtpm-mds. The guest enrollment client is no longer part of it:
+since 0.2.0 /usr/bin/devid-enroll lives in the separate devid-enroll
+package, so upgrading vtpm-mds on a host removes that path. Install the
+devid-enroll .deb in VM images (guests), not on the hypervisor.
+
+This package does not configure the IMDS bridge, nftables DNAT, or
 swtpm PKI — those typically come from site Ansible on the lab host:
 
   proxmox-imds-network  vmbr_imds 169.254.169.1/32 + DNAT 169.254.169.254:80
@@ -28,16 +34,28 @@ hosts without vmbr_imds). On the lab host:
 Build
 -----
 
+One source builds both packages at the same version:
+
   make deb
-  # artifact: dist/vtpm-mds_<version>_<arch>.deb
+  # artifacts: dist/vtpm-mds_<version>_<arch>.deb       (host daemon)
+  #            dist/devid-enroll_<version>_<arch>.deb   (guest client)
 
 Requires Go 1.24+ on PATH (go.mod toolchain) and debhelper. Equivalent:
 
   dpkg-buildpackage -b -us -uc
-  # writes the .deb to the parent of the source tree when that directory
+  # writes the .debs to the parent of the source tree when that directory
   # is writable; `make deb` always stages into dist/.
 
-GitHub Release (Linux amd64 only; tag v<changelog-version>):
+Install the host package on the hypervisor, the guest package in the VM
+image:
 
-  gh release download v0.1.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds_*_amd64.deb'
-  # https://github.com/dembaca/vtpm-mds/releases/download/v0.1.0/vtpm-mds_0.1.0_amd64.deb
+  sudo dpkg -i dist/vtpm-mds_*.deb && sudo systemctl start vtpm-mds
+  sudo dpkg -i dist/devid-enroll_*.deb   # guest only; no service
+
+GitHub Release (Linux amd64 only; tag v<changelog-version>). Both .debs
+are attached to the same tag:
+
+  gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds_*_amd64.deb'
+  gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'devid-enroll_*_amd64.deb'
+  # https://github.com/dembaca/vtpm-mds/releases/download/v0.2.0/vtpm-mds_0.2.0_amd64.deb
+  # https://github.com/dembaca/vtpm-mds/releases/download/v0.2.0/devid-enroll_0.2.0_amd64.deb

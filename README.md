@@ -28,25 +28,55 @@ make build
 # also builds aliases bin/qemu-mds, bin/prox-mds and guest client bin/devid-enroll
 ```
 
-### Debian package
+### Debian packages
 
-Requires Go 1.24+ and `debhelper`. `make deb` runs `dpkg-buildpackage` and copies the artifact to `dist/`:
+One source package, two binary packages, built and released together from the same changelog version:
+
+| Package | Install on | Contents |
+|---|---|---|
+| `vtpm-mds` | hypervisor / lab host | `/usr/sbin/vtpm-mds` (aliases `prox-mds`, `qemu-mds`), `vtpm-mds.service`, `/etc/vtpm-mds/config.yaml`, `/var/lib/vtpm-mds` |
+| `devid-enroll` | guest VM images | `/usr/bin/devid-enroll` and its man page — no daemon, no systemd unit, no `/etc/vtpm-mds` |
+
+**Breaking in 0.2.0:** the host package no longer ships `/usr/bin/devid-enroll` — upgrading `vtpm-mds` removes that path from the hypervisor. The client is its own package now; install `devid-enroll` where you actually need it (guest images, not hosts). It declares `Breaks`/`Replaces: vtpm-mds (<< 0.2.0)` so it can take over the moved path.
+
+Requires Go 1.24+ and `debhelper`. `make deb` runs `dpkg-buildpackage` and copies both artifacts to `dist/`:
 
 ```bash
 make deb
-# artifact: dist/vtpm-mds_<version>_<arch>.deb   (currently dist/vtpm-mds_0.1.0_amd64.deb)
+# artifacts: dist/vtpm-mds_<version>_<arch>.deb       (currently dist/vtpm-mds_0.2.0_amd64.deb)
+#            dist/devid-enroll_<version>_<arch>.deb   (currently dist/devid-enroll_0.2.0_amd64.deb)
+```
+
+Host — daemon, unit and config:
+
+```bash
 sudo dpkg -i dist/vtpm-mds_*.deb
 sudo systemctl start vtpm-mds   # enabled on install, not auto-started
 ```
 
-CI builds that same amd64 `.deb` on Linux (`ubuntu-24.04`, not Darwin). A GitHub Release is created when you push tag `v<debian-version>` (for example `v0.1.0`) or run **Actions → Debian package → Run workflow** with **Publish GitHub Release**.
-
-Ansible / lab-host download (private repo: GitHub auth required):
+Guest — client only, nothing to start:
 
 ```bash
-gh release download v0.1.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds_*_amd64.deb'
+sudo dpkg -i dist/devid-enroll_*.deb
+devid-enroll -version
+```
+
+CI builds both amd64 `.deb`s on Linux (`ubuntu-24.04`, not Darwin) and fails if either is missing. A GitHub Release is created when you push tag `v<debian-changelog-version>` (for example `v0.2.0`) or run **Actions → Debian package → Run workflow** with **Publish GitHub Release**; both artifacts are attached to that tag.
+
+Ansible / lab-host download — hosts fetch the daemon package (private repo: GitHub auth required):
+
+```bash
+gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds_*_amd64.deb'
 # or
-# https://github.com/dembaca/vtpm-mds/releases/download/v0.1.0/vtpm-mds_0.1.0_amd64.deb
+# https://github.com/dembaca/vtpm-mds/releases/download/v0.2.0/vtpm-mds_0.2.0_amd64.deb
+```
+
+Guest image builds fetch the client package as well (same tag, same version):
+
+```bash
+gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'devid-enroll_*_amd64.deb'
+# or
+# https://github.com/dembaca/vtpm-mds/releases/download/v0.2.0/devid-enroll_0.2.0_amd64.deb
 ```
 
 The unit listens on `169.254.169.1:80` (IMDS bridge). Packaged config points at Ansible-managed PKI under `/etc/ssl`. See `debian/README.Debian`.
@@ -102,8 +132,8 @@ specified in [`openspec/specs/`](openspec/specs/):**
 
 DevID enroll routes are registered when `devid_ca_cert` / `devid_ca_key` are set and
 TPM attestation is enabled. The guest client is `bin/devid-enroll` (a cloud-init
-oneshot in the QEMU lab); it writes `devid.crt.pem`, `devid.priv.blob` and
-`devid.pub.blob` for SPIRE.
+oneshot in the QEMU lab, and the `devid-enroll` package on real VM images); it
+writes `devid.crt.pem`, `devid.priv.blob` and `devid.pub.blob` for SPIRE.
 
 ## Development
 
@@ -230,12 +260,13 @@ sudo devid-enroll -cn vtpm-pilot -tpm /dev/tpmrm0 -out /tmp/devid-e2e
 openssl x509 -in /tmp/devid-e2e/devid.crt.pem -noout -subject -issuer -dates
 ```
 
-Install a host-matching client after a `dpkg -i` on Hogan:
+Install a host-matching client after a `dpkg -i` on Hogan — the host package no longer carries `/usr/bin/devid-enroll`, so push the guest `.deb` of the same version instead:
 
 ```bash
-# HOST as cursor-agent
-scp /usr/bin/devid-enroll vtpm-pilot:/tmp/devid-enroll.new
-ssh vtpm-pilot 'sudo install -m 0755 /tmp/devid-enroll.new /usr/local/bin/devid-enroll && devid-enroll -version'
+# HOST as cursor-agent; from dist/ after `make deb`, or
+# gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'devid-enroll_*_amd64.deb'
+scp dist/devid-enroll_*_amd64.deb vtpm-pilot:/tmp/
+ssh vtpm-pilot 'sudo dpkg -i /tmp/devid-enroll_*_amd64.deb && devid-enroll -version'
 ```
 
 ### Host — verify the guest cert against the DevID CA
