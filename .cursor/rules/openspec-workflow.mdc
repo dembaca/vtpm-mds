@@ -1,0 +1,29 @@
+---
+description: OpenSpec workflow and scope rules for vtpm-mds
+alwaysApply: true
+---
+
+This repository is spec-driven with OpenSpec. Read `AGENTS.md` before editing.
+
+Non-negotiables:
+
+- Before implementing, read the active change in `openspec/changes/<name>/`:
+  `proposal.md`, `design.md`, `tasks.md` and every `specs/<capability>/spec.md`
+  delta. Implement task by task; tick a checkbox only after running the
+  verification that task names.
+- Stay inside the change's declared scope, including `design.md` non-goals.
+  Product behaviour (flags, endpoints, status codes, defaults, wire formats)
+  needs its own change with a proposal and spec delta — write that record even
+  when the code has to ship in the current PR to unblock verification.
+- Validate before opening a PR: `openspec validate --all --strict`, or
+  `scripts/openspec-validate.py --strict` on hosts without node/npm.
+- When a change ships, archive it: delta into `openspec/specs/<capability>/`,
+  change directory into `openspec/changes/archive/`, update the `README.md`
+  status table.
+- Never leave uncommitted work behind. Commit or stash before switching
+  branches, creating worktrees, or running anything that restores files;
+  `make deb`/`make deb-clean` delete `.deb-build/`, and `/tmp` on the lab host
+  is tmpfs. This repo has already lost code that way.
+- Verify packaging on the produced artifacts (`dpkg-deb -c`/`-I`, `lintian`,
+  `systemd-analyze verify`, run the extracted binary). State plainly which
+  checks could not run rather than implying they passed.
