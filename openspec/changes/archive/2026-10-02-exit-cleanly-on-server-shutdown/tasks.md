@@ -74,18 +74,39 @@
 
 ## 4. Verify on the real unit
 
-- [ ] 4.1 Build a git-stamped package with `make deb-local` and verify `dpkg-deb -f` reports the expected version for the tree under test
+Run by Andreas Dembach as root on `hogan`, 2026-10-02, against package
+`0.2.0+git20260920.c2ad576144f2` (tree `c2ad576`).
 
-      Not run: needs root on the lab host; maintainer-run.
+- [x] 4.1 Build a git-stamped package with `make deb-local` and verify `dpkg-deb -f` reports the expected version for the tree under test
 
-- [ ] 4.2 Install it with `dpkg -i --force-confold` and verify `vtpm-mds -version` matches the package version, so the running daemon is known to be this tree — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
+      `make deb-local` → dist/vtpm-mds_0.2.0+git20260920.c2ad576144f2_amd64.deb
+      `dpkg-deb -f "$DEB" Version` → 0.2.0+git20260920.c2ad576144f2
+      Note: the package must be named explicitly. `dist/vtpm-mds_*.deb` also
+      matched a stale `vtpm-mds_0.2.0_amd64.deb` and, because glibc collation
+      ignores punctuation at the primary level, expanded with the stale one
+      first — `dpkg-deb -f` then read that archive and reported `0.2.0`.
 
-      Not run: needs root on the lab host; maintainer-run.
+- [x] 4.2 Install it with `dpkg -i --force-confold` and verify `vtpm-mds -version` matches the package version, so the running daemon is known to be this tree — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
 
-- [ ] 4.3 Verify `systemctl stop vtpm-mds` leaves `inactive (dead)` with result `success` and that `systemctl is-failed` reports `inactive` — needs root, record who ran it
+      `dpkg -i --force-confold "$DEB"`; `vtpm-mds -version` →
+      `vtpm-mds 0.2.0+git20260920.c2ad576144f2`, identical to 4.1.
 
-      Not run: needs root on the lab host; maintainer-run.
+- [x] 4.3 Verify `systemctl stop vtpm-mds` leaves `inactive (dead)` with result `success` and that `systemctl is-failed` reports `inactive` — needs root, record who ran it
 
-- [ ] 4.4 Verify `systemctl restart vtpm-mds` ends active and `journalctl -u vtpm-mds` shows no `exit-code` result for the restart — needs root, record who ran it
+      After `systemctl daemon-reload` (the first attempt warned that the
+      on-disk unit had changed since systemd loaded it, so it was repeated to
+      remove the doubt):
+      Result=success / ActiveState=inactive / SubState=dead; is-failed →
+      inactive. Before this change the same sequence ended in `failed`.
 
-      Not run: needs root on the lab host; maintainer-run.
+- [x] 4.4 Verify `systemctl restart vtpm-mds` ends active and `journalctl -u vtpm-mds` shows no `exit-code` result for the restart — needs root, record who ran it
+
+      `systemctl is-active` → active; `systemctl show -p Result,NRestarts` →
+      Result=success, NRestarts=0. Journal for the restart:
+        18:07:33 Listener stopped: http: Server closed
+        18:07:33 Server stopped gracefully
+      No `Server error:` and no `exit-code` in the window. The pre-fix wording
+      `Server error: http: Server closed` plus `Failed with result 'exit-code'`
+      does appear earlier in the same journal, at 17:59:33 — that is the old
+      binary being stopped by the package's preinst, and the differing log
+      wording is what distinguishes the two code paths.

@@ -79,13 +79,12 @@ Tests and vet must pass: `go vet ./...` and `go test ./...`.
 ## Known gaps, and the queue as of 2026-09-20
 
 Items 1 to 5 below are written up as changes and **implemented on `main`**.
-Four of them are **not yet archived**, because each still has tasks that need
+Three of them are **not yet archived**, because each still has tasks that need
 root on the lab host or a software TPM, and archiving a change whose
 verification never ran would put an unchecked claim into the living spec:
 
 | Change | Open tasks | What is missing |
 |---|---|---|
-| `exit-cleanly-on-server-shutdown` | 4.1-4.4 | the packaged `systemctl stop`/`restart` run; only a foreground SIGTERM was measured |
 | `bind-ek-certificate-to-endorsement-key` | 4.2, 4.3, 5.1 | `TestEnrollAgainstSwtpm` **skipped**, no swtpm socket; guest e2e needs root; 5.1 is the archive-time Purpose edit |
 | `enforce-authenticated-ldevid-subject` | 4.2, 4.3 | same swtpm skip and guest e2e |
 | `refuse-unbound-metadata-callers` | 6.2, 6.3 | the netns runs, which need root and a git-stamped package |
@@ -129,7 +128,8 @@ merge). Everything else is independent.
    error from `srv.Start()`, including `http.ErrServerClosed`, so every
    `systemctl stop`/`restart` exits 1 and ends in `failed`. Verified on 0.2.0.
    This belongs to the `operability` capability.
-   → `openspec/changes/exit-cleanly-on-server-shutdown/`
+   → **fixed and archived** 2026-10-02, verified on the real unit on `hogan`:
+   `openspec/changes/archive/2026-10-02-exit-cleanly-on-server-shutdown/`
 5. Smaller, from writing the specs: `token_ttl` parse errors are discarded (a typo
    yields a zero TTL, so every metadata read 401s); `config.Load` never merges
    defaults, so omitting `enable_ec2_compat` silently disables the metadata tree
