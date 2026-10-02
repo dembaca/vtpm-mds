@@ -144,6 +144,18 @@ merge). Everything else is independent.
    secret, the placeholder JWKS and the ignored `mds.jwt_ttl` as current
    behaviour, so this can now be proposed against a written contract.
 
+The QEMU lab under `scripts/qemu-lab/` **must not be run on `hogan`**. Its
+`setup-host.sh` creates `br-imds` and claims 169.254.169.1/16 and
+169.254.169.254/16, which this host already owns as /32 on the production
+`vmbr_imds`. That yields two connected routes for 169.254.0.0/16, and the
+reply to a lab guest leaves through the production bridge — the guest sees
+nothing but `curl: (28) Connection timed out`. Production kept winning the
+route lookup during the attempt on 2026-10-02 and `br-imds` is runtime-only,
+so nothing persisted, but which bridge wins is decided by route insertion
+order rather than by design. Run the QEMU lab on the cloud lab host. The same
+goes for `e2e-netns.sh`: it expects `i-100` for the lab YAML inventory, while
+`hogan` resolves callers from `/etc/pve`.
+
 Two smaller defects surfaced while implementing the above. Both are
 pre-existing and unspecified, so each needs its own change before anyone
 touches them:

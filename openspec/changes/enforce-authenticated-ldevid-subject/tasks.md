@@ -36,4 +36,17 @@
       through the site CA named in `/etc/swtpm_setup.conf`. The TPM, the EK
       certificate and the enroll path itself were real.
 - [ ] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` and verify the guest's `devid.crt.pem` reads `CN=<vm id>` with `openssl x509 -noout -subject` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
-      Not run: needs root on the lab host; maintainer-run.
+      Attempted 2026-10-02 on `hogan` by Andreas Dembach and abandoned — not a
+      defect of this change. `scripts/qemu-lab/` is the QEMU cloud lab: its
+      `setup-host.sh` creates `br-imds` and claims 169.254.169.1/16 and
+      169.254.169.254/16, which `hogan` already owns as /32 on the production
+      `vmbr_imds`. Two connected routes for 169.254.0.0/16 result, and
+      `ip route get 169.254.169.10` resolved via `vmbr_imds`, so the guest's
+      SYN arrived on `br-imds` while the reply left through the other bridge:
+      `devid-enroll.log` in the guest shows its IMDS NIC up at
+      169.254.169.10/16 and then nothing but `curl: (28) Connection timed out`.
+      The enrollment code was never reached. `br-imds` is runtime-only, so the
+      conflict was removed by deleting it; `vmbr_imds` and the production IMDS
+      were verified intact afterwards. Run this task on the cloud lab host
+      instead. Also needed there, and worth fixing first: `cloud-localds` and
+      an OVMF firmware path, neither of which the e2e script checks for.
