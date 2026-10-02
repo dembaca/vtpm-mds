@@ -22,10 +22,23 @@
 ## 4. Confirm legitimate enrollment is unchanged
 
 - [x] 4.1 Run `go vet ./...` and `go test ./...` and verify both pass, reporting the output
-- [ ] 4.2 Run `TestEnrollAgainstSwtpm` against the lab software TPM and verify a DevID certificate is still issued — if the swtpm socket is not present the test skips, so record explicitly whether it ran or skipped rather than implying it passed
-      Not verified: `go test ./internal/devid/ -run TestEnrollAgainstSwtpm -v` SKIPPED —
-      `/var/lib/mds-lab/run/swtpm.sock` is absent here, so no DevID certificate was
-      issued and the swtpm path is unverified.
+- [x] 4.2 Run `TestEnrollAgainstSwtpm` against the lab software TPM and verify a DevID certificate is still issued — if the swtpm socket is not present the test skips, so record explicitly whether it ran or skipped rather than implying it passed
+      RAN, did not skip. Run by Andreas Dembach as root on `hogan`, 2026-10-02,
+      against a freshly manufactured swtpm whose EK certificate was issued by
+      `CN=BGL Proxmox TPM CA`:
+        --- PASS: TestEnrollAgainstSwtpm (0.48s)
+        DevID cert issued (1371 bytes PEM), subject "CN=100"
+      A certificate was issued, so the EK binding holds against a real TPM: the
+      test verifies the EK certificate against the endorsement key with
+      `VerifyEKCertificateBinding` and then runs both enroll legs.
+      Environment note, because the repository does not produce it: the command
+      socket had to be created by hand (`swtpm socket --server
+      type=unixio,path=/var/lib/mds-lab/run/swtpm.sock …`), and
+      `/etc/vtpm-mds/ek-chain.pem` had to be assembled from
+      `/etc/ssl/certs/proxmox_tpm_ca.crt`, because `gen-lab-pki.sh` looks only
+      under `/var/lib/swtpm-localca/` while this host issues EK certificates
+      through the site CA named in `/etc/swtpm_setup.conf`. The TPM, the EK
+      certificate and the enroll path itself were real.
 - [ ] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` end to end from a git-stamped package and verify the guest still obtains `devid.crt.pem`, `devid.priv.blob` and `devid.pub.blob` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
       Not run: needs root on the lab host; maintainer-run.
 

@@ -20,9 +20,20 @@
 ## 4. Confirm end to end
 
 - [x] 4.1 Run `go vet ./...` and `go test ./...` and verify both pass, reporting the output
-- [ ] 4.2 Run `TestEnrollAgainstSwtpm` against the lab software TPM and verify the issued certificate's subject is the VM ID passed to `Start`, not the `guest100` platform name the test requests — record explicitly whether the test ran or skipped
-      Not verified: `go test ./internal/devid/ -run TestEnrollAgainstSwtpm -v` SKIPPED —
-      `/var/lib/mds-lab/run/swtpm.sock` is absent here. The assertion that the
-      issued subject is `CN=100` and not `guest100` is in the test but unrun.
+- [x] 4.2 Run `TestEnrollAgainstSwtpm` against the lab software TPM and verify the issued certificate's subject is the VM ID passed to `Start`, not the `guest100` platform name the test requests — record explicitly whether the test ran or skipped
+      RAN, did not skip. Run by Andreas Dembach as root on `hogan`, 2026-10-02:
+        --- PASS: TestEnrollAgainstSwtpm (0.48s)
+        DevID cert issued (1371 bytes PEM), subject "CN=100"
+      The test requests the platform common name `guest100` and passes the VM id
+      `100` to `Start`; the issued subject is `CN=100`, so the guest-supplied
+      name was ignored against a real TPM.
+      Environment note, because the repository does not produce it: the command
+      socket had to be created by hand (`swtpm socket --server
+      type=unixio,path=/var/lib/mds-lab/run/swtpm.sock …`), and
+      `/etc/vtpm-mds/ek-chain.pem` had to be assembled from
+      `/etc/ssl/certs/proxmox_tpm_ca.crt`, because `gen-lab-pki.sh` looks only
+      under `/var/lib/swtpm-localca/` while this host issues EK certificates
+      through the site CA named in `/etc/swtpm_setup.conf`. The TPM, the EK
+      certificate and the enroll path itself were real.
 - [ ] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` and verify the guest's `devid.crt.pem` reads `CN=<vm id>` with `openssl x509 -noout -subject` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
       Not run: needs root on the lab host; maintainer-run.
