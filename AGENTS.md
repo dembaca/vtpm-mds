@@ -156,9 +156,22 @@ order rather than by design. Run the QEMU lab on the cloud lab host. The same
 goes for `e2e-netns.sh`: it expects `i-100` for the lab YAML inventory, while
 `hogan` resolves callers from `/etc/pve`.
 
-Two smaller defects surfaced while implementing the above. Both are
-pre-existing and unspecified, so each needs its own change before anyone
-touches them:
+Eight tooling defects surfaced while implementing and verifying the above, and
+are now written up as three changes — none of them implemented:
+
+- `make-host-package-install-deterministic` — `README.md` documents an
+  ambiguous `dpkg -i dist/vtpm-mds_*.deb`, and the host package's `postinst`
+  never reloads systemd, so an installed unit is not the unit systemd runs.
+- `fail-loudly-when-the-lab-is-unprepared` — `gen-lab-pki.sh` ignores
+  `/etc/swtpm_setup.conf` and reports success without an EK chain, no script
+  creates the swtpm command socket `TestEnrollAgainstSwtpm` opens, and
+  `e2e-devid-guest.sh` checks none of its tools.
+- `confine-the-qemu-lab-to-its-own-host` — the lab collides with a production
+  IMDS, `cloud-install.sh` can disturb `pve-qemu-kvm`, and `MDS_LAB_ACCEL`
+  defaults to `tcg` even where KVM works.
+
+Two further defects are pre-existing and unspecified, and still need a change
+each before anyone touches them:
 
 - `GET /latest/meta-data/public-ipv4` always answers `404` because
   `getPublicIP` in `imds/handlers.go` is an unimplemented `TODO`. The
