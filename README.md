@@ -47,19 +47,34 @@ make deb
 #            dist/devid-enroll_<version>_<arch>.deb   (currently dist/devid-enroll_0.2.0_amd64.deb)
 ```
 
+Name the package you install. `dist/` routinely holds more than one build —
+`make deb` writes the changelog version, `make deb-local` a git-stamped one —
+and `dist/vtpm-mds_*.deb` then expands to all of them. glibc collation ignores
+punctuation at the primary level, so `vtpm-mds_0.2.0_amd64.deb` sorts *before*
+`vtpm-mds_0.2.0+git….deb`: the glob hands `dpkg` the stale package first, and
+`dpkg-deb -f dist/vtpm-mds_*.deb Version` reads only that one and reports the
+wrong version.
+
 Host — daemon, unit and config:
 
 ```bash
-sudo dpkg -i dist/vtpm-mds_*.deb
+DEB=$(ls -t dist/vtpm-mds_*+git*.deb | head -1)   # newest git-stamped build
+dpkg-deb -f "$DEB" Version                        # check before installing
+sudo dpkg -i --force-confold "$DEB"
+vtpm-mds -version                                 # must match the line above
 sudo systemctl start vtpm-mds   # enabled on install, not auto-started
 ```
 
 Guest — client only, nothing to start:
 
 ```bash
-sudo dpkg -i dist/devid-enroll_*.deb
+DEB=$(ls -t dist/devid-enroll_*+git*.deb | head -1)
+sudo dpkg -i "$DEB"
 devid-enroll -version
 ```
+
+Drop the `+git` from the pattern when installing a release build from
+`make deb`; the point is that exactly one file matches.
 
 CI builds both amd64 `.deb`s on Linux (`ubuntu-24.04`, not Darwin) and fails if either is missing. A GitHub Release is created when you push tag `v<debian-changelog-version>` (for example `v0.2.0`) or run **Actions → Debian package → Run workflow** with **Publish GitHub Release**; both artifacts are attached to that tag.
 
@@ -282,8 +297,9 @@ Install a host-matching client after a `dpkg -i` on Hogan — the host package n
 ```bash
 # HOST as cursor-agent; from dist/ after `make deb`, or
 # gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'devid-enroll_*_amd64.deb'
-scp dist/devid-enroll_*_amd64.deb vtpm-pilot:/tmp/
-ssh vtpm-pilot 'sudo dpkg -i /tmp/devid-enroll_*_amd64.deb && devid-enroll -version'
+DEB=$(ls -t dist/devid-enroll_*+git*.deb | head -1)
+scp "$DEB" "vtpm-pilot:/tmp/$(basename "$DEB")"
+ssh vtpm-pilot "sudo dpkg -i /tmp/$(basename "$DEB") && devid-enroll -version"
 ```
 
 ### Host — verify the guest cert against the DevID CA

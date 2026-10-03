@@ -10,4 +10,19 @@ esac
 
 #DEBHELPER#
 
+# debian/rules passes --no-start to dh_installsystemd deliberately: binding
+# 169.254.169.1:80 fails on build and lab hosts that have no IMDS bridge, so
+# the package enables the unit without starting it. That flag also suppresses
+# debhelper's own `systemctl daemon-reload`, which it emits as part of the
+# start/restart snippet — without the reload below, systemd keeps serving the
+# unit definition it loaded before this upgrade, and says so:
+#
+#   Warning: The unit file ... changed on disk. Run 'systemctl daemon-reload'.
+#
+# Reload the manager so the installed unit is the effective one. Still no
+# start: whether the service runs stays an operator decision.
+if [ "$1" = "configure" ] && [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null 2>&1 || true
+fi
+
 exit 0
