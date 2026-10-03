@@ -14,20 +14,32 @@ chmod +x scripts/qemu-lab/*.sh
 make build
 go build -o bin/devid-enroll ./cmd/devid-enroll
 
-./scripts/qemu-lab/gen-lab-pki.sh
 ./scripts/qemu-lab/setup-host.sh
 ./scripts/qemu-lab/download-image.sh
 
-# Ensure MDS is running with DevID CA
-if ! curl -fsS http://169.254.169.1/health >/dev/null 2>&1; then
-  sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.lab.yaml -debug >/tmp/vtpm-mds.log 2>&1 &
-  sleep 1
-fi
-curl -fsS http://169.254.169.1/health >/dev/null
-
-# Stop prior guest before recreating TPM/seed
+# Stop prior guest before recreating TPM/seed. Manufacture the guest vTPM
+# (and therefore swtpm-localca) *before* starting MDS so ek-chain.pem exists
+# when DevID enrollment is wired up — otherwise /devid/enroll/* is absent
+# and the guest gets HTTP 404.
 ./scripts/qemu-lab/stop-guest.sh >/dev/null 2>&1 || true
 ./scripts/qemu-lab/setup-guest-tpm.sh
+./scripts/qemu-lab/gen-lab-pki.sh
+
+# Fresh MDS process with DevID CA + EK trust chain loaded.
+if [[ -f /tmp/vtpm-mds.pid ]] && kill -0 "$(cat /tmp/vtpm-mds.pid)" 2>/dev/null; then
+  kill "$(cat /tmp/vtpm-mds.pid)" 2>/dev/null || true
+  sleep 1
+fi
+sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.lab.yaml -debug >/tmp/vtpm-mds.log 2>&1 &
+echo $! | sudo tee /tmp/vtpm-mds.pid >/dev/null
+sleep 1
+curl -fsS http://169.254.169.1/health >/dev/null
+if grep -q 'DevID enrollment disabled' /tmp/vtpm-mds.log; then
+  echo "ERROR: MDS started without DevID (ek-chain missing?)" >&2
+  tail -20 /tmp/vtpm-mds.log >&2 || true
+  exit 1
+fi
+
 ./scripts/qemu-lab/create-guest.sh
 ./scripts/qemu-lab/start-guest.sh
 

@@ -125,7 +125,7 @@ guest hits neither.
   verification** → Accepted, and a consequence of deciding that the binding is
   an authentication concern rather than a signing-request one. Mitigation: the
   only production path to `Start` is `HandleStart`, which authenticates first;
-  the swtpm test calls `VerifyEKCertificateBinding` explicitly before it calls
+  the swtpm test calls `VerifyEKCertificateBound` explicitly before it calls
   `Start`. Anyone adding a second caller of `Start` outside the HTTP handler
   must authenticate first, and this paragraph is where that is written down.
 

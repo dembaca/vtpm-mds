@@ -105,14 +105,12 @@ func VerifyDevIDResidency(pubAK, pubDevID *tpm2.Public, attestData, attestSig []
 	return nil
 }
 
-// errEKKeyMismatch reports that an EK certificate does not certify the
-// endorsement key it was presented with.
-var errEKKeyMismatch = errors.New("EK certificate does not certify the endorsement key")
+// ErrEKCertificateKeyMismatch is returned when an EK certificate does not
+// certify the endorsement key in the signing request (including a missing key).
+var ErrEKCertificateKeyMismatch = errors.New("EK certificate does not match the endorsement key in the signing request")
 
 // VerifyEKCertificateChain verifies cert against roots, tolerating critical SAN
-// extensions that Go's x509 verifier does not handle for EK certs. It says
-// nothing about which TPM holds the certified key: use
-// VerifyEKCertificateBinding wherever the endorsement key is available.
+// extensions that Go's x509 verifier does not handle for EK certs.
 func VerifyEKCertificateChain(roots *x509.CertPool, cert *x509.Certificate) error {
 	if cert == nil {
 		return errors.New("missing EK certificate")
@@ -142,27 +140,29 @@ func VerifyEKCertificateChain(roots *x509.CertPool, cert *x509.Certificate) erro
 	return nil
 }
 
-// VerifyEKCertificateBinding verifies cert against roots and additionally
-// requires that cert certifies pub, the endorsement key public area the caller
-// is enrolling with. Without this the EK factor proves possession of a public
-// certificate rather than of the TPM that certificate describes. A binding
-// failure is reported as errEKKeyMismatch.
-func VerifyEKCertificateBinding(roots *x509.CertPool, cert *x509.Certificate, pub *tpm2.Public) error {
+// VerifyEKCertificateBound verifies the certificate chain and that cert's
+// public key equals the endorsement key public area.
+func VerifyEKCertificateBound(roots *x509.CertPool, pub *tpm2.Public, cert *x509.Certificate) error {
 	if err := VerifyEKCertificateChain(roots, cert); err != nil {
 		return err
 	}
-	if pub == nil {
-		return errEKKeyMismatch
-	}
-	ekKey, err := pub.Key()
-	if err != nil {
-		return fmt.Errorf("%w: %v", errEKKeyMismatch, err)
-	}
-	// crypto.PublicKey.Equal reports false for a key of another type, so an
-	// endorsement key that is not the certified one never matches.
-	certKey, ok := cert.PublicKey.(interface{ Equal(crypto.PublicKey) bool })
-	if !ok || !certKey.Equal(ekKey) {
-		return errEKKeyMismatch
+	if !ekCertificateMatchesKey(cert, pub) {
+		return ErrEKCertificateKeyMismatch
 	}
 	return nil
+}
+
+func ekCertificateMatchesKey(cert *x509.Certificate, pub *tpm2.Public) bool {
+	if cert == nil || pub == nil {
+		return false
+	}
+	key, err := pub.Key()
+	if err != nil {
+		return false
+	}
+	equaler, ok := cert.PublicKey.(interface{ Equal(crypto.PublicKey) bool })
+	if !ok {
+		return false
+	}
+	return equaler.Equal(key)
 }

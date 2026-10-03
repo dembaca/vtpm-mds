@@ -39,7 +39,7 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 	if !roots.AppendCertsFromPEM(ekPEM) {
 		t.Fatal("ek roots")
 	}
-	if err := VerifyEKCertificateBinding(roots, sr.EndorsementCertificate, sr.EndorsementKey); err != nil {
+	if err := VerifyEKCertificateBound(roots, sr.EndorsementKey, sr.EndorsementCertificate); err != nil {
 		t.Fatalf("ek cert: %v", err)
 	}
 
@@ -72,16 +72,15 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 		t.Fatal("empty devid cert")
 	}
 	block, _ := pem.Decode(certPEM)
-	if block == nil || block.Type != "CERTIFICATE" {
-		t.Fatal("devid cert is not PEM")
+	if block == nil {
+		t.Fatal("expected PEM certificate")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The VM id passed to Start, not the "guest100" platform name requested.
 	if cert.Subject.CommonName != "100" {
-		t.Fatalf("CN=%q, want %q", cert.Subject.CommonName, "100")
+		t.Fatalf("CN=%q want 100 (VM ID), not guest platform name", cert.Subject.CommonName)
 	}
-	t.Logf("DevID cert issued (%d bytes PEM), subject %q", len(certPEM), cert.Subject.String())
+	t.Logf("DevID cert issued (%d bytes PEM) subject=%s", len(certPEM), cert.Subject.String())
 }

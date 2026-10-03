@@ -34,8 +34,7 @@ type StartResult struct {
 
 // Start verifies the signing request + signature, creates a credential challenge,
 // and stores an enroll session. vmid and ekFP bind the session to the
-// MAC-identified VM and EK certificate; vmid is also the subject common name of
-// the certificate the finish leg issues.
+// MAC-identified VM and EK certificate; the VM ID is the issued certificate CN.
 func (e *Enroller) Start(requestData, signature []byte, vmid, ekFP string) (*StartResult, error) {
 	if e == nil || e.CA == nil {
 		return nil, errors.New("enroller not configured")
@@ -47,6 +46,8 @@ func (e *Enroller) Start(requestData, signature []byte, vmid, ekFP string) (*Sta
 	if err := CheckSignature(sr.DevIDKey, requestData, signature); err != nil {
 		return nil, fmt.Errorf("invalid request signature: %w", err)
 	}
+	// Binding of the EK certificate to the endorsement key is enforced during
+	// AuthenticateEnrollCaller on enroll/start; Start re-checks the chain only.
 	if err := VerifyEKCertificateChain(e.EKRoots, sr.EndorsementCertificate); err != nil {
 		return nil, err
 	}
