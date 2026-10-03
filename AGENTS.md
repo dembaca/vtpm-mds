@@ -130,8 +130,20 @@ the maintainer; explore and propose, do not settle them alone.
 | Change | Tasks | Files it owns | Where it can be verified |
 |---|---|---|---|
 | `fail-loudly-when-the-lab-is-unprepared` | 1/19 | `scripts/qemu-lab/` only | **cloud lab only** — its tasks need `TestEnrollAgainstSwtpm` to run and a full `e2e-devid-guest.sh` |
-| `make-host-package-install-deterministic` | 0/13 | `debian/`, root `README.md` | this host — needs `dpkg -i` and a systemd manager |
 | `complete-the-cloud-lab-bootstrap` | 14/15 | none left | task 5.4 needs the **Cursor** environment |
+
+`make-host-package-install-deterministic` is **done and archived** (2026-10-03).
+Installing the host package now reloads the systemd manager, so an installed
+unit is the unit systemd runs, and the documented `dpkg -i` names one package
+instead of globbing.
+
+The agent user cannot build a `.deb`: `dpkg-buildpackage` needs
+`dpkg --print-architecture` and `/usr/local/sbin/hogan-lab` allows only
+`dpkg -i`. It can install one and inspect it with `dpkg-deb`, so packaging work
+splits into a source half here and a build-and-verify half for the maintainer.
+`make deb-local` run as root leaves `.deb-build/` root-owned, which blocks the
+next build by another user — `sudo rm -rf .deb-build` first, or override
+`DEB_STAGE`.
 
 Two defects are found, reproduced and still unwritten; each needs its own
 change before anyone touches them, and both live in `imds/handlers.go` (one
@@ -241,6 +253,11 @@ One thing needs root on the lab host, so it needs the maintainer:
 
 - `/usr/local/sbin/hogan-lab` whitelists only `dist/vtpm-mds_*.deb` for
   `dpkg-install`, so the guest package cannot be installed through the wrapper.
+  Its argument loop also assigns every `*.deb` it is handed to one variable, so
+  a caller whose shell expanded that glob to several files installs the last
+  one silently — the same ambiguity
+  `make-host-package-install-deterministic` removed from the repository, still
+  present in the wrapper.
 
 `openspec init` has been run — see
 `openspec/changes/initialize-openspec-agent-tooling/`. It needed no root: the
