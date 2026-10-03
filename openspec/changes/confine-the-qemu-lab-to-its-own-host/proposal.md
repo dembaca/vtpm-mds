@@ -29,7 +29,19 @@ the other way — on the host that serves real guests.
 Two smaller faults share the cause. `cloud-install.sh` runs
 `apt-get install -y qemu-system-x86 qemu-utils qemu-kvm ovmf`; on a Proxmox
 host `/usr/bin/qemu-system-x86_64` comes from `pve-qemu-kvm`, and installing
-Debian's packages over it can disturb the hypervisor's own virtualization. And
+Debian's packages over it can disturb the hypervisor's own virtualization.
+
+`complete-the-cloud-lab-bootstrap` made that materially more likely, for a good
+reason: the install used to be guarded on `qemu-system-x86_64` and
+`cloud-localds` both being present, which silently skipped hosts that had those
+two but lacked `swtpm_setup` or `ping`. It now installs whenever **any** of
+sixteen tools is missing. The guard is better; the blast radius on the wrong
+host is larger. Checked on `hogan` on 2026-10-03, exactly one of those sixteen
+is absent — `jq`. A `cloud-install.sh` run there would therefore apt-get the
+whole QEMU package set over `pve-qemu-kvm` because a JSON parser is missing.
+Nothing stops it today.
+
+And
 `MDS_LAB_ACCEL` defaults to `tcg` with a comment about a KVM bug on cloud
 agent hosts — a cloud-box workaround that costs every other host a factor of
 ten in boot time, on `hogan` with `/dev/kvm` present and usable.

@@ -16,6 +16,7 @@
 
 ## 3. Keep the bootstrap off a hypervisor
 
+- [ ] 3.0 Verify the trigger is real before fixing it: on a Proxmox host, run the tool loop `cloud-install.sh` now uses and verify it reports at least one missing tool, so the `apt-get` would run — on `hogan` on 2026-10-03 that was `jq` alone
 - [ ] 3.1 Make `cloud-install.sh` refuse to run its `apt-get install` where `pve-qemu-kvm` provides `/usr/bin/qemu-system-x86_64`, and verify the check with `dpkg -S` on such a host
 - [ ] 3.2 Verify the refusal states that the script is a cloud lab bootstrap and exits non-zero, and that it happens before `apt-get` is reached
 - [ ] 3.3 Verify the script still runs normally on a host without `pve-qemu-kvm`
