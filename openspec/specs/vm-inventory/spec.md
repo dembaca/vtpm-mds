@@ -259,49 +259,6 @@ certificate belongs to `devid-enrollment`.
 - **WHEN** a handler asks for the VM config of the request
 - **THEN** it receives no record
 
-### Requirement: Serve Unbound Callers Without A VM Identity
-
-An unbound caller SHALL NOT be refused at the connection or middleware layer:
-the connection is accepted and dispatched exactly like a bound one, and each
-handler decides for itself what a missing VM record means.
-
-Handlers that require a VM identity SHALL refuse the request. DevID enrollment
-SHALL reject an unbound caller with `401` and the message
-`VM identity required (MAC not in inventory)`, as specified by
-`devid-enrollment`.
-
-The EC2-compatible metadata handlers SHALL NOT refuse an unbound caller. When
-no VM record is bound, the instance ID SHALL fall back to a value synthesised
-from the caller's IP address with every `.` replaced by `-` and prefixed with
-`i-`, and that synthesised value SHALL be served with `200`. The IP address
-used for that fallback SHALL be the first entry of the `X-Forwarded-For`
-request header when that header is present, and the connection's remote
-address otherwise, so a caller that is in no inventory can choose the instance
-ID it is served. The fallback SHALL apply to every EC2-compatible handler that
-derives an instance ID, including
-`/latest/dynamic/instance-identity/document`.
-
-#### Scenario: An unknown caller receives a synthesised instance ID
-
-- **GIVEN** an inventory that contains only VM `100` with MAC
-  `52:54:00:a1:b2:c3`, and a caller from `127.0.0.1` that matches no record
-- **WHEN** the caller obtains an IMDSv2 token and requests
-  `/latest/meta-data/instance-id` with it
-- **THEN** the response is `200` with the body `i-127-0-0-1`
-
-#### Scenario: The caller steers the synthesised instance ID
-
-- **GIVEN** an unbound caller with a valid IMDSv2 token
-- **WHEN** it requests `/latest/meta-data/instance-id` with the header
-  `X-Forwarded-For: 10.9.9.9`
-- **THEN** the response is `200` with the body `i-10-9-9-9`
-
-#### Scenario: Enrollment refuses an unbound caller
-
-- **GIVEN** a caller bound to no VM record
-- **WHEN** it posts to a DevID enrollment endpoint
-- **THEN** the request is rejected with `401` because VM identity is required
-
 ### Requirement: Load The Cache At Startup And Refresh It On SIGHUP
 
 The inventory SHALL be held in a single process-wide cache, guarded for
@@ -344,3 +301,74 @@ matched against the new cache only on its next connection.
   `SIGHUP`
 - **THEN** the error is logged and the previously cached records remain in
   effect
+
+### Requirement: Let Each Handler Decide What An Unbound Caller Receives
+
+An unbound caller SHALL NOT be refused at the connection or middleware layer:
+the connection is accepted and dispatched exactly like a bound one, and each
+handler decides for itself what a missing VM record means. Resolution failing
+is information, not an error.
+
+The inventory layer SHALL NOT itself consult `mds.require_vm_identity` or any
+other policy setting. It reports whether a record was bound; the policy belongs
+to the handlers.
+
+Handlers that require a VM identity SHALL refuse the request:
+
+- DevID enrollment SHALL reject an unbound caller with `401` and the message
+  `VM identity required (MAC not in inventory)`, as specified by
+  `devid-enrollment`.
+- The handlers that report an instance identity — the EC2-compatible
+  `instance-id` and instance identity document endpoints — SHALL refuse an
+  unbound caller as specified by `instance-metadata`, which also enumerates
+  those paths and defines the one configuration setting that relaxes the rule.
+- `GET /latest/identity` SHALL refuse an unbound caller as specified by
+  `workload-identity`.
+
+Handlers that report nothing about the caller's instance SHALL NOT refuse it.
+The remaining metadata paths echo the caller's own request, report its own peer
+address, or serve a fixed string, so an unbound caller is served them as a
+bound one is.
+
+No handler SHALL derive a caller's identity from a request header. Because a
+bound record comes from the ARP table and the cached inventory, and nothing
+else may stand in for it, a caller cannot present an identity it was not
+resolved to.
+
+`PUT /latest/api/token` and `GET /health` SHALL be served to any caller, bound
+or not.
+
+#### Scenario: An unbound connection is still accepted
+
+- **GIVEN** a caller whose IP address has no complete entry in
+  `/proc/net/arp`, such as a process connecting over loopback
+- **WHEN** it opens a connection and sends a request
+- **THEN** the connection is accepted and dispatched, and the request reaches a
+  handler
+
+#### Scenario: Enrollment refuses an unbound caller
+
+- **GIVEN** a caller bound to no VM record
+- **WHEN** it posts to a DevID enrollment endpoint
+- **THEN** the request is rejected with `401` because VM identity is required
+
+#### Scenario: Metadata refuses an unbound caller its instance identity
+
+- **GIVEN** a caller bound to no VM record and a configuration that leaves
+  `mds.require_vm_identity` at its built-in default
+- **WHEN** it requests `/latest/meta-data/instance-id` with a valid IMDSv2
+  token
+- **THEN** the request is refused, as `instance-metadata` specifies
+
+#### Scenario: Metadata still serves an unbound caller its own address
+
+- **GIVEN** the same unbound caller and configuration
+- **WHEN** it requests `/latest/meta-data/local-ipv4` with a valid IMDSv2 token
+- **THEN** the response is `200`, because that value is the caller's own peer
+  address and asserts no identity
+
+#### Scenario: An unbound caller can still mint a token and check health
+
+- **GIVEN** a caller bound to no VM record
+- **WHEN** it sends `PUT /latest/api/token` and `GET /health`
+- **THEN** both respond `200`

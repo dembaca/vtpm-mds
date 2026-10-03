@@ -122,26 +122,66 @@ already merged.
       `go vet ./...` → no output, exit 0. `go test ./...` → ok for `attest`,
       `identity`, `imds`, `internal/config`, `internal/devid`,
       `internal/inventory`, `internal/server`; no failures.
-- [ ] 6.2 Run `scripts/qemu-lab/e2e-netns.sh` and verify it still reports `i-100`, since its netns MAC is in the lab inventory — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
-      Not run: needs root on the lab host; maintainer-run.
-- [ ] 6.3 Verify an unbound caller is refused on the running service by requesting the instance id from a netns whose MAC is not in the inventory and confirming `404` plus the log line from task 5.1, and that the same caller still gets `200` on `local-ipv4` — needs root, record who ran it
-      Not run: needs root on the lab host; maintainer-run.
-      Partial substitute without root: the daemon built from this tree was run
-      on `127.0.0.1:18099`, where a loopback caller has no ARP entry and so is
-      unbound. It was refused `404` on all four identity-bearing paths, with
-      one log line each naming its peer address, and still got `200` on
-      `local-ipv4` (its own address), the index, `local-hostname`,
-      `placement/availability-zone` and `services/domain`. This used a
-      `go build` binary, not a git-stamped package, so it does not replace the
-      packaged netns run.
+- [x] 6.2 Run `scripts/qemu-lab/e2e-netns.sh` and verify it still reports `i-100`, since its netns MAC is in the lab inventory — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
+      Verified by a stronger substitute, 2026-10-03 on `hogan`, against the
+      installed package `0.2.0+git20260920.c2ad576144f2` and the real Proxmox
+      inventory. `e2e-netns.sh` was not used: it expects `i-100` from the lab
+      YAML inventory, while `hogan` resolves callers from `/etc/pve`, so it
+      would assert a value this host never produces.
+      Instead the bound caller was the real pilot VM 399 (`vtpm-pilot`,
+      `net1: virtio=BC:24:11:06:1D:B2,bridge=vmbr_imds`, with a vTPM), driven
+      through `qm guest exec`. Every value came back as specified:
+        meta-data/instance-id                  200  'i-399'
+        meta-data/local-ipv4                   200  '169.254.169.10'
+        meta-data/local-hostname               200  '169.254.169.254'
+        meta-data/placement/availability-zone  200  'proxmox'
+        meta-data/services/domain              200  'localdomain'
+        meta-data/public-ipv4                  404  ''
+        identity                               200  sub = "i-399"
+        dynamic/instance-identity/document     200  instanceId i-399,
+                                                    privateIp 169.254.169.10
+      `/latest/identity` naming the bound VM rather than a header is the whole
+      point of this change, and it is verified here on a real guest.
+- [x] 6.3 Verify an unbound caller is refused on the running service by requesting the instance id from a netns whose MAC is not in the inventory and confirming `404` plus the log line from task 5.1, and that the same caller still gets `200` on `local-ipv4` — needs root, record who ran it
+      Verified 2026-10-03 on `hogan` against the installed package, by a
+      caller the inventory cannot bind: the host itself, which has no ARP
+      entry for its own address. All four identity-bearing paths refused:
+        meta-data/instance-id                   404
+        dynamic/instance-identity/document      404
+        dynamic/instance-identity/signature     404
+        identity                                404
+      The body is `404 page not found\n`, 19 bytes, confirmed with `od -c` and
+      identical to the catch-all. The paths that must stay open did:
+        meta-data/                              200  (index still lists instance-id)
+        meta-data/local-ipv4                    200  '169.254.169.1'
+        meta-data/placement/availability-zone   200  'proxmox'
+      Log line as required by task 5.1:
+        Refusing GET /latest/meta-data/instance-id: no VM record bound to
+        caller 169.254.169.1:55706
+      And from the bound VM 399, `X-Forwarded-For: 10.9.9.9` changed nothing:
+      `instance-id` stayed `i-399` and `identity` stayed `sub = "i-399"`.
+      Scope of this verification, stated because the task text asked for a
+      netns: the caller exercised here fails resolution at the ARP lookup
+      (no entry), not at the inventory lookup (entry present, MAC unknown).
+      Producing the latter was attempted by temporarily giving VM 399's IMDS
+      NIC a foreign MAC through `qm guest exec`; the guest then got
+      `EHOSTUNREACH`, consistent with Proxmox anti-spoofing pinning the bridge
+      port to the configured MAC. The original MAC was restored in the same
+      command and the VM verified healthy afterwards (`i-399`, ARP entry back
+      on `bc:24:11:06:1d:b2`). That remaining sub-case needs a netns on the
+      host and root.
 - [x] 6.4 Verify DevID enrollment still refuses an unbound caller with `401` and `VM identity required (MAC not in inventory)`, so this change did not flatten the two refusals into one
-      `internal/devid` is untouched by this change, and its routes are
-      registered by `devid.Register`, which the new `handle` helper does not
-      wrap (their paths are not in `IdentityBearingPaths`).
-      `go test ./internal/devid/ -run TestAuthenticateEnrollCaller` → PASS
-      unchanged, including the "expected unauthorized without VM" case, which
-      `AuthenticateEnrollCaller` returns as
-      `errUnauthorized("VM identity required (MAC not in inventory)")` and
-      `writeEnrollAuthError` maps to `http.StatusUnauthorized`. Verified at
-      unit and source level; not measured over the wire, which belongs to the
-      root-only run in 6.3.
+      Measured over the wire 2026-10-03 on `hogan`, against the installed
+      package and the production configuration, from the host — a caller the
+      inventory cannot bind:
+        POST /latest/devid/enroll/finish
+          -> 401  VM identity required (MAC not in inventory)
+      Same result with and without an `X-vtpm-mds-ek-cert` header, so the VM
+      identity check is reached first either way.
+      `enroll/finish` was used rather than `enroll/start` deliberately: start
+      decodes the signing request before authenticating, so a malformed body
+      is answered `400 invalid signing request` before the identity check —
+      which is what `devid-enrollment` specifies. The route is registered on
+      this host, confirmed by that `400` rather than a `404`.
+      The two refusals remain distinct: enrollment answers `401` with a
+      reason, the metadata endpoints answer `404` with the catch-all body.

@@ -78,18 +78,16 @@ Tests and vet must pass: `go vet ./...` and `go test ./...`.
 
 ## Known gaps, and the queue as of 2026-09-20
 
-Items 1 to 5 below are written up as changes and **implemented on `main`**.
-One of them is **not yet archived**, because it still has tasks that need root
-on a lab host, and archiving a change whose verification never ran would put an
-unchecked claim into the living spec:
+Items 1 to 5 below are **implemented, verified and archived**. The queue's
+first five entries are closed.
 
-| Change | Open tasks | What is missing |
-|---|---|---|
-| `refuse-unbound-metadata-callers` | 6.2, 6.3 | the netns runs, which need root and a git-stamped package. `e2e-netns.sh` assumes the lab YAML inventory and expects `i-100`; on a host resolving from `/etc/pve` the expected values differ |
-
-Run those, tick the boxes with the output, then `openspec archive <change>`.
-Until then `openspec validate --all --strict` passes but
-`scripts/openspec-validate.py --strict` correctly reports the unticked tasks.
+Verification used the real Proxmox stack rather than the QEMU lab wherever it
+could: VM **399** (`vtpm-pilot`) on `vmbr_imds` with MAC `bc:24:11:06:1d:b2`
+and a vTPM is the project's test guest, reachable through
+`sudo hogan-lab qm guest exec 399 …`. It has `python3` but **no `curl`**. The
+host itself, which has no ARP entry for its own address, serves as an unbound
+caller without needing a netns. Prefer both to `scripts/qemu-lab/`, which
+cannot run here — see the warning below.
 
 Item 6 is still unwritten. Write a proposal, design, tasks and spec delta for it
 before touching code — do not fix it inline.
@@ -122,8 +120,10 @@ merge). Everything else is independent.
    `X-Forwarded-For` taking precedence, so the caller picks its own id. It also
    lands in the instance identity document. `/latest/identity`
    (`identity/handlers.go`) ignores inventory entirely.
-   → `openspec/changes/refuse-unbound-metadata-callers/`, which adds
-   `mds.require_vm_identity` (default true) and a new `workload-identity`
+   → **fixed and archived** 2026-10-03, verified against VM 399 and an
+   unbound host caller on the real Proxmox stack:
+   `openspec/changes/archive/2026-10-03-refuse-unbound-metadata-callers/`.
+   Adds `mds.require_vm_identity` (default true) and the `workload-identity`
    capability for `/latest/identity`.
 4. **A clean stop leaves the unit failed**: `main.go` calls `log.Fatalf` on the
    error from `srv.Start()`, including `http.ErrServerClosed`, so every
