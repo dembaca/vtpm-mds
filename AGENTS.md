@@ -75,6 +75,37 @@ Tests and vet must pass: `go vet ./...` and `go test ./...`.
   shadowed `make` with an unusable build and broke the parent's session.
 - Tell each subagent to commit on its own branch and not to push, so the
   coordinator merges and verifies the combined tree.
+- Use a git worktree per subagent when they run in parallel. They share one
+  shell session, so they cannot each check out a different branch in the same
+  tree.
+
+## Coordinating with cloud agents
+
+Cursor and Claude cloud agents work on this repository too, and they branch
+from `main` rather than from whatever a local session has in flight. On
+2026-10-02 that produced two independent implementations of the same two
+changes, from the same base. Nothing was lost, but only because both sides had
+committed everything and the proposals and designs were untouched on both.
+
+- **Push `main` before handing work to a cloud agent**, and have it branch from
+  the pushed commit. A local session sitting on twenty unpushed commits is how
+  the duplicate happened.
+- **Split by file, and say so in the briefing.** The split that works today:
+  `scripts/qemu-lab/` is the cloud lab's, `debian/` and the root `README.md`
+  belong to whoever is doing packaging, and product code under `imds/`,
+  `identity/`, `internal/` is a third set.
+- **One hand on `AGENTS.md` and the root `README.md`.** Both attract edits from
+  every direction; concurrent ones conflict for no benefit.
+- **Archiving stays with the coordinator**, so the queue below, the README
+  status table and `openspec/specs/` move together.
+- **A cloud agent verifies what only it can.** It has a working QEMU lab; this
+  host does not and must not — see the warning below. Tasks that need the lab
+  belong there. Conversely, anything needing the Proxmox stack, VM 399 or the
+  installed package belongs here.
+- Tell it to record what it could **not** verify in its environment. A cloud
+  box has the default `swtpm-localca` layout and `/usr/share/OVMF/`; this host
+  has a site CA named in `/etc/swtpm_setup.conf` and `pve-edk2-firmware`. A run
+  that only covers one of those should say which.
 
 ## Known gaps, and the queue as of 2026-09-20
 
@@ -90,7 +121,28 @@ caller without needing a netns. Prefer both to `scripts/qemu-lab/`, which
 cannot run here — see the warning below.
 
 Item 6 is still unwritten. Write a proposal, design, tasks and spec delta for it
-before touching code — do not fix it inline.
+before touching code — do not fix it inline. Its design decisions — signing key
+type, where the key lives, rotation, which PCRs a quote must cover — belong to
+the maintainer; explore and propose, do not settle them alone.
+
+### Open changes as of 2026-10-03, and who can take them
+
+| Change | Tasks | Files it owns | Where it can be verified |
+|---|---|---|---|
+| `fail-loudly-when-the-lab-is-unprepared` | 1/19 | `scripts/qemu-lab/` only | **cloud lab only** — its tasks need `TestEnrollAgainstSwtpm` to run and a full `e2e-devid-guest.sh` |
+| `make-host-package-install-deterministic` | 0/13 | `debian/`, root `README.md` | this host — needs `dpkg -i` and a systemd manager |
+| `complete-the-cloud-lab-bootstrap` | 14/15 | none left | task 5.4 needs the **Cursor** environment |
+
+Two defects are found, reproduced and still unwritten; each needs its own
+change before anyone touches them, and both live in `imds/handlers.go` (one
+also in `identity/handlers.go`), so they are a third disjoint set:
+
+- `GET /latest/meta-data/public-ipv4` always answers `404` because
+  `getPublicIP` is an unimplemented `TODO`. Where the address should come from
+  is an open question, not just an implementation.
+- `imds.getClientIP` falls back to the literal `"127.0.0.1"` when `PeerIP`
+  cannot parse `RemoteAddr`, so with `mds.require_vm_identity: false` an
+  unparseable peer is served the invented id `i-127-0-0-1`.
 
 Ordered by severity. The first four are recorded as current behaviour in
 `openspec/specs/`, so read the requirement before implementing the change that
