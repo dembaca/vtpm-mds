@@ -34,8 +34,20 @@
 - [x] 4.1 Run `go vet ./...` and `go test ./...` and verify both pass, reporting the output
   - Verification: `go vet ./...` → VET_OK. `go test ./... -count=1` → all packages ok (`internal/devid` 7.339s).
 - [x] 4.2 Run `TestEnrollAgainstSwtpm` against the lab software TPM and verify a DevID certificate is still issued — if the swtpm socket is not present the test skips, so record explicitly whether it ran or skipped rather than implying it passed
-  - Verification (`go test ./internal/devid/ -run TestEnrollAgainstSwtpm -v -count=1`): SKIP — `stat /var/lib/mds-lab/run/swtpm.sock: no such file or directory`.
-- [ ] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` end to end from a git-stamped package and verify the guest still obtains `devid.crt.pem`, `devid.priv.blob` and `devid.pub.blob` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
+  - Verification: RAN on the cloud lab host, 2026-10-03. Command socket at
+    `/var/lib/mds-lab/run/swtpm.sock` (swtpm `--server type=unixio` +
+    `--flags not-need-init,startup-clear`). Output:
+        --- PASS: TestEnrollAgainstSwtpm (0.55s)
+        DevID cert issued (1371 bytes PEM) subject=CN=100
+- [x] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` end to end from a git-stamped package and verify the guest still obtains `devid.crt.pem`, `devid.priv.blob` and `devid.pub.blob` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
+  - Verification: RAN on the cloud lab host, 2026-10-03, as root via
+    `sudo ./scripts/qemu-lab/e2e-devid-guest.sh` (TCG). Guest oneshot used
+    `-cn guest100`; enroll/start and enroll/finish both returned 200.
+    Materials present under `/var/lib/mds-lab/vms/guest100/shared/devid-out/`:
+    `devid.crt.pem`, `devid.priv.blob`, `devid.pub.blob`. Log ended with
+    `GUEST DEVID E2E PASSED`. Note: the e2e script builds `bin/vtpm-mds` from
+    this tree rather than installing a `.deb`; the binary under test is this
+    commit.
 
 ## 5. Keep the capability description honest
 

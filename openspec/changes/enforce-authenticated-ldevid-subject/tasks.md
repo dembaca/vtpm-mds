@@ -30,5 +30,18 @@
 - [x] 4.1 Run `go vet ./...` and `go test ./...` and verify both pass, reporting the output
   - Verification: `go vet ./...` exit 0; `go test ./... -count=1` → all packages ok (internal/devid ~6.6s)
 - [x] 4.2 Run `TestEnrollAgainstSwtpm` against the lab software TPM and verify the issued certificate's subject is the VM ID passed to `Start`, not the `guest100` platform name the test requests — record explicitly whether the test ran or skipped
-  - Verification: SKIPPED — `stat /var/lib/mds-lab/run/swtpm.sock: no such file or directory`. Test updated to assert CN=`100` when the socket is present.
-- [ ] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` and verify the guest's `devid.crt.pem` reads `CN=<vm id>` with `openssl x509 -noout -subject` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
+  - Verification: RAN on the cloud lab host, 2026-10-03. Output:
+        --- PASS: TestEnrollAgainstSwtpm (0.55s)
+        DevID cert issued (1371 bytes PEM) subject=CN=100
+    The signing request asks for platform CN `guest100`; `Start` is called with
+    VM id `100`; the issued subject is `CN=100`.
+- [x] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` and verify the guest's `devid.crt.pem` reads `CN=<vm id>` with `openssl x509 -noout -subject` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
+  - Verification: RAN on the cloud lab host, 2026-10-03, as root via
+    `sudo ./scripts/qemu-lab/e2e-devid-guest.sh` (TCG). Guest oneshot passes
+    `-cn guest100`. Observed:
+        subject=CN = 100
+        issuer=CN = vtpm-mds Lab DevID CA, O = vtpm-mds
+        GUEST DEVID E2E PASSED
+    `openssl x509 -noout -subject` on
+    `/var/lib/mds-lab/vms/guest100/shared/devid-out/devid.crt.pem` reports
+    `CN = 100` (the inventory VM id), not `guest100`.
