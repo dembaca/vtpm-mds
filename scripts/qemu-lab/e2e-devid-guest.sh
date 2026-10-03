@@ -5,6 +5,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
+# Precondition gate: every external tool this script and its children invoke,
+# checked before the first side effect so a missing one is reported in seconds
+# rather than after a build, a bridge and a vTPM. Keep in step with the child
+# scripts (setup-host, download-image, setup-guest-tpm, gen-lab-pki,
+# create-guest, start-guest, stop-guest).
+# shellcheck source=common.sh
+source "${ROOT}/scripts/qemu-lab/common.sh"
+require_tools make go curl openssl python3 sudo ip iptables sysctl \
+  swtpm swtpm_setup swtpm_localca certtool ssh-keygen \
+  qemu-system-x86_64 qemu-img cloud-localds
+require_one_of genisoimage mkisofs xorrisofs
+discover_ovmf
+
 LAB_DIR="${MDS_LAB_DIR:-/var/lib/mds-lab}"
 VM_NAME="${MDS_LAB_VM_NAME:-guest100}"
 SHARED="${LAB_DIR}/vms/${VM_NAME}/shared"

@@ -64,8 +64,9 @@ else
   echo "Using TCG emulation"
 fi
 
-OVMF_CODE="${OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}"
-OVMF_VARS_TEMPLATE="${OVMF_VARS_TEMPLATE:-/usr/share/OVMF/OVMF_VARS_4M.fd}"
+# shellcheck source=common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+discover_ovmf || exit 1
 OVMF_VARS="${VM_DIR}/OVMF_VARS.fd"
 [[ -f "$OVMF_VARS" ]] || cp "$OVMF_VARS_TEMPLATE" "$OVMF_VARS"
 
