@@ -6,6 +6,20 @@ The Cloud Agent / lab host acts as the hypervisor: `vtpm-mds` listens on
 `169.254.169.1:80`, bridge `br-imds` also owns `169.254.169.254` (DNAT → `:80`),
 and callers are identified by **ARP MAC → YAML inventory**.
 
+## Supported cloud environments
+
+The same scripts serve both agent clouds; there is no per-environment split.
+
+| | Cursor cloud | Claude cloud |
+|---|---|---|
+| Base image | prepared, lab tools preinstalled | bare Ubuntu 24.04, root |
+| `USER` | set | may be unset (scripts default it to `id -un`) |
+| `/dev/kvm` | unusable, TCG | absent, TCG |
+| Bootstrap | `cloud-install.sh` is a no-op for tools | `cloud-install.sh` installs what is missing |
+
+`cloud-install.sh` installs only when a tool the lab calls is missing, so
+running it on a prepared image changes nothing.
+
 ## Layout
 
 | Script | Purpose |
