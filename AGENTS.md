@@ -171,7 +171,8 @@ also in `identity/handlers.go`), so they are a third disjoint set:
 
 Ordered by severity. The first four are recorded as current behaviour in
 `openspec/specs/`, so read the requirement before implementing the change that
-replaces it.
+replaces it. Items 1 to 5 are closed; item 6 is deferred with its analysis
+written out, because the answer turned out to be "remove", not "implement".
 
 Apply order matters in two places, and each change says so in its own proposal:
 `refuse-unbound-metadata-callers` comes after both
@@ -216,11 +217,65 @@ merge). Everything else is independent.
    → split in two: `openspec/changes/fail-fast-on-unusable-configuration/`
    (the two config defects) and `openspec/changes/parse-peer-address-correctly/`
    (the address defect).
-6. Long-standing and unspecified: TPM quote verification, and real signing keys
-   for the identity JWTs. Still unwritten. The `workload-identity` capability
-   added by `refuse-unbound-metadata-callers` records the placeholder HS256
-   secret, the placeholder JWKS and the ignored `mds.jwt_ttl` as current
-   behaviour, so this can now be proposed against a written contract.
+6. **Probably remove rather than implement: the attest and JWT identity path.**
+   Deferred 2026-10-03 — not relevant to the two use cases that matter (SPIRE
+   via `tpm_devid`, Teleport via TPM join). Written up here so the analysis is
+   not repeated; **no change record yet, deliberately**.
+
+   This was queued as "implement TPM quote verification and real signing keys
+   for the identity JWTs". Looking at it with the maintainer, that is the wrong
+   framing. The reasons, in the order they decide the question:
+
+   - **Nothing consumes `/latest/attest` or `/latest/identity`.** No client, no
+     lab script, no guest component; they appear only in `ARCHITECTURE.md`, in
+     the route registration, and as a refused path in a test. SPIRE reads the
+     DevID files from disk and does its own credential activation against the
+     `.priv`/`.pub` blobs.
+   - **The JWKS cannot reach an external verifier.** The service listens on
+     `169.254.169.1:80`, reachable from guests on the IMDS bridge and from the
+     host. A SPIRE server, Vault or Teleport outside cannot fetch
+     `/.well-known/jwks.json` at all. Real signing keys do not fix that; it is
+     the design, not the implementation.
+   - **The shape is borrowed from the wrong cloud.** `/latest/` is AWS, and
+     having that namespace made it cheap to hang more under it — but AWS has no
+     `/latest/identity` and no JWKS. A signed instance identity token verified
+     against the provider's public JWKS is the GCP and Azure pattern, which
+     works because Google's JWKS is on the public internet. The pattern was
+     copied without the part that carries it.
+   - **`ARCHITECTURE.md` already contradicts itself.** Its goals call the JWT
+     "consumable by SPIRE, Teleport, and Vault", while its own integration
+     table says Teleport integrates by *restricting to the EK CA* and SPIRE by
+     *DevID PEM + TPM2B blobs*. Those two rows are the real use cases, and
+     neither needs the JWT. The three rows that do — SPIRE JWT path, Vault
+     `auth/jwt`, Kubernetes node labels — all hang on the unreachable JWKS.
+   - **Both endpoints currently affirm without checking.** `POST /latest/attest`
+     answers `Valid: true` to any quote once the nonce matches, and
+     `/latest/identity` signs with an HS256 secret compiled into the binary.
+     An endpoint that confirms without verifying is worse than no endpoint.
+
+   Proposed direction when it is picked up: remove `/latest/attest/nonce`,
+   `/latest/attest`, `/latest/identity` and `/.well-known/jwks.json`; archive
+   the `workload-identity` capability with `REMOVED` requirements and a
+   migration note; and correct `ARCHITECTURE.md` — the three JWKS integration
+   rows and roadmap phases 3 and 6. The `workload-identity` spec written on
+   2026-10-03 is not wasted work: writing the placeholder behaviour down is
+   what made the conclusion visible.
+
+   Defer the PCR-policy question until something consumes a policy. Quote
+   verification without a policy consumer is its own purpose, which is no
+   purpose.
+
+   **Open sub-question, decides the scope:** does
+   `/latest/dynamic/instance-identity/{document,signature}` stay? Those are
+   genuine AWS paths that cloud-init tooling may expect, but `signature`
+   returns the constant `dGVzdC1zaWduYXR1cmU=` to every caller — the same
+   defect as `/latest/attest`, in an endpoint there may be a compatibility
+   reason to keep.
+
+   Before writing any of this, check Teleport's TPM join against its current
+   documentation rather than from memory, to confirm what `vtpm-mds` would have
+   to supply at join time — the expectation is nothing, since the node talks to
+   its own TPM and to the auth server.
 
 The QEMU lab under `scripts/qemu-lab/` **must not be run on `hogan`**. Its
 `setup-host.sh` creates `br-imds` and claims 169.254.169.1/16 and
