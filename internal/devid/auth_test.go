@@ -64,35 +64,42 @@ func TestParseEKCertHeader(t *testing.T) {
 }
 
 func TestAuthenticateEnrollCaller(t *testing.T) {
-	cert, roots := testEKCert(t)
-	other, _ := testEKCert(t)
+	cert, key, roots := testEKMaterial(t)
+	other, _, _ := testEKMaterial(t)
 	enroller := NewEnroller(&CA{}, roots, nil)
+	ekPub := rsaKeyToEKPub(key)
 
 	req := httptest.NewRequest(http.MethodPost, "/latest/devid/enroll/start", nil)
 	req.Header.Set(HeaderEKCert, EncodeEKCertHeader(cert))
 
-	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ""); !isUnauthorized(err) {
+	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ekPub, ""); !isUnauthorized(err) {
 		t.Fatalf("expected unauthorized without VM, got %v", err)
 	}
 
 	vm := &inventory.VMConfig{VMID: "100", MACs: []string{"52:54:00:a1:b2:c3"}}
 	req = req.WithContext(context.WithValue(req.Context(), inventory.VMConfigContextKey, vm))
 
-	vmid, ek, err := enroller.AuthenticateEnrollCaller(req, cert, "")
+	// Start-style: chain + bind.
+	vmid, ek, err := enroller.AuthenticateEnrollCaller(req, cert, ekPub, "")
 	if err != nil || vmid != "100" || ek == nil {
 		t.Fatalf("auth failed: vmid=%q err=%v", vmid, err)
 	}
 
-	if _, _, err := enroller.AuthenticateEnrollCaller(req, other, ""); !isUnauthorized(err) {
+	// Finish-style call: chain only (no signing-request EK).
+	if _, _, err := enroller.AuthenticateEnrollCaller(req, nil, nil, ""); err != nil {
+		t.Fatalf("finish-style auth: %v", err)
+	}
+
+	if _, _, err := enroller.AuthenticateEnrollCaller(req, other, ekPub, ""); !isUnauthorized(err) {
 		t.Fatalf("expected CSR mismatch unauthorized, got %v", err)
 	}
 
 	vm.EKSHA256 = EKFingerprint(other)
-	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ""); !isUnauthorized(err) {
+	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ekPub, ""); !isUnauthorized(err) {
 		t.Fatalf("expected pin mismatch, got %v", err)
 	}
 	vm.EKSHA256 = EKFingerprint(cert)
-	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ""); err != nil {
+	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ekPub, ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -121,7 +128,7 @@ func TestFinishRejectsIdentityMismatch(t *testing.T) {
 	pub.RSAParameters.Symmetric = nil
 	sr := SigningRequest{DevIDKey: &pub}
 
-	sid, err := enroller.Sessions.Put([]byte("nonce"), sr, "100", "100", "fp-a")
+	sid, err := enroller.Sessions.Put([]byte("nonce"), sr, "100", "fp-a")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +136,7 @@ func TestFinishRejectsIdentityMismatch(t *testing.T) {
 		t.Fatal("expected VM mismatch")
 	}
 
-	sid, err = enroller.Sessions.Put([]byte("nonce"), sr, "100", "100", "fp-a")
+	sid, err = enroller.Sessions.Put([]byte("nonce"), sr, "100", "fp-a")
 	if err != nil {
 		t.Fatal(err)
 	}

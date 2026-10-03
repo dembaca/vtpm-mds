@@ -1,6 +1,7 @@
 package devid
 
 import (
+	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/asn1"
@@ -104,16 +105,19 @@ func VerifyDevIDResidency(pubAK, pubDevID *tpm2.Public, attestData, attestSig []
 	return nil
 }
 
-// VerifyEKCertificate verifies cert against roots, tolerating critical SAN
+// ErrEKCertificateKeyMismatch is returned when an EK certificate does not
+// certify the endorsement key in the signing request (including a missing key).
+var ErrEKCertificateKeyMismatch = errors.New("EK certificate does not match the endorsement key in the signing request")
+
+// VerifyEKCertificateChain verifies cert against roots, tolerating critical SAN
 // extensions that Go's x509 verifier does not handle for EK certs.
-func VerifyEKCertificate(roots *x509.CertPool, pub *tpm2.Public, cert *x509.Certificate) error {
+func VerifyEKCertificateChain(roots *x509.CertPool, cert *x509.Certificate) error {
 	if cert == nil {
 		return errors.New("missing EK certificate")
 	}
 	if roots == nil {
 		return errors.New("missing EK trust roots")
 	}
-	_ = pub // optional future: compare pub vs cert.PublicKey
 
 	if len(cert.UnhandledCriticalExtensions) > 0 {
 		kept := make([]asn1.ObjectIdentifier, 0, len(cert.UnhandledCriticalExtensions))
@@ -134,4 +138,31 @@ func VerifyEKCertificate(roots *x509.CertPool, pub *tpm2.Public, cert *x509.Cert
 		return fmt.Errorf("EK certificate verification failed: %w", err)
 	}
 	return nil
+}
+
+// VerifyEKCertificateBound verifies the certificate chain and that cert's
+// public key equals the endorsement key public area.
+func VerifyEKCertificateBound(roots *x509.CertPool, pub *tpm2.Public, cert *x509.Certificate) error {
+	if err := VerifyEKCertificateChain(roots, cert); err != nil {
+		return err
+	}
+	if !ekCertificateMatchesKey(cert, pub) {
+		return ErrEKCertificateKeyMismatch
+	}
+	return nil
+}
+
+func ekCertificateMatchesKey(cert *x509.Certificate, pub *tpm2.Public) bool {
+	if cert == nil || pub == nil {
+		return false
+	}
+	key, err := pub.Key()
+	if err != nil {
+		return false
+	}
+	equaler, ok := cert.PublicKey.(interface{ Equal(crypto.PublicKey) bool })
+	if !ok {
+		return false
+	}
+	return equaler.Equal(key)
 }

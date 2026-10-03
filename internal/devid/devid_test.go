@@ -1,11 +1,14 @@
 package devid
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -155,12 +158,12 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 		PlatformIdentity: pkix.Name{CommonName: "vm-100"}.ToRDNSequence(),
 	}
 
-	cert, err := ca.IssueDevID(sr, "fallback", time.Now().UTC())
+	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("IssueDevID: %v", err)
 	}
-	if cert.Subject.CommonName != "vm-100" {
-		t.Fatalf("CN=%q", cert.Subject.CommonName)
+	if cert.Subject.CommonName != "100" {
+		t.Fatalf("CN=%q want 100 (authenticated VM ID)", cert.Subject.CommonName)
 	}
 	if cert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
 		t.Fatal("missing digitalSignature key usage")
@@ -176,7 +179,7 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 	}
 
 	enroller := NewEnroller(ca, x509.NewCertPool(), NewSessionStore(time.Minute))
-	sid, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "vm-100", "100", "ekfp")
+	sid, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "100", "ekfp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +187,7 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 		t.Fatal("expected nonce mismatch error")
 	}
 
-	sid2, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "vm-100", "100", "ekfp")
+	sid2, err := enroller.Sessions.Put([]byte("correct-nonce"), *sr, "100", "ekfp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,6 +198,167 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 	block, _ := pem.Decode(pemBytes)
 	if block == nil || block.Type != "CERTIFICATE" {
 		t.Fatal("expected PEM certificate")
+	}
+}
+
+// TestGuestSuppliedCommonNameIsIgnored: platform identity CN other-name is
+// ignored; the authenticated VM ID becomes the certificate CN.
+func TestGuestSuppliedCommonNameIsIgnored(t *testing.T) {
+	ca := mustParseTestCA(t)
+	sr := mustMinimalSigningRequest(t, pkix.Name{CommonName: "other-name"})
+
+	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("IssueDevID: %v", err)
+	}
+	if cert.Subject.CommonName != "100" {
+		t.Fatalf("CN=%q want 100", cert.Subject.CommonName)
+	}
+	if cert.Subject.String() != "CN=100" {
+		t.Fatalf("subject=%q", cert.Subject.String())
+	}
+
+	enroller := NewEnroller(ca, x509.NewCertPool(), NewSessionStore(time.Minute))
+	sid, err := enroller.Sessions.Put([]byte("nonce"), *sr, "100", "ekfp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemBytes, err := enroller.Finish(sid, []byte("nonce"), "100", "ekfp")
+	if err != nil {
+		t.Fatalf("Finish: %v", err)
+	}
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		t.Fatal("expected PEM certificate")
+	}
+	issued, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issued.Subject.CommonName != "100" {
+		t.Fatalf("Finish CN=%q want 100", issued.Subject.CommonName)
+	}
+	if issued.Subject.String() != "CN=100" {
+		t.Fatalf("Finish subject=%q contains guest name", issued.Subject.String())
+	}
+}
+
+func TestIssueDevIDVMIDWhenNoPlatformIdentity(t *testing.T) {
+	ca := mustParseTestCA(t)
+	sr := mustMinimalSigningRequest(t, pkix.Name{})
+
+	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("IssueDevID: %v", err)
+	}
+	if cert.Subject.CommonName != "100" {
+		t.Fatalf("CN=%q want 100", cert.Subject.CommonName)
+	}
+	if cert.Subject.String() != "CN=100" {
+		t.Fatalf("subject=%q", cert.Subject.String())
+	}
+}
+
+func TestIssueDevIDPreservesOrganizationAndOU(t *testing.T) {
+	ca := mustParseTestCA(t)
+	sr := mustMinimalSigningRequest(t, pkix.Name{
+		CommonName:         "other-name",
+		Organization:       []string{"Example GmbH"},
+		OrganizationalUnit: []string{"lab"},
+	})
+
+	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("IssueDevID: %v", err)
+	}
+	if cert.Subject.CommonName != "100" {
+		t.Fatalf("CN=%q want 100", cert.Subject.CommonName)
+	}
+	if len(cert.Subject.Organization) != 1 || cert.Subject.Organization[0] != "Example GmbH" {
+		t.Fatalf("Organization=%v", cert.Subject.Organization)
+	}
+	if len(cert.Subject.OrganizationalUnit) != 1 || cert.Subject.OrganizationalUnit[0] != "lab" {
+		t.Fatalf("OrganizationalUnit=%v", cert.Subject.OrganizationalUnit)
+	}
+}
+
+func TestIssueDevIDSANNotCritical(t *testing.T) {
+	ca := mustParseTestCA(t)
+	sr := mustMinimalSigningRequest(t, pkix.Name{CommonName: "other-name"})
+
+	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("IssueDevID: %v", err)
+	}
+	found := false
+	for _, ext := range cert.Extensions {
+		if ext.Id.Equal(oidSubjectAltName) {
+			found = true
+			if ext.Critical {
+				t.Fatal("SAN extension marked critical; subject is never empty")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("missing SAN extension")
+	}
+}
+
+func TestIssueDevIDCertificateShape(t *testing.T) {
+	ca := mustParseTestCA(t)
+	sr := mustMinimalSigningRequest(t, pkix.Name{Organization: []string{"Example GmbH"}})
+
+	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("IssueDevID: %v", err)
+	}
+	if !cert.NotAfter.Equal(NoExpiration) {
+		t.Fatalf("NotAfter=%v want %v", cert.NotAfter, NoExpiration)
+	}
+	if cert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+		t.Fatal("missing digitalSignature key usage")
+	}
+	if cert.IsCA {
+		t.Fatal("IsCA true")
+	}
+	foundEKU := false
+	for _, oid := range cert.UnknownExtKeyUsage {
+		if oid.Equal(OIDVerifiedTPMFixed) {
+			foundEKU = true
+		}
+	}
+	if !foundEKU {
+		t.Fatal("missing verifiedTPMFixed EKU")
+	}
+	foundSAN := false
+	for _, ext := range cert.Extensions {
+		if ext.Id.Equal(oidSubjectAltName) {
+			foundSAN = true
+			if err := assertTCGDevIDSAN(ext.Value); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if !foundSAN {
+		t.Fatal("missing SAN extension")
+	}
+}
+
+func TestIssueDevIDSerialDeterministic(t *testing.T) {
+	ca := mustParseTestCA(t)
+	sr := mustMinimalSigningRequest(t, pkix.Name{CommonName: "other-name"})
+	now := time.Now().UTC()
+
+	cert1, err := ca.IssueDevID(sr, "100", now)
+	if err != nil {
+		t.Fatalf("IssueDevID 1: %v", err)
+	}
+	cert2, err := ca.IssueDevID(sr, "100", now)
+	if err != nil {
+		t.Fatalf("IssueDevID 2: %v", err)
+	}
+	if cert1.SerialNumber.Cmp(cert2.SerialNumber) != 0 {
+		t.Fatalf("serials differ: %s vs %s", cert1.SerialNumber, cert2.SerialNumber)
 	}
 }
 
@@ -275,4 +439,69 @@ func mustTestCA(t *testing.T) (*x509.Certificate, *rsa.PrivateKey) {
 		t.Fatal(err)
 	}
 	return cert, key
+}
+
+func assertTCGDevIDSAN(der []byte) error {
+	// OtherName encoding is awkward to round-trip; verify the TCG otherName
+	// type OIDs are present in the SAN SEQUENCE.
+	hwOID, err := asn1.Marshal(oidOnHardwareModuleName)
+	if err != nil {
+		return err
+	}
+	permOID, err := asn1.Marshal(oidOnPermanentIdentifier)
+	if err != nil {
+		return err
+	}
+	if !bytes.Contains(der, hwOID) {
+		return fmt.Errorf("SAN missing HardwareModuleName OID")
+	}
+	if !bytes.Contains(der, permOID) {
+		return fmt.Errorf("SAN missing PermanentIdentifier OID")
+	}
+	tpmTypeOID, err := asn1.Marshal(oidTCGHardwareTypeTPM2)
+	if err != nil {
+		return err
+	}
+	if !bytes.Contains(der, tpmTypeOID) {
+		return fmt.Errorf("SAN missing TPM hardware type OID")
+	}
+	return nil
+}
+
+func mustParseTestCA(t *testing.T) *CA {
+	t.Helper()
+	caCert, caKey := mustTestCA(t)
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})
+	keyDER, err := x509.MarshalPKCS8PrivateKey(caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	ca, err := ParseCA(caPEM, keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ca
+}
+
+func mustMinimalSigningRequest(t *testing.T, platform pkix.Name) *SigningRequest {
+	t.Helper()
+	ekKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	devKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ekTPM := rsaPublicToTPM(ekKey, true)
+	devTPM := rsaPublicToTPM(devKey, false)
+	devTPM.Attributes = DevIDAttributes
+	devTPM.RSAParameters.Sign = &tpm2.SigScheme{Alg: tpm2.AlgRSASSA, Hash: tpm2.AlgSHA256}
+	devTPM.RSAParameters.Symmetric = nil
+	return &SigningRequest{
+		EndorsementKey:   &ekTPM,
+		DevIDKey:         &devTPM,
+		PlatformIdentity: platform.ToRDNSequence(),
+	}
 }
