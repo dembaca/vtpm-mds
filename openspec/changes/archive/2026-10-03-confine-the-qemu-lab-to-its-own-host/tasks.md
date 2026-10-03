@@ -94,8 +94,13 @@
 - [x] 6.1 Run `go vet ./...` and `go test ./...` and verify both pass, confirming no product code was touched
       `go vet ./...` clean, `go test ./...` all packages ok — no product code
       was touched.
-- [ ] 6.2 Verify a full lab run still works on the intended host, from `setup-host.sh` through a booted guest — needs the cloud lab host, so record it as maintainer-run if it cannot be executed here
-      Not run: needs the cloud lab host; maintainer-run. The guard was shown
-      not to fire where QEMU is a Debian package, but a full lab run after the
-      change has not been exercised. `complete-the-cloud-lab-bootstrap` records
-      that `e2e-netns.sh` and `e2e-devid-guest.sh` both passed there before it.
+- [x] 6.2 Verify a full lab run still works on the intended host, from `setup-host.sh` through a booted guest — needs the cloud lab host, so record it as maintainer-run if it cannot be executed here
+      Verified by the Claude cloud agent's work on
+      `fail-loudly-when-the-lab-is-unprepared`, merged 2026-10-03. Its branch
+      was cut from `a9fde5e`, which contains this change (`e97b16f`), so every
+      lab run it made included the conflict guard, the pve-qemu-kvm guard and
+      the KVM-by-default accel selection. On that host it ran `setup-host.sh`
+      through a booted guest to `GUEST DEVID E2E PASSED`, and `e2e-netns.sh`
+      reported `instance-id=i-100` — so the guards do not fire where the lab
+      belongs. The Cursor cloud run of `complete-the-cloud-lab-bootstrap`
+      task 5.4 is a second instance of the same evidence.

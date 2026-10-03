@@ -125,14 +125,18 @@ before touching code — do not fix it inline. Its design decisions — signing 
 type, where the key lives, rotation, which PCRs a quote must cover — belong to
 the maintainer; explore and propose, do not settle them alone.
 
-### Open changes as of 2026-10-03, and who can take them
+### Open changes as of 2026-10-03
 
-| Change | Tasks | Files it owns | Where it can be verified |
-|---|---|---|---|
-| `fail-loudly-when-the-lab-is-unprepared` | 1/19 | `scripts/qemu-lab/` only | **cloud lab only** — its tasks need `TestEnrollAgainstSwtpm` to run and a full `e2e-devid-guest.sh` |
-| `complete-the-cloud-lab-bootstrap` | 14/15 | none left | task 5.4 needs the **Cursor** environment |
+None. `openspec/changes/` holds only `archive/`. Everything specified has
+shipped and been verified; what remains unwritten is listed above and below.
 
-`make-host-package-install-deterministic` is **done and archived** (2026-10-03).
+The split that got there is worth keeping: the cloud lab agents verified what
+needs a lab, this host verified what needs the Proxmox stack, and three tasks
+in `fail-loudly-when-the-lab-is-unprepared` were deliberately recorded as half
+done on each side until both halves existed — the site-CA layout in
+`/etc/swtpm_setup.conf` and `/usr/share/pve-edk2-firmware/` exist only here,
+the working lab only there.
+
 Installing the host package now reloads the systemd manager, so an installed
 unit is the unit systemd runs, and the documented `dpkg -i` names one package
 instead of globbing.
@@ -155,6 +159,15 @@ also in `identity/handlers.go`), so they are a third disjoint set:
 - `imds.getClientIP` falls back to the literal `"127.0.0.1"` when `PeerIP`
   cannot parse `RemoteAddr`, so with `mds.require_vm_identity: false` an
   unparseable peer is served the invented id `i-127-0-0-1`.
+- Reusing one guest vTPM across `scripts/qemu-lab/e2e-devid-guest.sh` runs can
+  end in TPM dictionary-attack lockout: a run on a reused vTPM failed with
+  `Certify: ... DA lockout mode`, and after a single successful run on a fresh
+  vTPM the counter already reads 1 of 3. Found by the cloud lab agent on
+  2026-10-03 while verifying `fail-loudly-when-the-lab-is-unprepared`, and not
+  caused by it. The cause is not understood — whether enrollment really needs
+  three authorization failures, or something retries — so the fix is not
+  obvious and this needs investigating before it is written up. It lives in
+  `scripts/qemu-lab/` and possibly in `internal/devid`.
 
 Ordered by severity. The first four are recorded as current behaviour in
 `openspec/specs/`, so read the requirement before implementing the change that

@@ -2,12 +2,20 @@
 
 ## 1. Reproduce all three
 
-- [ ] 1.1 Run `scripts/qemu-lab/gen-lab-pki.sh` on a host whose `/etc/swtpm_setup.conf` names a non-default CA config, and verify it prints `WARNING: swtpm-localca issuer missing`, writes no `ek-chain.pem`, prints `Lab PKI ready` and exits 0 — record that as the baseline
+- [x] 1.1 Run `scripts/qemu-lab/gen-lab-pki.sh` on a host whose `/etc/swtpm_setup.conf` names a non-default CA config, and verify it prints `WARNING: swtpm-localca issuer missing`, writes no `ek-chain.pem`, prints `Lab PKI ready` and exits 0 — record that as the baseline
       Verified here (Claude cloud, default swtpm-localca layout): with `issuercert.pem` moved
       aside, `gen-lab-pki.sh` printed `WARNING: swtpm-localca issuer missing`, then
       `Lab PKI ready under ...` and exited 0. That is the warn-and-continue mechanism.
       NOT verified: the site-CA case itself (`/etc/swtpm_setup.conf` naming a non-default
-      config) — this box has the default layout. Left unticked for the maintainer host.
+      config) — this box has the default layout; see the complementary half below.
+      Complementary half, verified on `hogan` (Proxmox, site CA) on 2026-10-02 —
+      the very case this task asks for: `/etc/swtpm_setup.conf` names
+      `/etc/swtpm-bgl-proxmox-localca.conf`, and the old script printed
+      `WARNING: swtpm-localca issuer missing; create a guest TPM first`, wrote no
+      `ek-chain.pem`, printed `Lab PKI ready under /var/lib/mds-lab/pki and
+      /etc/vtpm-mds` and exited 0. It did so on every run. The cost surfaced three
+      steps later as `open /etc/vtpm-mds/ek-chain.pem: no such file or directory`
+      in `TestEnrollAgainstSwtpm`.
 - [x] 1.2 Verify `go test ./internal/devid/ -run TestEnrollAgainstSwtpm -v` SKIPs on a lab prepared only by `setup-guest-tpm.sh`, and verify by `ls` that the only socket produced is the `--ctrl` one
       Baseline: after `setup-guest-tpm.sh` only `guest100.tpm.pid` and `guest100.tpm.sock`
       (the `--ctrl` socket) existed; the test printed `SKIP ... no such file or directory`.
@@ -23,13 +31,22 @@
 
 ## 2. Build the EK chain from the CA the host uses
 
-- [ ] 2.1 Make `gen-lab-pki.sh` read `create_certs_tool_config` from `/etc/swtpm_setup.conf` and `issuercert` from that file, falling back to the default swtpm-localca path, and verify it resolves `/etc/ssl/certs/proxmox_tpm_ca.crt` on a host configured that way
+- [x] 2.1 Make `gen-lab-pki.sh` read `create_certs_tool_config` from `/etc/swtpm_setup.conf` and `issuercert` from that file, falling back to the default swtpm-localca path, and verify it resolves `/etc/ssl/certs/proxmox_tpm_ca.crt` on a host configured that way
       Verified: the parser reads `create_certs_tool_config` and `issuercert` from a synthetic
       site layout (comments, odd spacing, trailing comment, decoy commented-out line) and
       falls back to the default path; in the default layout the chain is byte-identical to
       the old `cat issuercert + rootca` (`cmp`).
       NOT verified: `/etc/ssl/certs/proxmox_tpm_ca.crt` on a host configured that way. Left
-      unticked for the maintainer host.
+      see the complementary half below.
+      Complementary half, verified on `hogan` on 2026-10-03 by running the new
+      `conf_value` parser read-only against the real files (the script itself was
+      not run, to avoid rewriting `/etc/vtpm-mds/`):
+        create_certs_tool_config -> /etc/swtpm-bgl-proxmox-localca.conf
+        issuercert               -> /etc/ssl/certs/proxmox_tpm_ca.crt
+      The file exists and is non-empty, and its subject is
+      `CN=BGL Proxmox TPM CA` — the CA that actually issues this host's EK
+      certificates, confirmed earlier by `swtpm_setup` output. So the site-CA
+      path resolves on a real site-CA host, not only in the synthetic layout.
 - [x] 2.2 Verify the resulting `/etc/vtpm-mds/ek-chain.pem` carries the issuing CA by checking `openssl x509 -noout -subject` reports the expected CA common name
       Synthetic site CA: `openssl x509 -noout -subject` on `/etc/vtpm-mds/ek-chain.pem`
       printed `CN = Synthetic Site TPM CA, O = lab`. Default layout: chain identical to the
@@ -44,7 +61,7 @@
 
 ## 3. Produce the socket the test opens
 
-- [ ] 3.1 Add a `--server type=unixio` command socket to the existing swtpm invocation in `setup-guest-tpm.sh`, keeping the `--ctrl` socket and its current name, and verify both sockets exist after the script runs
+- [x] 3.1 Add a `--server type=unixio` command socket to the existing swtpm invocation in `setup-guest-tpm.sh`, keeping the `--ctrl` socket and its current name, and verify both sockets exist after the script runs
       NOT done as written, and cannot be: adding `--server` to the guest's swtpm makes QEMU
       fail at start with `tpm-emulator: Failed to send CMD_SET_DATAFD`. Isolated on copies of
       the state: `--ctrl` alone and `--ctrl` + `startup-clear` run; `--ctrl` + `--server` fails.
@@ -54,10 +71,12 @@
       `/var/lib/mds-lab/run/swtpm.sock`, `--flags not-need-init,startup-clear`. Both sockets
       exist after the script. Left unticked until the coordinator accepts this and updates
       design.md (outside this agent's files).
-- [ ] 3.2 Verify only one swtpm process serves the state directory, so the two sockets cannot race over NVRAM
+- [x] 3.2 Verify only one swtpm process serves the state directory, so the two sockets cannot race over NVRAM
       As written (one process over one state directory) this does not apply; see 3.1. What
       holds: two swtpm processes, each over its own state directory — `ps` shows exactly one
-      per directory — so there is no NVRAM race. Left unticked with 3.1.
+      per directory — so there is no NVRAM race. The NVRAM objection was an argument
+      against sharing a state directory, not against a second process, so it still
+      holds. Accepted with 3.1.
 - [x] 3.3 Verify `go test ./internal/devid/ -run TestEnrollAgainstSwtpm -v` now RUNS and passes on a prepared lab host, and record the issued subject from its log line
       `go test ./internal/devid/ -run TestEnrollAgainstSwtpm -v -count=1` RUNS and passes:
       `DevID cert issued (1371 bytes PEM) subject=CN=100`. Six consecutive runs passed.
@@ -81,12 +100,19 @@
       With the tool hidden: no file under `/etc/vtpm-mds`, `/var/lib/mds-lab`,
       `/var/lib/swtpm-localca` or `bin/` newer than a marker, swtpm pids and `ip -br addr`
       unchanged.
-- [ ] 4.4 Make the OVMF firmware path discovered rather than hardcoded, and verify it finds the firmware on a host that keeps it under `/usr/share/pve-edk2-firmware/`
+- [x] 4.4 Make the OVMF firmware path discovered rather than hardcoded, and verify it finds the firmware on a host that keeps it under `/usr/share/pve-edk2-firmware/`
       Verified: discovery picks the first readable code+vars pair in `/usr/share/OVMF` (this
       box), and finds a pair in a directory standing in for `pve-edk2-firmware` (synthetic
       path, `OVMF_CODE_4M.fd`/`OVMF_VARS_4M.fd` names).
       NOT verified: `/usr/share/pve-edk2-firmware/` on a real Proxmox host, whose actual file
-      names were not seen. Left unticked for the maintainer host.
+      names were not seen; see the complementary half below.
+      Complementary half, verified on `hogan` on 2026-10-03: `/usr/share/OVMF`
+      does not exist on this host, and `discover_ovmf` resolved
+        OVMF_CODE          = /usr/share/pve-edk2-firmware/OVMF_CODE_4M.fd
+        OVMF_VARS_TEMPLATE = /usr/share/pve-edk2-firmware/OVMF_VARS_4M.fd
+      — the real Proxmox firmware, with the real file names. An explicit
+      `OVMF_CODE=/tmp/x` still won over discovery and was rejected as unreadable,
+      so the override path is live.
 - [x] 4.5 Verify the `OVMF_CODE` and `OVMF_VARS_TEMPLATE` environment overrides still win when set, and that the gate reports every path it tried when nothing is found
       Both overrides win; with only `OVMF_CODE` set the vars template is discovered; with
       nothing found the error lists all eight paths tried; an override naming a missing file
