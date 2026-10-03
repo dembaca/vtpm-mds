@@ -2,6 +2,9 @@
 # Start the MDS lab QEMU guest with vTPM + IMDS NIC + 9p shared folder.
 set -euo pipefail
 
+# Non-login shells (e.g. Claude cloud) leave USER unset.
+USER="${USER:-$(id -un)}"
+
 LAB_DIR="${MDS_LAB_DIR:-/var/lib/mds-lab}"
 VM_NAME="${MDS_LAB_VM_NAME:-guest100}"
 VM_DIR="${LAB_DIR}/vms/${VM_NAME}"

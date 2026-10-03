@@ -3,6 +3,9 @@
 # Creates br-imds with 169.254.169.1 and DNATs classic IMDS address 169.254.169.254.
 set -euo pipefail
 
+# Non-login shells (e.g. Claude cloud) leave USER unset.
+USER="${USER:-$(id -un)}"
+
 BRIDGE="${MDS_LAB_BRIDGE:-br-imds}"
 HOST_IP="${MDS_LAB_HOST_IP:-169.254.169.1}"
 IMDS_IP="${MDS_LAB_IMDS_IP:-169.254.169.254}"

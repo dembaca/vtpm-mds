@@ -22,14 +22,28 @@ if [[ -e /dev/kvm ]]; then
   sudo chmod 666 /dev/kvm || true
 fi
 
-# System packages needed for the QEMU lab (idempotent)
-if ! command -v qemu-system-x86_64 >/dev/null 2>&1 || ! command -v cloud-localds >/dev/null 2>&1; then
+# System packages needed for the QEMU lab (idempotent). Install when ANY tool
+# the lab scripts call is missing, so a host that already has QEMU but lacks
+# e.g. swtpm_setup or ping is completed rather than skipped.
+LAB_TOOLS=(
+  qemu-system-x86_64 qemu-img cloud-localds genisoimage
+  swtpm swtpm_setup swtpm_localca certtool
+  ip iptables ping ssh-keygen
+  curl jq openssl python3
+)
+missing=()
+for tool in "${LAB_TOOLS[@]}"; do
+  command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+done
+if ((${#missing[@]})); then
+  echo "Installing lab packages (missing: ${missing[*]})"
   sudo apt-get update -qq
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
     qemu-system-x86 qemu-utils qemu-kvm ovmf \
-    iproute2 bridge-utils iptables \
+    iproute2 bridge-utils iptables iputils-ping \
     cloud-image-utils genisoimage \
-    curl jq cpu-checker
+    swtpm swtpm-tools gnutls-bin openssh-client \
+    curl jq openssl python3 cpu-checker
 fi
 
 go mod download
