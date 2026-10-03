@@ -40,7 +40,7 @@
       `USER=root`: `E2E netns IMDS smoke test PASSED`, `instance-id=i-100`.
 - [x] 5.3 Run `e2e-devid-guest.sh` and verify `GUEST DEVID E2E PASSED`
       `env -u USER e2e-devid-guest.sh`: `Guest enroll finished with rc=0`, `subject=CN = 100`, `GUEST DEVID E2E PASSED` (TCG, no `/dev/kvm`).
-- [ ] 5.4 Verify the Cursor environment itself is unaffected; it cannot be run here, so record it as maintainer-run
-      Not run: needs the Cursor environment. Maintainer-run; the change is written so that a fully provisioned host takes no new path (no apt run, `USER` unchanged).
+- [x] 5.4 Verify the Cursor environment itself is unaffected; it cannot be run here, so record it as maintainer-run
+      Run on the Cursor cloud agent, 2026-10-03, `USER=ubuntu`. `bash -x setup-host.sh` used `chown -R ubuntu:ubuntu` for both lab trees, so the exported `USER` was kept. The prepared image was missing `swtpm_setup`, `swtpm_localca` and `certtool`; the first `cloud-install.sh` printed `Installing lab packages (missing: swtpm_setup swtpm_localca certtool)`, and those three then resolved under `/usr/bin`. The second run printed no `Installing lab` line and no apt activity. `cloud-start.sh` exited 0, `GET /health` returned `{"status":"ok"}`, and `e2e-netns.sh` printed `instance-id=i-100` and `E2E netns IMDS smoke test PASSED`. The first apt run is the risk the design already accepts: those tools were genuinely missing, so a later script would have failed. Once they are present, the Cursor path takes no further apt run.
 - [x] 5.5 Run `bash -n` on every changed script, `go vet ./...` and `go test ./...`, and `openspec validate --all --strict`, and verify all pass
       `bash -n` on all three scripts clean; `go vet ./...` clean; `go test ./...` all packages `ok`; `openspec validate --all --strict`: 10 passed, 0 failed.

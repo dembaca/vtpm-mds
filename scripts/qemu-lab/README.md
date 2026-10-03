@@ -43,13 +43,16 @@ The same scripts serve both agent clouds; there is no per-environment split.
 
 | | Cursor cloud | Claude cloud |
 |---|---|---|
-| Base image | prepared, lab tools preinstalled | bare Ubuntu 24.04, root |
-| `USER` | set | may be unset (scripts default it to `id -un`) |
+| Base image | prepared; some TPM helper tools may be absent | bare Ubuntu 24.04, root |
+| `USER` | set, and the scripts keep that value | may be unset (scripts default it to `id -un`) |
 | `/dev/kvm` | unusable, TCG | absent, TCG |
-| Bootstrap | `cloud-install.sh` is a no-op for tools | `cloud-install.sh` installs what is missing |
+| Bootstrap | `cloud-install.sh` installs only missing tools | `cloud-install.sh` installs what is missing |
 
-`cloud-install.sh` installs only when a tool the lab calls is missing, so
-running it on a prepared image changes nothing.
+`cloud-install.sh` installs only when a tool the lab calls is missing. When
+every tool is already present, that run does not call `apt-get`. On the Cursor
+image observed on 2026-10-03 the first run installed `swtpm_setup`,
+`swtpm_localca` and `certtool`; the second run changed nothing, and `USER`
+stayed `ubuntu`.
 
 ## Layout
 
