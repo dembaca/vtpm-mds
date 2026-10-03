@@ -31,5 +31,4 @@
   - Verification: `go vet ./...` exit 0; `go test ./... -count=1` → all packages ok (internal/devid ~6.6s)
 - [x] 4.2 Run `TestEnrollAgainstSwtpm` against the lab software TPM and verify the issued certificate's subject is the VM ID passed to `Start`, not the `guest100` platform name the test requests — record explicitly whether the test ran or skipped
   - Verification: SKIPPED — `stat /var/lib/mds-lab/run/swtpm.sock: no such file or directory`. Test updated to assert CN=`100` when the socket is present.
-- [x] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` and verify the guest's `devid.crt.pem` reads `CN=<vm id>` with `openssl x509 -noout -subject` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
-  - Verification: maintainer-run — qemu lab / guest environment not available in this cloud agent host
+- [ ] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` and verify the guest's `devid.crt.pem` reads `CN=<vm id>` with `openssl x509 -noout -subject` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here

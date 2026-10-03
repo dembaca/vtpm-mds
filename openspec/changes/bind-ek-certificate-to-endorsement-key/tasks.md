@@ -35,8 +35,7 @@
   - Verification: `go vet ./...` → VET_OK. `go test ./... -count=1` → all packages ok (`internal/devid` 7.339s).
 - [x] 4.2 Run `TestEnrollAgainstSwtpm` against the lab software TPM and verify a DevID certificate is still issued — if the swtpm socket is not present the test skips, so record explicitly whether it ran or skipped rather than implying it passed
   - Verification (`go test ./internal/devid/ -run TestEnrollAgainstSwtpm -v -count=1`): SKIP — `stat /var/lib/mds-lab/run/swtpm.sock: no such file or directory`.
-- [x] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` end to end from a git-stamped package and verify the guest still obtains `devid.crt.pem`, `devid.priv.blob` and `devid.pub.blob` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
-  - Verification: maintainer-run — no passwordless sudo / no `hogan-lab` in this environment.
+- [ ] 4.3 Run `scripts/qemu-lab/e2e-devid-guest.sh` end to end from a git-stamped package and verify the guest still obtains `devid.crt.pem`, `devid.priv.blob` and `devid.pub.blob` — needs root on the lab host, so record it as maintainer-run if it cannot be executed here
 
 ## 5. Keep the capability description honest
 
