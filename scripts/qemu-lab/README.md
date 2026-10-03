@@ -57,14 +57,15 @@ running it on a prepared image changes nothing.
 |--------|---------|
 | `cloud-install.sh` / `cloud-start.sh` | Cloud Agent environment bootstrap |
 | `setup-host.sh` | Bridge, DNAT, lab config + inventory |
-| `gen-lab-pki.sh` | Lab DevID CA + EK trust material |
+| `common.sh` | Shared helpers (tool gate, OVMF discovery); sourced, not run |
+| `gen-lab-pki.sh` | Lab DevID CA + EK trust chain; **fails** when no chain can be built |
 | `download-image.sh` | Ubuntu cloud image cache |
-| `setup-guest-tpm.sh` | Manufacture + start guest swtpm (QEMU ctrl socket) |
+| `setup-guest-tpm.sh` | Manufacture + start the guest swtpm (QEMU ctrl socket) and a separate host-test swtpm (`swtpm.sock`) |
 | `create-guest.sh` | Disk, cloud-init seed, 9p share, DevID oneshot |
 | `start-guest.sh` / `stop-guest.sh` | QEMU with IMDS NIC + vTPM + 9p |
 | `e2e-netns.sh` | Fast IMDS smoke (no full guest boot) |
 | `e2e-imds.sh` | IMDS via guest SSH (TCG may be flaky) |
-| `e2e-devid-guest.sh` | Full path: boot guest → DevID → SPIRE blobs |
+| `e2e-devid-guest.sh` | Full path: boot guest → DevID → SPIRE blobs; checks its tools first |
 
 ## Recommended smoke test (fast)
 
@@ -97,6 +98,23 @@ sudo ./scripts/qemu-lab/e2e-devid-guest.sh
 
 Notes:
 
+- `e2e-devid-guest.sh` checks every tool it needs before doing anything and names
+  `cloud-install.sh` when one is missing. UEFI firmware is found under
+  `/usr/share/OVMF`, `/usr/share/pve-edk2-firmware` or `/usr/share/edk2/ovmf`;
+  `OVMF_CODE` / `OVMF_VARS_TEMPLATE` override it.
+- `gen-lab-pki.sh` takes the EK issuer from the swtpm CA configuration named in
+  `/etc/swtpm_setup.conf` (`MDS_LAB_SWTPM_SETUP_CONF` overrides), falling back to
+  `/var/lib/swtpm-localca/`. It exits non-zero when it finds no issuer.
+- `go test ./internal/devid/ -run TestEnrollAgainstSwtpm` runs against the
+  host-test vTPM on `/var/lib/mds-lab/run/swtpm.sock` after `setup-guest-tpm.sh`,
+  and skips without a lab. It is a **separate** swtpm with its own state: QEMU
+  fails (`CMD_SET_DATAFD`) when the guest's instance also has `--server`, and two
+  instances over one state directory would race on NVRAM.
+- Reusing one guest vTPM across `e2e-devid-guest.sh` runs can end in
+  `Certify: ... DA lockout mode`: one run on a fresh vTPM left the dictionary-attack
+  counter at 1 of 3 (recovery interval 1000 s), and a vTPM reused over several
+  runs was locked at 3 of 3. Move `vms/guest100/tpm` aside to start over. The cause
+  is not yet understood and is not addressed here.
 - Nested KVM currently hits a host `kvm` BUG (`vmx_vcpu_create`); the lab defaults to **TCG**.
 - Guest SSH via user-net hostfwd can be flaky under TCG; prefer `e2e-netns.sh` for IMDS-only checks and `e2e-devid-guest.sh` (9p DONE file) for DevID.
 - Guest SSH (when working): `ssh -p 2222 ubuntu@127.0.0.1`
