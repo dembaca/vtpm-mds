@@ -4,8 +4,15 @@
 
 `scripts/qemu-lab/` builds a self-contained QEMU lab: its own bridge, its own
 link-local addresses, its own DNAT, its own guest. It was written for the
-cloud agent box, and it says so nowhere. Run on the Proxmox hypervisor it
-collides with the production metadata service it is supposed to be testing.
+cloud agent box, and it says so nowhere. Run on the Proxmox host it collides
+with the metadata service it is supposed to be testing.
+
+Nobody should run it there, and nothing needs to: on Proxmox the service is
+tested against the pilot VM 399 and the installed package, under real
+conditions, which is strictly the better test. The reason it happens anyway is
+that the checkout lives at `/usr/local/src/vtpm-mds` **on** that host, so
+whoever works in the repository reaches for `scripts/qemu-lab/` without
+leaving it. That is how it was run on 2026-10-02.
 
 On `hogan`, `setup-host.sh` creates `br-imds` and adds `169.254.169.1/16` and
 `169.254.169.254/16`. The host already owns both as `/32` on `vmbr_imds`, the
@@ -21,15 +28,25 @@ logged nothing but `curl: (28) Connection timed out` until the run timed out —
 after a nine-minute TCG boot. `/proc/net/arp` meanwhile held two entries for
 `169.254.169.10` with different MAC addresses, one per bridge.
 
-Production kept winning the route lookup and `br-imds` is runtime-only, so
+`vmbr_imds` kept winning the route lookup and `br-imds` is runtime-only, so
 nothing persisted. But which of two identical-prefix connected routes wins is
-decided by insertion order, not by design, and the next run could order them
-the other way — on the host that serves real guests.
+decided by insertion order, not by design, and the next run could order it the
+other way.
+
+What that costs is worth stating accurately, because it decides how much
+machinery this change deserves. `hogan` carries lab workloads; a short outage
+that gets fixed straight away is acceptable there. The damage is not an
+incident, it is an afternoon: timeouts with no obvious cause, a nine-minute TCG
+boot before the symptom appears, and a debugging detour away from whatever was
+actually being verified. That is what happened, and it is reason enough for a
+check that costs three lines.
 
 Two smaller faults share the cause. `cloud-install.sh` runs
 `apt-get install -y qemu-system-x86 qemu-utils qemu-kvm ovmf`; on a Proxmox
 host `/usr/bin/qemu-system-x86_64` comes from `pve-qemu-kvm`, and installing
-Debian's packages over it can disturb the hypervisor's own virtualization.
+Debian's packages over it can displace it, taking every guest on the host with
+it until someone reinstalls. On `hogan` that is three VMs. Recoverable, and
+still not a thing to trigger by accident.
 
 `complete-the-cloud-lab-bootstrap` made that materially more likely, for a good
 reason: the install used to be guarded on `qemu-system-x86_64` and
@@ -57,8 +74,10 @@ ten in boot time, on `hogan` with `/dev/kvm` present and usable.
 - `MDS_LAB_ACCEL` defaults to KVM when `/dev/kvm` is present and usable, and
   falls back to TCG otherwise. The cloud-box workaround becomes the fallback
   rather than the default, and stays reachable with `MDS_LAB_ACCEL=tcg`.
-- `scripts/qemu-lab/README.md` states which host the lab is for and that it
-  must not be run on a hypervisor serving production guests.
+- `scripts/qemu-lab/README.md` states which host the lab is for, and that on a
+  Proxmox host the service is tested against a real guest and the installed
+  package instead — so a reader who reached for the wrong tool is pointed at
+  the right one rather than merely stopped.
 - No change to the daemon, the client, the packaging, or any capability.
 
 ## Capabilities

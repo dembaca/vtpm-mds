@@ -6,6 +6,37 @@ The Cloud Agent / lab host acts as the hypervisor: `vtpm-mds` listens on
 `169.254.169.1:80`, bridge `br-imds` also owns `169.254.169.254` (DNAT → `:80`),
 and callers are identified by **ARP MAC → YAML inventory**.
 
+## Where this lab belongs — and where it does not
+
+These scripts are for an agent cloud host that has nothing else on it. They
+claim `169.254.169.1` and `169.254.169.254` outright, create `br-imds`, and
+DNAT the classic IMDS address.
+
+**Do not run them on a Proxmox host.** A Proxmox host that serves vtpm-mds
+already owns those addresses on `vmbr_imds`. Adding `br-imds` produces two
+connected routes for `169.254.0.0/16`, and replies to a lab guest leave
+through whichever interface the kernel picked — the guest then sees only
+connection timeouts, minutes after the point where the mistake could have been
+reported. `cloud-install.sh` would additionally install Debian's QEMU packages
+over `pve-qemu-kvm`, taking every guest on the host with it.
+
+`setup-host.sh` and `cloud-install.sh` now refuse in both cases and change
+nothing. Do not work around them; there is a better test on that host.
+
+**On a Proxmox host, test against a real guest instead.** That is the stronger
+test anyway: real `/etc/pve` inventory, real ARP binding, a real vTPM, and the
+daemon from the installed package rather than `make build`. Drive the guest
+through the guest agent, for example:
+
+```bash
+sudo hogan-lab qm config 399 | grep -E '^(name|net[0-9]|tpmstate)'
+sudo hogan-lab qm guest exec 399 -- /usr/bin/python3 -c '...'
+```
+
+The reason this warning exists is that the checkout lives on the Proxmox host,
+so whoever works in the repository reaches for `scripts/qemu-lab/` without
+leaving it.
+
 ## Supported cloud environments
 
 The same scripts serve both agent clouds; there is no per-environment split.

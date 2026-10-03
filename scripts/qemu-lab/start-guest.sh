@@ -47,8 +47,15 @@ fi
 sudo ip link set "$TAP_NAME" up
 sudo ip link set "$BRIDGE" up
 
+# Default to KVM wherever the node is usable; TCG is the fallback, not the
+# rule. Nested KVM is broken on Cloud Agent hosts, so those pin MDS_LAB_ACCEL=tcg
+# rather than every other host paying a factor of ten in boot time for it.
 ACCEL_ARGS=()
-ACCEL_MODE="${MDS_LAB_ACCEL:-tcg}"
+if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+  ACCEL_MODE="${MDS_LAB_ACCEL:-kvm}"
+else
+  ACCEL_MODE="${MDS_LAB_ACCEL:-tcg}"
+fi
 if [[ "$ACCEL_MODE" == "kvm" && -r /dev/kvm && -w /dev/kvm ]]; then
   ACCEL_ARGS=(-enable-kvm -cpu host)
   echo "Using KVM acceleration"

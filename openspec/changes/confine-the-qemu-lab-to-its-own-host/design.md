@@ -32,16 +32,16 @@ host. That is a property of one host, encoded as everyone's default.
 
 **Non-Goals:**
 
-- Making the lab coexist with a production IMDS on one host. Two services
-  claiming the same link-local addresses cannot both be right, and picking a
-  different subnet for the lab means changing the guest image, the cloud-init
-  network config and the client's default URL together. That is a larger
-  change, and nobody needs it today — the cloud box exists.
+- Making the lab coexist with another IMDS on one host. Two services claiming
+  the same link-local addresses cannot both be right, and picking a different
+  subnet for the lab means changing the guest image, the cloud-init network
+  config and the client's default URL together. Nobody needs it: the cloud box
+  runs the lab, and a Proxmox host tests against a real guest and the installed
+  package, which is the better test anyway.
 - Removing the TCG path. It is the only option where KVM is unavailable, and
   it stays reachable explicitly.
 - Teaching the lab to clean up a previous run's bridge. Deleting an interface
-  that might be production is exactly the kind of guess this change exists to
-  avoid.
+  it did not create is exactly the kind of guess this change exists to avoid.
 - Changing `vm-inventory`'s ARP lookup to cope with one IP on two bridges.
   That ambiguity is a symptom of the conflict, not a defect to paper over, and
   it would need its own change and a spec delta.
@@ -96,10 +96,11 @@ run took is visible in the log.
   `MDS_LAB_ACCEL=tcg`, and the failure is loud and immediate rather than
   silent. The comment moves to where the fallback is chosen so the next reader
   finds it.
-- **[Trade-off] The lab becomes unrunnable on the hypervisor, where someone
-  might want it for convenience** → Accepted. It was never actually runnable
-  there; it only looked like it was, which cost a maintainer a nine-minute
-  boot and a debugging session on a production host.
+- **[Trade-off] The lab becomes unrunnable on the Proxmox host, where someone
+  might reach for it out of convenience because the checkout is there** →
+  Accepted, and the convenience was illusory: it was never actually runnable
+  there, it only looked like it was. The README points that reader at the test
+  that does work on that host.
 
 ## Migration Plan
 

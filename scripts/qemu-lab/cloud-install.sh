@@ -5,7 +5,26 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
+# This is the cloud lab bootstrap. Its apt-get installs Debian's QEMU packages,
+# which on a Proxmox host would displace pve-qemu-kvm and take every guest with
+# it until someone reinstalls. Refuse there. The test on a Proxmox host is a
+# real guest plus the installed package, not this lab — see README.md.
+if command -v qemu-system-x86_64 >/dev/null 2>&1 \
+   && dpkg -S "$(command -v qemu-system-x86_64)" 2>/dev/null | grep -q '^pve-qemu-kvm:'; then
+  cat >&2 <<'EOF'
+ERROR: qemu-system-x86_64 on this host comes from pve-qemu-kvm.
+
+cloud-install.sh is the bootstrap for the cloud lab host; its apt-get would
+install Debian's QEMU packages over the Proxmox ones. Nothing was changed.
+
+On a Proxmox host, test vtpm-mds against a real guest and the installed
+package instead — see scripts/qemu-lab/README.md.
+EOF
+  exit 1
+fi
+
 chmod +x scripts/qemu-lab/*.sh
+
 
 # Durable lab directories (snapshot-friendly)
 sudo mkdir -p /var/lib/mds-lab/{images,vms,run,inventory} /etc/mds-lab /etc/vtpm-mds /var/lib/vtpm-mds
