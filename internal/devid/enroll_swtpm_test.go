@@ -2,6 +2,7 @@ package devid
 
 import (
 	"crypto/x509"
+	"encoding/pem"
 	"os"
 	"testing"
 
@@ -38,7 +39,7 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 	if !roots.AppendCertsFromPEM(ekPEM) {
 		t.Fatal("ek roots")
 	}
-	if err := VerifyEKCertificate(roots, sr.EndorsementKey, sr.EndorsementCertificate); err != nil {
+	if err := VerifyEKCertificateBound(roots, sr.EndorsementKey, sr.EndorsementCertificate); err != nil {
 		t.Fatalf("ek cert: %v", err)
 	}
 
@@ -55,7 +56,7 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	start, err := enroller.Start(data, sig, "guest100", "100", EKFingerprint(sr.EndorsementCertificate))
+	start, err := enroller.Start(data, sig, "100", EKFingerprint(sr.EndorsementCertificate))
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -70,5 +71,16 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 	if len(certPEM) == 0 {
 		t.Fatal("empty devid cert")
 	}
-	t.Logf("DevID cert issued (%d bytes PEM)", len(certPEM))
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		t.Fatal("expected PEM certificate")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cert.Subject.CommonName != "100" {
+		t.Fatalf("CN=%q want 100 (VM ID), not guest platform name", cert.Subject.CommonName)
+	}
+	t.Logf("DevID cert issued (%d bytes PEM) subject=%s", len(certPEM), cert.Subject.String())
 }

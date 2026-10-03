@@ -72,14 +72,14 @@ func (e *Enroller) HandleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vmid, ekCert, err := e.AuthenticateEnrollCaller(r, sr.EndorsementCertificate, "")
+	vmid, ekCert, err := e.AuthenticateEnrollCaller(r, sr.EndorsementCertificate, sr.EndorsementKey, "")
 	if err != nil {
 		writeEnrollAuthError(w, err)
 		return
 	}
 	ekFP := EKFingerprint(ekCert)
 
-	result, err := e.Start(requestData, sig, vmid, vmid, ekFP)
+	result, err := e.Start(requestData, sig, vmid, ekFP)
 	if err != nil {
 		log.Printf("devid enroll/start: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -107,7 +107,7 @@ func (e *Enroller) HandleFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vmid, ekCert, err := e.AuthenticateEnrollCaller(r, nil, "")
+	vmid, ekCert, err := e.AuthenticateEnrollCaller(r, nil, nil, "")
 	if err != nil {
 		writeEnrollAuthError(w, err)
 		return

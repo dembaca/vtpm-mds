@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/dembaca/vtpm-mds/internal/inventory"
+	"github.com/google/go-tpm/legacy/tpm2"
 )
 
 // HeaderEKCert is sent by the guest enroll client. Value is base64(DER) of the
@@ -64,8 +65,8 @@ func EncodeEKCertHeader(cert *x509.Certificate) string {
 //
 // If expectedFP is non-empty (session- or inventory-pinned), the header EK
 // fingerprint must match. If csrEK is non-nil (enroll/start), header EK must
-// equal the CSR endorsement certificate.
-func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certificate, expectedFP string) (vmID string, ekCert *x509.Certificate, err error) {
+// equal the CSR endorsement certificate and must certify endorsementKey.
+func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certificate, endorsementKey *tpm2.Public, expectedFP string) (vmID string, ekCert *x509.Certificate, err error) {
 	vm := inventory.GetVMConfigFromRequest(r)
 	if vm == nil || vm.VMID == "" {
 		return "", nil, errUnauthorized("VM identity required (MAC not in inventory)")
@@ -76,8 +77,20 @@ func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certifi
 	if err != nil {
 		return "", nil, errUnauthorized(err.Error())
 	}
-	if err := VerifyEKCertificate(e.EKRoots, nil, ekCert); err != nil {
-		return "", nil, errUnauthorized(fmt.Sprintf("EK certificate not trusted: %v", err))
+
+	if csrEK != nil {
+		// enroll/start: chain + bind the certificate to the endorsement key.
+		if err := VerifyEKCertificateBound(e.EKRoots, endorsementKey, ekCert); err != nil {
+			if errors.Is(err, ErrEKCertificateKeyMismatch) {
+				return "", nil, errUnauthorized(ErrEKCertificateKeyMismatch.Error())
+			}
+			return "", nil, errUnauthorized(fmt.Sprintf("EK certificate not trusted: %v", err))
+		}
+	} else {
+		// enroll/finish: chain only; the session fingerprint carries the binding.
+		if err := VerifyEKCertificateChain(e.EKRoots, ekCert); err != nil {
+			return "", nil, errUnauthorized(fmt.Sprintf("EK certificate not trusted: %v", err))
+		}
 	}
 
 	fp := EKFingerprint(ekCert)
