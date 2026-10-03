@@ -79,15 +79,13 @@ Tests and vet must pass: `go vet ./...` and `go test ./...`.
 ## Known gaps, and the queue as of 2026-09-20
 
 Items 1 to 5 below are written up as changes and **implemented on `main`**.
-Three of them are **not yet archived**, because each still has tasks that need
-root on the lab host or a software TPM, and archiving a change whose
-verification never ran would put an unchecked claim into the living spec:
+One of them is **not yet archived**, because it still has tasks that need root
+on a lab host, and archiving a change whose verification never ran would put an
+unchecked claim into the living spec:
 
 | Change | Open tasks | What is missing |
 |---|---|---|
-| `bind-ek-certificate-to-endorsement-key` | 4.2, 4.3, 5.1 | `TestEnrollAgainstSwtpm` **skipped**, no swtpm socket; guest e2e needs root; 5.1 is the archive-time Purpose edit |
-| `enforce-authenticated-ldevid-subject` | 4.2, 4.3 | same swtpm skip and guest e2e |
-| `refuse-unbound-metadata-callers` | 6.2, 6.3 | the netns runs, which need root and a git-stamped package |
+| `refuse-unbound-metadata-callers` | 6.2, 6.3 | the netns runs, which need root and a git-stamped package. `e2e-netns.sh` assumes the lab YAML inventory and expects `i-100`; on a host resolving from `/etc/pve` the expected values differ |
 
 Run those, tick the boxes with the output, then `openspec archive <change>`.
 Until then `openspec validate --all --strict` passes but
@@ -112,10 +110,13 @@ merge). Everything else is independent.
    against a software TPM. The EK factor proves possession of a public certificate,
    not of the certified TPM, and `ek_sha256` pinning inherits the same weakness.
    See `openspec/specs/devid-enrollment/spec.md`, "Trust The EK Certificate".
-   → `openspec/changes/bind-ek-certificate-to-endorsement-key/`
+   → **fixed and archived** 2026-10-03, verified against a software TPM and
+   a guest end-to-end run on the cloud lab host:
+   `openspec/changes/archive/2026-10-03-bind-ek-certificate-to-endorsement-key/`
 2. **The LDevID subject is guest-controlled** (`internal/devid/enroll.go`,
    `subjectCNFromRequest`): the CSR's CN wins over the authenticated VM id.
-   → `openspec/changes/enforce-authenticated-ldevid-subject/`
+   → **fixed and archived** 2026-10-03, same evidence:
+   `openspec/changes/archive/2026-10-03-enforce-authenticated-ldevid-subject/`
 3. **Unbound callers are served an identity instead of refused**
    (`imds/handlers.go`, `getInstanceID` fallback): `i-<caller-ip>`, with
    `X-Forwarded-For` taking precedence, so the caller picks its own id. It also

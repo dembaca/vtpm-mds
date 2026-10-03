@@ -7,7 +7,8 @@ service, so a guest can obtain SPIRE `tpm_devid` materials anchored in its
 vTPM. Enrollment is a two-leg HTTP protocol — a signed TPM signing request
 answered with a credential-activation challenge, then a challenge response
 answered with a certificate — authenticated by the caller's inventory identity
-together with an endorsement key certificate that chains to a configured EK CA.
+together with an endorsement key certificate that chains to a configured EK CA
+and certifies the endorsement key being enrolled.
 This capability covers the wire protocol, its authentication and the guest
 client; how a caller's MAC maps to a VM belongs to the `vm-inventory`
 capability, and the IMDSv2 token flow belongs to `instance-metadata`.
@@ -182,57 +183,6 @@ Every authentication failure SHALL be answered `401` and logged as
   `X-VTPM-MDS-EK-CERT`
 - **THEN** the header is accepted and the request proceeds past authentication
 
-### Requirement: Trust The EK Certificate Through The Configured EK CA Chain
-
-On both legs the service SHALL verify the header EK certificate against the
-root pool built from `ek_ca_chain`, accepting any extended key usage. A
-certificate that cannot be chained, or whose validity period does not cover
-the current time, SHALL be rejected with `401` and body
-`EK certificate not trusted: EK certificate verification failed: <reason>`.
-
-Because swtpm-issued EK certificates carry a critical Subject Alternative Name
-extension that the Go verifier does not handle, verification SHALL drop the SAN
-OID from the certificate's unhandled critical extensions before chain building,
-and SHALL keep every other unhandled critical extension.
-
-Verification is chain building only. The service does not compare the
-certificate's public key with the endorsement key carried in the signing
-request, and performs no revocation checking. A caller presenting any EK
-certificate that chains to `ek_ca_chain` is therefore accepted even when the
-credential-activation challenge is wrapped to an unrelated endorsement key, so
-possession of a trusted EK certificate — which is not secret — rather than
-possession of the certified TPM is what this factor establishes.
-
-#### Scenario: EK certificate not issued by a configured CA
-
-- **GIVEN** an EK certificate that does not chain to `ek_ca_chain`
-- **WHEN** a caller sends it in `X-vtpm-mds-ek-cert`
-- **THEN** the response is `401` and the body starts with
-  `EK certificate not trusted:`
-
-#### Scenario: EK certificate has expired
-
-- **GIVEN** an EK certificate issued by a configured CA whose `notAfter` is in
-  the past
-- **WHEN** a caller sends it in `X-vtpm-mds-ek-cert`
-- **THEN** the response is `401` and the body reports
-  `x509: certificate has expired or is not yet valid`
-
-#### Scenario: EK certificate with a critical SAN extension
-
-- **GIVEN** an swtpm EK certificate whose SAN extension is marked critical
-- **WHEN** it chains to `ek_ca_chain`
-- **THEN** verification succeeds and the request proceeds
-
-#### Scenario: EK certificate public key is not bound to the TPM
-
-- **GIVEN** an EK certificate that chains to `ek_ca_chain` but whose public key
-  belongs to no TPM the caller controls
-- **WHEN** the caller enrolls with that certificate in the header and in the
-  signing request, while the signing request carries its own TPM's endorsement
-  key
-- **THEN** enrollment succeeds and a certificate is issued
-
 ### Requirement: Bind The EK Certificate To Request, Pin And Session
 
 On `enroll/start` the header EK certificate SHALL be byte-for-byte identical,
@@ -310,8 +260,11 @@ trusted certificate whenever the request carries one, because authentication
 has bound it to the header; a request that carries no endorsement certificate
 SHALL be rejected there with body `missing EK certificate`.
 
-The request's platform identity is parsed as an RDN sequence but not verified
-against the caller's identity; it is only a source for the certificate subject.
+The request's platform identity is parsed as an RDN sequence and is not
+verified against the caller's identity. It contributes only the subject
+attributes other than the common name, which is taken from the authenticated
+VM ID. A platform identity that names another VM SHALL therefore be accepted
+without error and SHALL have no effect on the identity the certificate asserts.
 
 #### Scenario: Request signature does not verify
 
@@ -351,6 +304,12 @@ attestation key. The endorsement key SHALL be RSA and SHALL carry symmetric
 parameters; otherwise start SHALL fail with `400` and body
 `create challenge: only RSA EK is supported` or
 `create challenge: EK missing symmetric parameters`.
+
+Because authentication has already bound the trusted EK certificate to that
+endorsement key, the challenge SHALL be wrapped to the key the configured EK CA
+certified. Only the TPM holding that endorsement key can recover the nonce, so
+a successful finish proves the attestation key — and through the residency
+check the DevID key — lives in the certified TPM.
 
 The returned `credential_blob_b64` and `secret_b64` SHALL have the two-byte
 TPM2B size prefixes stripped, so the guest can pass them straight to
@@ -416,53 +375,6 @@ SHALL NOT survive a daemon restart.
   issued
 - **THEN** the response is `400` with body `unknown or expired session`
 
-### Requirement: Issue A Non-Expiring LDevID With TCG DevID Encoding
-
-On a successful finish the service SHALL sign a certificate with the DevID CA
-containing:
-
-- the DevID public key from the signing request as the certificate public key;
-- a subject taken from the signing request's platform identity, with the
-  authenticated VM ID used as common name only when the platform identity
-  carries none — a platform identity common name supplied by the guest
-  therefore wins over the authenticated VM ID;
-- `notBefore` set to the time of the finish call and `notAfter` set to
-  `9999-12-31T23:59:59Z`, so LDevIDs do not expire;
-- key usage digitalSignature, basic constraints present with CA false, and the
-  extended key usage OID `2.23.133.11.1.2` (tcg-cap-verifiedTPMFixed);
-- a Subject Alternative Name extension carrying a TCG HardwareModuleName with
-  hardware type `2.23.133.1.2` and a PermanentIdentifier with assigner
-  `2.23.133.12.1`, built from the SHA-256 digest of the request's endorsement
-  public key when one is present and from the endorsement certificate DER
-  otherwise, and marked critical exactly when the subject is empty;
-- a serial number derived deterministically from the CA certificate, the
-  subject and the public key, so re-enrolling the same key with the same
-  subject yields the same serial.
-
-The certificate SHALL be returned PEM-encoded in `devid_cert_pem`. The service
-SHALL NOT publish a revocation list or offer any other way to withdraw an
-issued LDevID.
-
-#### Scenario: Guest-supplied common name is used
-
-- **GIVEN** an authenticated caller identified as VM `100`
-- **WHEN** its signing request carries a platform identity with common name
-  `other-name`
-- **THEN** the issued certificate's subject is `CN=other-name`
-
-#### Scenario: VM ID is the fallback common name
-
-- **GIVEN** an authenticated caller identified as VM `100`
-- **WHEN** its signing request carries no platform identity
-- **THEN** the issued certificate's subject is `CN=100`
-
-#### Scenario: Certificate shape
-
-- **WHEN** a certificate is issued
-- **THEN** it has `notAfter` `9999-12-31T23:59:59Z`, key usage
-  digitalSignature, CA false, extended key usage `2.23.133.11.1.2`, and a TCG
-  SAN with a HardwareModuleName and a PermanentIdentifier
-
 ### Requirement: Write DevID Materials On The Guest
 
 The guest client SHALL build its signing request from the TPM: read the EK
@@ -510,3 +422,151 @@ matches its DevID key.
 - **WHEN** `devid-enroll` runs
 - **THEN** it reports `HTTP 401:` with the service's reason, exits non-zero,
   and writes no DevID files
+
+### Requirement: Trust The EK Certificate And Bind It To The Endorsement Key
+
+On both legs the service SHALL verify the header EK certificate against the
+root pool built from `ek_ca_chain`, accepting any extended key usage. A
+certificate that cannot be chained, or whose validity period does not cover
+the current time, SHALL be rejected with `401` and body
+`EK certificate not trusted: EK certificate verification failed: <reason>`.
+
+Because swtpm-issued EK certificates carry a critical Subject Alternative Name
+extension that the Go verifier does not handle, verification SHALL drop the SAN
+OID from the certificate's unhandled critical extensions before chain building,
+and SHALL keep every other unhandled critical extension.
+
+On `enroll/start` the service SHALL additionally require that the certificate
+certifies the endorsement key the caller is enrolling with: the public key of
+the header EK certificate SHALL equal the endorsement key public area carried
+in the signing request. A request that fails this check SHALL be rejected with
+`401` and body
+`EK certificate does not match the endorsement key in the signing request`.
+A signing request that carries an endorsement certificate but no endorsement
+key public area SHALL be rejected the same way, because the binding cannot be
+established; the service SHALL NOT proceed to challenge creation in that case.
+
+Because the challenge is wrapped to the endorsement key from the signing
+request, this binding is what makes the EK factor prove possession of the
+certified TPM rather than possession of the certificate. An EK certificate is
+not secret — it is readable from the TPM's NV storage and is sent in the clear
+on both legs — so chain building alone establishes nothing about the caller.
+
+`enroll/finish` SHALL verify the chain only. It carries no signing request, and
+the session binds the fingerprint of the certificate whose binding was proven
+at start, so the caller cannot substitute another certificate there.
+
+The service SHALL perform no revocation checking on either leg.
+
+#### Scenario: EK certificate not issued by a configured CA
+
+- **GIVEN** an EK certificate that does not chain to `ek_ca_chain`
+- **WHEN** a caller sends it in `X-vtpm-mds-ek-cert`
+- **THEN** the response is `401` and the body starts with
+  `EK certificate not trusted:`
+
+#### Scenario: EK certificate has expired
+
+- **GIVEN** an EK certificate issued by a configured CA whose `notAfter` is in
+  the past
+- **WHEN** a caller sends it in `X-vtpm-mds-ek-cert`
+- **THEN** the response is `401` and the body reports
+  `x509: certificate has expired or is not yet valid`
+
+#### Scenario: EK certificate with a critical SAN extension
+
+- **GIVEN** an swtpm EK certificate whose SAN extension is marked critical
+- **WHEN** it chains to `ek_ca_chain`
+- **THEN** verification succeeds and the request proceeds
+
+#### Scenario: EK certificate certifies another key than the one being enrolled
+
+- **GIVEN** an EK certificate that chains to `ek_ca_chain` but whose public key
+  is not the caller's endorsement key
+- **WHEN** the caller posts to `/latest/devid/enroll/start` with that
+  certificate in the header and in the signing request, while the signing
+  request carries its own TPM's endorsement key
+- **THEN** the response is `401` with body
+  `EK certificate does not match the endorsement key in the signing request`,
+  no session is created, and no certificate is issued
+
+#### Scenario: Signing request omits the endorsement key
+
+- **GIVEN** an authenticated caller whose header EK certificate is trusted and
+  matches the certificate in its signing request
+- **WHEN** that signing request carries no endorsement key public area
+- **THEN** the response is `401` with body
+  `EK certificate does not match the endorsement key in the signing request`
+
+#### Scenario: A guest enrolling with its own TPM is unaffected
+
+- **GIVEN** a guest whose EK certificate was issued over its own TPM's
+  endorsement key, as an swtpm-issued certificate is
+- **WHEN** it runs both enroll legs
+- **THEN** the binding check passes and a certificate is issued
+
+### Requirement: Issue A Non-Expiring LDevID Bound To The Authenticated VM
+
+On a successful finish the service SHALL sign a certificate with the DevID CA
+containing:
+
+- the DevID public key from the signing request as the certificate public key;
+- a subject whose common name is the authenticated VM ID bound to the enroll
+  session. A common name carried in the signing request's platform identity
+  SHALL be ignored; the guest SHALL NOT be able to influence the common name of
+  the certificate it receives. The remaining relative distinguished names of
+  the platform identity SHALL be carried into the subject unchanged, because
+  they assert no identity the service has established;
+- `notBefore` set to the time of the finish call and `notAfter` set to
+  `9999-12-31T23:59:59Z`, so LDevIDs do not expire;
+- key usage digitalSignature, basic constraints present with CA false, and the
+  extended key usage OID `2.23.133.11.1.2` (tcg-cap-verifiedTPMFixed);
+- a Subject Alternative Name extension carrying a TCG HardwareModuleName with
+  hardware type `2.23.133.1.2` and a PermanentIdentifier with assigner
+  `2.23.133.12.1`, built from the SHA-256 digest of the request's endorsement
+  public key when one is present and from the endorsement certificate DER
+  otherwise. Because authentication requires a non-empty VM ID and that VM ID
+  is always the common name, the subject is never empty, so this extension
+  SHALL NOT be marked critical;
+- a serial number derived deterministically from the CA certificate, the
+  subject and the public key, so re-enrolling the same key with the same
+  subject yields the same serial.
+
+The certificate SHALL be returned PEM-encoded in `devid_cert_pem`. The service
+SHALL NOT publish a revocation list or offer any other way to withdraw an
+issued LDevID.
+
+#### Scenario: Guest-supplied common name is ignored
+
+- **GIVEN** an authenticated caller identified as VM `100`
+- **WHEN** its signing request carries a platform identity with common name
+  `other-name`
+- **THEN** the issued certificate's subject common name is `100` and the string
+  `other-name` does not appear in the subject
+
+#### Scenario: VM ID is the common name
+
+- **GIVEN** an authenticated caller identified as VM `100`
+- **WHEN** its signing request carries no platform identity
+- **THEN** the issued certificate's subject is `CN=100`
+
+#### Scenario: Other platform identity attributes survive
+
+- **GIVEN** an authenticated caller identified as VM `100`
+- **WHEN** its signing request carries a platform identity with organization
+  `Example GmbH` and organizational unit `lab`
+- **THEN** the issued certificate's subject carries that organization and
+  organizational unit, and its common name is `100`
+
+#### Scenario: Certificate shape
+
+- **WHEN** a certificate is issued
+- **THEN** it has `notAfter` `9999-12-31T23:59:59Z`, key usage
+  digitalSignature, CA false, extended key usage `2.23.133.11.1.2`, and a TCG
+  SAN with a HardwareModuleName and a PermanentIdentifier
+
+#### Scenario: The TCG SAN is never critical
+
+- **WHEN** a certificate is issued to any authenticated caller
+- **THEN** its Subject Alternative Name extension is not marked critical,
+  because the subject always carries the VM ID as common name

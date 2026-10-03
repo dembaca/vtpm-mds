@@ -5,6 +5,11 @@
 - [ ] 1.1 Run `scripts/qemu-lab/gen-lab-pki.sh` on a host whose `/etc/swtpm_setup.conf` names a non-default CA config, and verify it prints `WARNING: swtpm-localca issuer missing`, writes no `ek-chain.pem`, prints `Lab PKI ready` and exits 0 — record that as the baseline
 - [ ] 1.2 Verify `go test ./internal/devid/ -run TestEnrollAgainstSwtpm -v` SKIPs on a lab prepared only by `setup-guest-tpm.sh`, and verify by `ls` that the only socket produced is the `--ctrl` one
 - [ ] 1.3 Verify `e2e-devid-guest.sh` reaches `create-guest.sh` before failing when `cloud-localds` is absent, by checking how far its output gets — this is the cost the precondition gate removes
+- [x] 1.4 Verify the ordering instance of the same pattern is already fixed: `gen-lab-pki.sh` ran before `setup-guest-tpm.sh`, so the first run had no EK chain and the service started without DevID routes
+      Already fixed by the cloud lab agent in commit `a7c0106`, merged here. The
+      script now manufactures the vTPM first and aborts when the service log
+      says `DevID enrollment disabled`. Verified by reading the merged script;
+      the cloud lab guest e2e run on 2026-10-03 passed with that ordering.
 
 ## 2. Build the EK chain from the CA the host uses
 

@@ -51,4 +51,8 @@
 
 ## 5. Keep the capability description honest
 
-- [ ] 5.1 When archiving, update the `## Purpose` of `openspec/specs/devid-enrollment/spec.md` so the EK factor is described as a certificate that chains to the configured EK CA **and** certifies the endorsement key being enrolled, and verify the archived spec no longer claims the factor is chain building alone
+- [x] 5.1 When archiving, update the `## Purpose` of `openspec/specs/devid-enrollment/spec.md` so the EK factor is described as a certificate that chains to the configured EK CA **and** certifies the endorsement key being enrolled, and verify the archived spec no longer claims the factor is chain building alone
+  - Verification: `openspec/specs/devid-enrollment/spec.md` Purpose now reads
+    "chains to a configured EK CA and certifies the endorsement key being
+    enrolled". `grep -c 'chains to a configured EK CA\.' ` on that file returns
+    0, so the old claim that the factor is chain building alone is gone.

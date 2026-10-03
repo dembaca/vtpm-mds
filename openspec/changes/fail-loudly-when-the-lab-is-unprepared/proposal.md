@@ -31,6 +31,16 @@ dependencies are installed by `cloud-install.sh`, which it never calls and
 never names. It also hardcodes `/usr/share/OVMF/OVMF_CODE_4M.fd`, absent on a
 host whose firmware lives in `/usr/share/pve-edk2-firmware/`.
 
+A fourth instance of the same pattern in that script has already been fixed,
+in commit `a7c0106` from the cloud lab agent, and is recorded here because it
+is the clearest evidence for the argument: `gen-lab-pki.sh` ran *before*
+`setup-guest-tpm.sh`, so on a first run no vTPM had been manufactured yet, no
+swtpm local CA existed, no `ek-chain.pem` was written — and the service then
+started without registering the DevID routes, so the guest's enrollment
+returned `404` after a full boot. The order is now reversed and the script
+aborts when the service log reports `DevID enrollment disabled`. That abort is
+exactly what this change asks the remaining three to do.
+
 The common fault is not the missing pieces — it is that each is discovered
 minutes of work after the point where it could have been reported.
 
