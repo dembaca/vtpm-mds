@@ -7,8 +7,9 @@ See proposal.md — Why.
 `InstanceID` has two branches. A bound VM record yields `i-<vmid>`. Otherwise
 it yields `i-` plus the peer address with `.` replaced by `-`, taken from
 `getClientIP`. `getClientIP` parses `RemoteAddr` with `PeerIP` and substitutes
-`127.0.0.1` when `PeerIP` returns nil. `getClientIP` has no other caller, so
-the substitution exists only to feed the fallback id.
+`127.0.0.1` when `PeerIP` returns nil, and returns the textual form of an IPv6
+address unchanged. `getClientIP` has no other caller, so the substitution
+exists only to feed the fallback id.
 
 `RequireVMIdentity` already refuses an unbound caller before the handler runs
 when `mds.require_vm_identity` is true, so the fallback branch is reachable only
@@ -29,7 +30,6 @@ in the opt-out configuration.
 - Making the fallback id a good identity. It names a connection, not an
   instance; the spec already says so.
 - Adding a `public-ipv4` source. Unrelated, though in the same file.
-- The IPv6 form of the fallback id; see Open Questions.
 
 ## Decisions
 
@@ -44,24 +44,38 @@ convention at implementation time is an explicit second return value, that is an
 acceptable substitute — the observable behaviour in the spec delta is what is
 fixed.
 
-### Answer `404 page not found`, exactly as a refusal does
+### The fallback id needs an IPv4 peer
 
-A caller with no derivable id is answered like a caller that
-`require_vm_identity` would refuse: `404`, body `404 page not found`. Reasons:
+The maintainer decided that an IPv6 peer is treated like an unparseable one.
+The fallback id is therefore built only from `LocalIPv4(r)`, which already
+returns the empty string for a peer with no IPv4 address and renders an
+IPv4-mapped address as its dotted quad. An empty result means "no id". This
+removes the need for `getClientIP` altogether, and it matches `local-ipv4`,
+which answers an IPv6 peer with "no address" rather than a fragment.
+
+### Answer `422`, not the `404` of a refusal
+
+A caller with no derivable id is answered `422` with an empty body and
+`Content-Type: text/plain`; the maintainer chose `422` over `404`. Reasons:
 
 - There is no `200`-shaped value to give. The identity document has a fixed
   key set, and `instanceId` is the one key whose whole purpose is the identity;
   an empty string there reads as "this instance has no id" rather than "the
   service could not tell", and a consumer would cache it.
-- The status and body already mean "this endpoint will not tell you who you
-  are" for this caller class, so a caller learns nothing new and the
-  unauthenticated-probing argument made for the refusal applies unchanged.
+- The endpoint exists and the request is well formed; what cannot be processed
+  is the caller's connection. `404` would claim the path does not exist and
+  would be indistinguishable from the `require_vm_identity` refusal, so an
+  operator debugging an opt-out deployment could not tell the two apart.
+  The refusal's `404 page not found` exists to hide which paths are
+  identity-bearing from an unbound caller; this case is only reachable with the
+  refusal switched off, so there is nothing left to hide.
 - `500` was rejected. The service is functioning; the request has no
   derivable answer, which is a client-side condition, and `500` would page an
   operator for a connection the listener produced.
 
-The refusal helper in `imds` is reused rather than copied, so the bytes cannot
-drift.
+The three handlers share one response helper, so the status and body cannot
+drift between them. The body is empty, matching `local-ipv4` and `public-ipv4`
+when no value is available.
 
 ### The signature endpoint is untouched
 
@@ -73,19 +87,20 @@ refused with the document only under `require_vm_identity`.
 
 `workload-identity` defines the subject as derived exactly as the metadata
 instance id is. Once `InstanceID` can report "none", `/latest/identity` must
-refuse rather than sign a token whose `sub` is `i-`. The handler change is in
+answer `422` rather than sign a token whose `sub` is `i-`. The handler change is in
 the tasks; the requirement text needs none, and task 3.2 verifies the handler.
 
 ## Risks / Trade-offs
 
 - **[Risk] An operator running with `require_vm_identity: false` has a client
-  that today receives `i-127-0-0-1` from an unparseable peer and now gets
-  `404`** → Accepted. No such client can be relying on the value: it is
-  identical for every unparseable peer, so it identifies nothing.
+  that today receives `i-127-0-0-1` from an unparseable peer, or `i-fe80::1`
+  from an IPv6 peer, and now gets `422`** → Accepted. The first value is
+  identical for every unparseable peer, so it identifies nothing; the second is
+  not an id any EC2 consumer parses.
 - **[Risk] `RemoteAddr` is unparseable more often than assumed** (a unix
   socket, a proxy-protocol listener added later) → Mitigation: the effect is a
-  `404` on the identity endpoints for those callers, the same as the default
-  configuration gives every unbound caller. That is the conservative failure.
+  `422` on the identity endpoints for those callers. That is the conservative
+  failure: nothing is served.
 - **[Trade-off] Loopback callers keep `i-127-0-0-1`** even though the same id is
   a plausible-looking default. It is a real peer address and the spec already
   documents it; changing it would be a different change.
@@ -97,8 +112,5 @@ unparseable-peer case.
 
 ## Open Questions
 
-- An IPv6 peer with `require_vm_identity: false` is served `i-fe80::1`: the
-  fallback replaces only `.`, so the id keeps its colons. That is not invented,
-  but it is not an EC2-shaped id either. Out of scope here because the spec
-  states the `.`-to-`-` rule explicitly; if the maintainer wants IPv6 peers
-  refused or encoded differently, it needs its own change.
+None. The status code (`422`) and the treatment of IPv6 peers were decided by
+the maintainer in the `~vtpm-mds` channel on 2026-10-04.

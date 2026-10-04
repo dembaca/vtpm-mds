@@ -5,7 +5,9 @@
 `imds.getClientIP` returns the literal `"127.0.0.1"` when `PeerIP` cannot parse
 `r.RemoteAddr`. With `mds.require_vm_identity` set to false, `InstanceID` builds
 the instance id of an unbound caller from that value, so a caller whose peer
-address is unparseable is served the invented id `i-127-0-0-1`.
+address is unparseable is served the invented id `i-127-0-0-1`. An IPv6 peer is
+served `i-fe80::1`, an id that is not shaped like an EC2 instance id; the
+maintainer decided it is refused the same way (see design.md).
 
 That id is indistinguishable from the one a real caller on the loopback address
 gets, and the `instance-metadata` spec records the loopback case as expected
@@ -24,13 +26,17 @@ path, found and reproduced while specifying the queue and still unwritten.
 ## What Changes
 
 - `InstanceID` reports that no id can be derived, instead of inventing one, when
-  no VM record is bound and the peer address cannot be parsed.
+  no VM record is bound and the peer has no IPv4 address: its address cannot be
+  parsed, or it is an IPv6 address.
 - **BREAKING** With `mds.require_vm_identity` false, `GET
   /latest/meta-data/instance-id`, `GET /latest/dynamic/instance-identity/document`
-  and `GET /latest/identity` answer `404` with the body `404 page not found` to
-  such a caller — the same bytes the catch-all and the `require_vm_identity`
-  refusal return — instead of `200` with `i-127-0-0-1`.
-- `getClientIP` no longer returns `127.0.0.1` for a peer it cannot parse.
+  and `GET /latest/identity` answer `422` with an empty body and
+  `Content-Type: text/plain` to such a caller, instead of `200` with
+  `i-127-0-0-1` (unparseable peer) or `i-fe80::1` (IPv6 peer). The status is
+  deliberately not the `404` that the `require_vm_identity` refusal returns: the
+  endpoint exists and the request is understood, the service just has nothing
+  true to say.
+- `getClientIP` is removed; the fallback id is built from `LocalIPv4`.
 - A caller that genuinely connects from `127.0.0.1` is unchanged and still
   receives `i-127-0-0-1`.
 - No change to bound callers, to the default configuration, to `local-ipv4`,

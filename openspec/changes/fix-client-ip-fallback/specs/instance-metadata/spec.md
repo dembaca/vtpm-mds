@@ -24,11 +24,11 @@ therefore receives `i-127-0-0-1`. That synthesized id names the connection, not
 an instance, and SHALL NOT be treated as an identity; the setting exists so an
 operator can keep a deployment running while its inventory is completed.
 
-When no VM record is bound, `mds.require_vm_identity` is false and the peer
-address of the connection cannot be parsed, the service SHALL NOT synthesize an
-id and SHALL NOT substitute any address for the one it could not parse. It SHALL
-respond `404` with the body `404 page not found`, byte for byte what the
-catch-all handler returns for an unregistered route.
+When no VM record is bound, `mds.require_vm_identity` is false and the peer of
+the connection has no IPv4 address — its address cannot be parsed, or it is an
+IPv6 address that is not IPv4-mapped — the service SHALL NOT synthesize an id
+and SHALL NOT substitute any address for the one it does not have. It SHALL
+respond `422` with an empty body and `Content-Type: text/plain`.
 
 #### Scenario: Bound caller gets its inventory id
 
@@ -67,8 +67,23 @@ catch-all handler returns for an unregistered route.
 - **GIVEN** `mds.require_vm_identity` is false, a valid session token, and an
   unbound caller whose `RemoteAddr` is `not-an-address`
 - **WHEN** it sends `GET /latest/meta-data/instance-id`
-- **THEN** the service responds `404` with the body `404 page not found`, and in
-  particular never responds `200` with the body `i-127-0-0-1`
+- **THEN** the service responds `422` with an empty body, and in particular
+  never responds `200` with the body `i-127-0-0-1`
+
+#### Scenario: IPv6 peer is not given an id with colons in it
+
+- **GIVEN** `mds.require_vm_identity` is false, a valid session token, and an
+  unbound caller whose peer address is `[fe80::1]:5000`
+- **WHEN** it sends `GET /latest/meta-data/instance-id`
+- **THEN** the service responds `422` with an empty body, and in particular
+  never responds `200` with the body `i-fe80::1`
+
+#### Scenario: IPv4-mapped peer still gets the fallback id
+
+- **GIVEN** `mds.require_vm_identity` is false, a valid session token, and an
+  unbound caller whose peer address is `[::ffff:10.0.0.5]:5000`
+- **WHEN** it sends `GET /latest/meta-data/instance-id`
+- **THEN** the service responds `200` with the body `i-10-0-0-5`
 
 ### Requirement: Serve An Unsigned Instance Identity Document
 
@@ -92,8 +107,8 @@ set.
 
 When no instance id can be derived, as specified by
 `Derive The Instance Id From The Bound VM Record`, the service SHALL NOT serve a
-document with an empty or invented `instanceId`; it SHALL respond `404` with the
-body `404 page not found`.
+document with an empty or invented `instanceId`; it SHALL respond `422` with an
+empty body and `Content-Type: text/plain`.
 
 `GET /latest/dynamic/instance-identity/signature` SHALL respond `200` with
 `Content-Type: text/plain` and the fixed placeholder string
@@ -122,7 +137,7 @@ document's authenticity.
 - **GIVEN** `mds.require_vm_identity` is false, a valid session token, and an
   unbound caller whose `RemoteAddr` is `not-an-address`
 - **WHEN** it sends `GET /latest/dynamic/instance-identity/document`
-- **THEN** the service responds `404` with the body `404 page not found`
+- **THEN** the service responds `422` with an empty body
 
 #### Scenario: Identity signature is a constant placeholder
 
