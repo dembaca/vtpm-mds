@@ -28,7 +28,11 @@ When no VM record is bound, `mds.require_vm_identity` is false and the peer of
 the connection has no IPv4 address — its address cannot be parsed, or it is an
 IPv6 address that is not IPv4-mapped — the service SHALL NOT synthesize an id
 and SHALL NOT substitute any address for the one it does not have. It SHALL
-respond `422` with an empty body and `Content-Type: text/plain`.
+respond `422` with an empty body and `Content-Type: text/plain`. This
+status is deliberately distinct from the `404` that
+`Refuse An Instance Identity To Callers With No VM Record` returns: that
+refusal exists only while `mds.require_vm_identity` is true, whereas this case
+exists only while it is false.
 
 #### Scenario: Bound caller gets its inventory id
 

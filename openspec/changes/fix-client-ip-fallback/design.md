@@ -73,6 +73,16 @@ A caller with no derivable id is answered `422` with an empty body and
   derivable answer, which is a client-side condition, and `500` would page an
   operator for a connection the listener produced.
 
+This leaves two different refusals, on purpose. With `require_vm_identity`
+true an unbound caller gets the byte-exact catch-all `404`, because there
+refusing is a security posture and the caller must not learn which routes carry
+an identity. With it false there is no such posture, and the `422` is
+distinguishable so the operator can see why. `Refuse An Instance Identity To
+Callers With No VM Record` is not modified by this change. Likewise
+`local-ipv4` keeps its maintainer-decided `404` for an IPv6 peer: it is a
+different endpoint with a different question, "what is your address", and the
+two answers are both intended.
+
 The three handlers share one response helper, so the status and body cannot
 drift between them. The body is empty, matching `local-ipv4` and `public-ipv4`
 when no value is available.
