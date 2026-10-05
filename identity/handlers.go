@@ -66,6 +66,10 @@ func HandleIdentity(store *imds.TokenStore) http.HandlerFunc {
 		// refused before this handler runs, by the imds.RequireVMIdentity
 		// wrapper the route is registered with.
 		instanceID := imds.InstanceID(r)
+		if instanceID == "" {
+			imds.WriteInstanceIDUnavailable(w)
+			return
+		}
 		clientIP := imds.LocalIPv4(r)
 		hostname := getHostname(r)
 

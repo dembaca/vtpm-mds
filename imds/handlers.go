@@ -136,6 +136,10 @@ func HandleInstanceID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	instanceID := InstanceID(r)
+	if instanceID == "" {
+		WriteInstanceIDUnavailable(w)
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprint(w, instanceID)
@@ -227,8 +231,14 @@ func HandleInstanceIdentityDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	instanceID := InstanceID(r)
+	if instanceID == "" {
+		WriteInstanceIDUnavailable(w)
+		return
+	}
+
 	doc := map[string]interface{}{
-		"instanceId":         InstanceID(r),
+		"instanceId":         instanceID,
 		"imageId":            "proxmox-unknown",
 		"instanceType":       "vm",
 		"region":             getRegion(r),
@@ -282,10 +292,17 @@ func storeValidatesToken(s *TokenStore, r *http.Request) bool {
 // id of the record the vm-inventory capability bound to the connection.
 //
 // When no record is bound it synthesizes "i-" followed by the connection's
-// peer address with every "." replaced by "-". That path is only reachable
-// with mds.require_vm_identity set to false, because RequireVMIdentity
-// refuses an unbound caller before the handler runs; the synthesized id names
-// the connection, not an instance, and is not an identity.
+// peer IPv4 address with every "." replaced by "-". That path is only
+// reachable with mds.require_vm_identity set to false, because
+// RequireVMIdentity refuses an unbound caller before the handler runs; the
+// synthesized id names the connection, not an instance, and is not an
+// identity.
+//
+// When no record is bound and the peer has no IPv4 address — its address does
+// not parse, or it is an IPv6 address that is not IPv4-mapped — no id can be
+// derived and InstanceID returns the empty string. No address is substituted
+// for the one the peer does not have; callers answer with
+// WriteInstanceIDUnavailable.
 //
 // No request header is consulted, so a caller cannot name itself. This is the
 // one derivation: the identity package calls it rather than keeping a copy.
@@ -296,7 +313,21 @@ func InstanceID(r *http.Request) string {
 		return fmt.Sprintf("i-%s", vmConfig.VMID)
 	}
 
-	return fmt.Sprintf("i-%s", strings.ReplaceAll(getClientIP(r), ".", "-"))
+	ip := LocalIPv4(r)
+	if ip == "" {
+		return ""
+	}
+	return fmt.Sprintf("i-%s", strings.ReplaceAll(ip, ".", "-"))
+}
+
+// WriteInstanceIDUnavailable answers a request for which InstanceID returned
+// the empty string: 422 with an empty text/plain body. It is deliberately not
+// the 404 of RequireVMIdentity — that refusal exists only while
+// mds.require_vm_identity is true, this case only while it is false — and the
+// body is empty, as local-ipv4 and public-ipv4 answer when they have no value.
+func WriteInstanceIDUnavailable(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusUnprocessableEntity)
 }
 
 func getHostname(r *http.Request) string {
@@ -359,17 +390,4 @@ func getRegion(r *http.Request) string {
 
 func getDomain(r *http.Request) string {
 	return "localdomain"
-}
-
-// getClientIP returns the address of the connection's peer. It deliberately
-// consults no request header: the service listens directly on the link-local
-// metadata address with nothing in front of it, so a forwarded-for header is
-// caller-supplied data and never evidence of the caller's address. The branch
-// that preferred it was removed by refuse-unbound-metadata-callers.
-func getClientIP(r *http.Request) string {
-	ip := PeerIP(r.RemoteAddr)
-	if ip == nil {
-		return "127.0.0.1"
-	}
-	return ip.String()
 }
