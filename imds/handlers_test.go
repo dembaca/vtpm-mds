@@ -171,10 +171,12 @@ func TestHandleLocalIPv4_IPv4MappedPeer(t *testing.T) {
 // privateIp behaviour for a peer with no IPv4 address (task 1.2, 3.2):
 // baseline, recorded before this fix, was privateIp == "[fe80". The key
 // must remain present with the empty string, so the document keeps its ten
-// keys.
+// keys. The caller is bound to a VM record: an unbound IPv6 peer has no
+// derivable instance id and is answered 422 instead (see
+// TestUnderivableInstanceID).
 func TestHandleInstanceIdentityDocument_IPv6Peer(t *testing.T) {
 	setupTestStore()
-	req := httptest.NewRequest("GET", "/latest/dynamic/instance-identity/document", nil)
+	req := boundRequest(t, "/latest/dynamic/instance-identity/document", "100")
 	req.RemoteAddr = "[fe80::1]:5000"
 
 	token, _ := store.GenerateToken()
@@ -749,3 +751,118 @@ func setupTestStore() {
 }
 
 
+
+// peersWithoutIPv4 are RemoteAddr values from which no IPv4 address can be
+// taken: unparseable, empty, port-only and a plain IPv6 peer.
+var peersWithoutIPv4 = []string{"not-an-address", "", ":5000", "[fe80::1]:5000"}
+
+// TestUnderivableInstanceID verifies that, with mds.require_vm_identity
+// false and no VM record bound, a peer with no IPv4 address is answered 422
+// with an empty text/plain body by every handler that reports the instance
+// id, and is never served an invented id (tasks 1.1, 1.2, 3.1, 3.2).
+func TestUnderivableInstanceID(t *testing.T) {
+	setupTestStore()
+	mux := newTestMux(false)
+
+	paths := []string{
+		"/latest/meta-data/instance-id",
+		"/latest/dynamic/instance-identity/document",
+	}
+	for _, peer := range peersWithoutIPv4 {
+		for _, path := range paths {
+			req := httptest.NewRequest("GET", path, nil)
+			req.RemoteAddr = peer
+			req.Header.Set("X-Forwarded-For", "10.9.9.9")
+			req.Header.Set("X-Aws-Ec2-Metadata-Token", newToken(t))
+
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Errorf("%s from %q: expected status 422, got %d (body %q)", path, peer, rec.Code, rec.Body.String())
+			}
+			if body := rec.Body.String(); body != "" {
+				t.Errorf("%s from %q: expected empty body, got %q", path, peer, body)
+			}
+			if ct := rec.Header().Get("Content-Type"); ct != "text/plain" {
+				t.Errorf("%s from %q: expected Content-Type text/plain, got %q", path, peer, ct)
+			}
+		}
+	}
+}
+
+// TestInstanceIDDerivation covers InstanceID directly: the empty string means
+// no id could be derived (task 2.2).
+func TestInstanceIDDerivation(t *testing.T) {
+	tests := []struct {
+		remoteAddr string
+		want       string
+	}{
+		{"10.0.0.5:1234", "i-10-0-0-5"},
+		{"127.0.0.1:12345", "i-127-0-0-1"},
+		{"[::ffff:10.0.0.5]:5000", "i-10-0-0-5"},
+		{"10.0.0.5", "i-10-0-0-5"},
+		{"not-an-address", ""},
+		{"", ""},
+		{":5000", ""},
+		{"[fe80::1]:5000", ""},
+	}
+	for _, tc := range tests {
+		req := httptest.NewRequest("GET", "/latest/meta-data/instance-id", nil)
+		req.RemoteAddr = tc.remoteAddr
+		if got := InstanceID(req); got != tc.want {
+			t.Errorf("InstanceID(%q) = %q, want %q", tc.remoteAddr, got, tc.want)
+		}
+	}
+}
+
+// TestIPv4MappedPeerKeepsFallbackID verifies the IPv4-mapped peer is still
+// served its dotted-quad fallback id (task 4.1).
+func TestIPv4MappedPeerKeepsFallbackID(t *testing.T) {
+	setupTestStore()
+	mux := newTestMux(false)
+
+	req := httptest.NewRequest("GET", "/latest/meta-data/instance-id", nil)
+	req.RemoteAddr = "[::ffff:10.0.0.5]:5000"
+	req.Header.Set("X-Aws-Ec2-Metadata-Token", newToken(t))
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "i-10-0-0-5" {
+		t.Errorf("expected 200 'i-10-0-0-5', got %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// TestSignatureServedToPeerWithoutIPv4 verifies the signature endpoint, which
+// derives nothing from the caller, is untouched (task 3.3).
+func TestSignatureServedToPeerWithoutIPv4(t *testing.T) {
+	setupTestStore()
+	mux := newTestMux(false)
+
+	req := httptest.NewRequest("GET", "/latest/dynamic/instance-identity/signature", nil)
+	req.RemoteAddr = "[fe80::1]:5000"
+	req.Header.Set("X-Aws-Ec2-Metadata-Token", newToken(t))
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "dGVzdC1zaWduYXR1cmU=" {
+		t.Errorf("expected 200 'dGVzdC1zaWduYXR1cmU=', got %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// TestUnboundCallerStillRefusedWithNotFoundByDefault verifies the
+// require_vm_identity refusal keeps its 404, deliberately distinct from the
+// 422 above (task 4.2).
+func TestUnboundCallerStillRefusedWithNotFoundByDefault(t *testing.T) {
+	setupTestStore()
+	mux := newTestMux(true)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, unboundRequest(t, "/latest/meta-data/instance-id"))
+
+	if rec.Code != http.StatusNotFound || rec.Body.String() != notFoundBody() {
+		t.Errorf("expected 404 %q, got %d %q", notFoundBody(), rec.Code, rec.Body.String())
+	}
+}

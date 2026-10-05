@@ -335,3 +335,31 @@ func setupTestStore() *imds.TokenStore {
 }
 
 
+
+// TestHandleIdentity_UnderivableInstanceID verifies that, with
+// mds.require_vm_identity false and no record bound, a peer with no IPv4
+// address is answered 422 with an empty text/plain body and no token is signed
+// (tasks 1.3, 3.2).
+func TestHandleIdentity_UnderivableInstanceID(t *testing.T) {
+	store := setupTestStore()
+	handler := imds.RequireVMIdentity(false, store, HandleIdentity(store))
+
+	for _, peer := range []string{"not-an-address", "", ":5000", "[fe80::1]:5000"} {
+		req := httptest.NewRequest("GET", "/latest/identity", nil)
+		req.RemoteAddr = peer
+		req.Header.Set("X-Aws-Ec2-Metadata-Token", newToken(t, store))
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("peer %q: expected status 422, got %d (body %q)", peer, rec.Code, rec.Body.String())
+		}
+		if body := rec.Body.String(); body != "" {
+			t.Errorf("peer %q: expected empty body, got %q", peer, body)
+		}
+		if ct := rec.Header().Get("Content-Type"); ct != "text/plain" {
+			t.Errorf("peer %q: expected Content-Type text/plain, got %q", peer, ct)
+		}
+	}
+}

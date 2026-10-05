@@ -130,8 +130,8 @@ document's authenticity.
 
 #### Scenario: Identity document for a peer with no IPv4 address
 
-- **GIVEN** a valid session token and a caller whose peer address is
-  `[fe80::1]:5000`
+- **GIVEN** a valid session token and a caller bound to VM `100` whose peer
+  address is `[fe80::1]:5000`
 - **WHEN** it sends `GET /latest/dynamic/instance-identity/document`
 - **THEN** the response is `200`, the `privateIp` key is present with the empty
   string as its value, and it is in particular not `[fe80`
