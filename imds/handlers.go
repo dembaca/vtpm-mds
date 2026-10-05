@@ -26,15 +26,14 @@ func SetStore(s *TokenStore) {
 // echo the caller's own request, report its own peer address or serve a fixed
 // string, so none of them asserts an identity the service vouches for.
 //
-// GET /latest/identity is served by the identity package, which imports this
-// one. It is listed here so the refused set lives in one place, as
-// instance-metadata's "Refuse An Instance Identity To Callers With No VM
-// Record" requires.
+// The set lives in one place because instance-metadata's "Refuse An Instance
+// Identity To Callers With No VM Record" enumerates it. It held a fourth entry,
+// GET /latest/identity, until that endpoint and the identity package were
+// removed for answering with a signature no verifier could check.
 var IdentityBearingPaths = []string{
 	"/latest/meta-data/instance-id",
 	"/latest/dynamic/instance-identity/document",
 	"/latest/dynamic/instance-identity/signature",
-	"/latest/identity",
 }
 
 // RequiresVMIdentity reports whether path is one of IdentityBearingPaths, and

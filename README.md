@@ -103,6 +103,8 @@ Create `/etc/vtpm-mds/config.yaml` (see `config.yaml` for the full template):
 ```yaml
 mds:
   listen_addr: "169.254.169.1:80"
+  # jwks_path, attestation_ca and jwt_ttl are still accepted and have no
+  # effect; they belonged to the removed JWT identity path.
   jwks_path: "/var/lib/vtpm-mds/jwks.json"
   attestation_ca: "/etc/vtpm-mds/attestation-ca.pem"
   ek_ca_chain: "/etc/vtpm-mds/ek-chain.pem"
@@ -130,13 +132,14 @@ sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.yaml
 | `/latest/meta-data/*` | GET | Instance metadata tree |
 | `/latest/dynamic/instance-identity/document` | GET | EC2-style instance identity document |
 | `/latest/dynamic/instance-identity/signature` | GET | Detached signature over the document |
-| `/latest/attest/nonce` | GET | Request nonce for a TPM quote |
-| `/latest/attest` | POST | Submit TPM quote for verification |
-| `/latest/identity` | GET | Retrieve signed JWT/JWS identity document |
-| `/.well-known/jwks.json` | GET | Public JWKS for verifiers |
 | `/latest/devid/enroll/start` | POST | Verify CSR, return EK credential challenge |
 | `/latest/devid/enroll/finish` | POST | Verify challenge, issue LDevID PEM |
 | `/health` | GET | Liveness probe (no token required) |
+
+`GET /latest/attest/nonce`, `POST /latest/attest`, `GET /latest/identity` and
+`GET /.well-known/jwks.json` were removed: they reported results they had not
+computed, and the published key set could not verify the token it accompanied.
+See `ARCHITECTURE.md`, "Removed: the attestation and JWT identity path".
 
 **Exact behaviour — authentication, status codes, response shapes and edge cases — is
 specified in [`openspec/specs/`](openspec/specs/):**

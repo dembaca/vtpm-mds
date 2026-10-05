@@ -440,9 +440,9 @@ var metadataRoutes = []struct {
 
 // TestRefusedAndServedPaths drives every registered metadata path from an
 // unbound caller and from a bound one (tasks 3.4, 3.5, 3.7).
-// GET /latest/identity is the fourth refused path; it lives in the identity
-// package, which imports this one, and is covered by
-// identity.TestHandleIdentity_UnboundCallerRefused.
+// There used to be a fourth refused path, GET /latest/identity, covered in the
+// identity package. Both the endpoint and the package were removed; see
+// TestIdentityEndpointIsGone.
 func TestRefusedAndServedPaths(t *testing.T) {
 	setupTestStore()
 	mux := newTestMux(true)
@@ -502,7 +502,6 @@ func TestIdentityBearingPathsIsExactlyTheSpecifiedSet(t *testing.T) {
 		"/latest/meta-data/instance-id",
 		"/latest/dynamic/instance-identity/document",
 		"/latest/dynamic/instance-identity/signature",
-		"/latest/identity",
 	}
 	if len(IdentityBearingPaths) != len(want) {
 		t.Fatalf("expected exactly %d identity-bearing paths, got %d: %v",
@@ -864,5 +863,35 @@ func TestUnboundCallerStillRefusedWithNotFoundByDefault(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound || rec.Body.String() != notFoundBody() {
 		t.Errorf("expected 404 %q, got %d %q", notFoundBody(), rec.Code, rec.Body.String())
+	}
+}
+
+// TestIdentityEndpointIsGone inverts the assertion that /latest/identity is a
+// refused path. It is no longer refused because it no longer exists: the
+// endpoint signed an HS256 JWT under a secret compiled into the binary, while
+// the key set it advertised carried the literal modulus "placeholder-modulus",
+// so no verifier could ever check it. The route, the identity package and the
+// JWKS endpoint were removed together.
+//
+// The test fails if the route is reinstated under either name.
+func TestIdentityEndpointIsGone(t *testing.T) {
+	setupTestStore()
+	mux := newTestMux(true)
+
+	for _, path := range []string{"/latest/identity", "/.well-known/jwks.json"} {
+		if RequiresVMIdentity(path) {
+			t.Errorf("%q is still enumerated as identity-bearing; the endpoint was removed", path)
+		}
+
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, boundRequest(t, path, "100"))
+
+		// Unregistered, so the catch-all answers: a bound caller — who would
+		// have been served a token — gets the same 404 as for any other path
+		// that does not exist.
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s: expected 404 from the catch-all, got %d (is the route registered again?)",
+				path, rec.Code)
+		}
 	}
 }

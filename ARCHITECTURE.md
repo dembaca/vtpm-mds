@@ -18,11 +18,10 @@ private cloud without depending on external cloud IMDS.
 ## Key Goals
 
 - **Cloud-compatible metadata API** — EC2-IMDSv2-compatible endpoint for cloud-init and tooling
-- **TPM-anchored attestation** — verify VM identity using vTPM (swtpm) quotes and EKCerts
+- **TPM-anchored enrollment** — bind an LDevID to a vTPM via EKCert verification and credential activation
 - **TPM DevID provisioning** — modern go-tpm reimplementation of HP-style LDevID enrollment over IMDS HTTP (not gRPC)
-- **Short-lived identity documents (JWT/JWS)** — consumable by SPIRE, Teleport, and Vault
 - **Caller binding** — MAC → inventory for tenant isolation; DevID enroll also requires EK cert auth
-- **Host-anchored trust** — EK CA chain + DevID CA; host TPM sealing for JWT keys (roadmap)
+- **Host-anchored trust** — EK CA chain + DevID CA
 
 ---
 
@@ -31,9 +30,9 @@ private cloud without depending on external cloud IMDS.
 ```
 +-------------------------------------------------------------+
 |                     Control Plane / Consumers               |
-|   SPIRE (tpm_devid / JWT) / Teleport / Vault / K8s          |
+|   SPIRE (tpm_devid) / Teleport (TPM join)                   |
 +-----------------------------▲-------------------------------+
-                              │  JWKS / DevID trust
+                              │  DevID / EK CA trust
                               │
 +-----------------------------│-------------------------------+
 |           QEMU host (Proxmox or plain QEMU lab)             |
@@ -41,8 +40,6 @@ private cloud without depending on external cloud IMDS.
 |  - vtpm-mds:                                     |
 |      • /latest/api/token (IMDSv2)                           |
 |      • /latest/meta-data/* (EC2-compatible)                 |
-|      • /latest/attest/* (TPM attestation)                   |
-|      • /latest/identity (signed JWT/JWS)                    |
 |      • /latest/devid/enroll/{start,finish} (LDevID)         |
 |  - Inventory: YAML path  -or-  Proxmox /etc/pve             |
 |  - nftables/iptables: DNAT 169.254.169.254 → listen addr    |
@@ -70,10 +67,6 @@ private cloud without depending on external cloud IMDS.
 | `/latest/meta-data/*` | GET | Instance metadata tree | EC2-compatible |
 | `/latest/dynamic/instance-identity/document` | GET | EC2-style IID | partial |
 | `/latest/dynamic/instance-identity/signature` | GET | PKCS#7 signature | AWS-incompatible |
-| `/latest/attest/nonce` | GET | Request nonce for TPM quote | attestation |
-| `/latest/attest` | POST | Submit TPM quote + EKCert | attestation |
-| `/latest/identity` | GET | Retrieve signed JWT/JWS identity | attestation |
-| `/.well-known/jwks.json` | GET | Public JWKS for verifiers | attestation |
 | `/latest/devid/enroll/start` | POST | DevID CSR → credential challenge | SPIRE DevID |
 | `/latest/devid/enroll/finish` | POST | Challenge response → LDevID PEM | SPIRE DevID |
 
@@ -103,7 +96,6 @@ Guest client (`cmd/devid-enroll`) performs credential activation locally and wri
 - Each **swtpm_localca** signs EKCerts for vTPMs on that host.
 - **vtpm-mds** verifies EKCerts on DevID enroll, runs TPM credential activation challenge,
   and issues LDevIDs from `devid_ca_*`.
-- JWT path (separate): validates TPM quotes and signs identity JWTs; consumers trust JWKS.
 - SPIRE `tpm_devid`: trusts the DevID CA and verifies residency via TPM blobs.
 
 ---
@@ -122,6 +114,8 @@ Guest client (`cmd/devid-enroll`) performs credential activation locally and wri
 ```yaml
 mds:
   listen_addr: 169.254.169.1:80
+  # jwks_path and attestation_ca are still accepted and have no effect;
+  # they belonged to the removed JWT identity path.
   jwks_path: /var/lib/vtpm-mds/jwks.json
   attestation_ca: /etc/vtpm-mds/attestation-ca.pem
   ek_ca_chain: /etc/vtpm-mds/ek-chain.pem
@@ -138,15 +132,42 @@ See also root `config.yaml` and `scripts/qemu-lab/README.md`.
 
 ---
 
+## Removed: the attestation and JWT identity path
+
+`GET /latest/attest/nonce`, `POST /latest/attest`, `GET /latest/identity` and
+`GET /.well-known/jwks.json` were removed. They answered without checking:
+`POST /latest/attest` replied `{"valid": true, "identity": "attested-identity"}`
+to any request whose nonce matched, with quote verification left as a `TODO`,
+and `/latest/identity` signed `HS256` under a secret compiled into the binary
+while the key set it advertised carried the literal modulus
+`placeholder-modulus` under `alg: RS256`. No verifier could check either.
+
+Real signing keys would not have rescued the design. The service listens on
+`169.254.169.1`, reachable from guests on the IMDS bridge and from the host, so
+a SPIRE server, Vault or Teleport outside cannot fetch the key set at all. The
+shape was borrowed from GCP and Azure, where a provider's JWKS is on the public
+internet; AWS, whose `/latest/` namespace this service imitates, has neither
+`/latest/identity` nor a JWKS.
+
+The two integrations that matter never needed them. SPIRE's `tpm_devid` node
+attestor consumes the DevID PEM and the TPM2B blobs from enrollment. A Teleport
+TPM join reads the EK public key and EKCert from the node's **own** TPM and
+sends them to the Auth Service, which checks `ek_public_hash`,
+`ekcert_allowed_cas` and `ek_certificate_serial` — it contacts no metadata
+service and needs no JWT. Both are DevID or EK paths, and both are unaffected.
+
+`mds.enable_tpm_attestation` is unchanged and now gates DevID enrollment alone.
+`mds.jwt_ttl`, `mds.jwks_path` and `mds.attestation_ca` are still accepted and
+have no effect; `jwt_ttl` never had any.
+
+---
+
 ## Integration Targets
 
 | System | Purpose | Integration |
 |---------|----------|-------------|
 | **SPIRE** | Node attestation via `tpm_devid` | DevID PEM + TPM2B blobs from enroll |
-| **SPIRE** | JWT node/workload path | trust JWKS from vtpm-mds |
 | **Teleport** | TPM join | restrict to EK CA |
-| **Vault** | `auth/jwt` with bound claims | trust JWKS |
-| **Kubernetes** | Node attestation labels | `/identity` JWTs |
 | **Proxmox** | Inventory + hooks for vTPM/EKCert | `/etc/pve` fallback + future hooks |
 | **Plain QEMU** | Lab / non-Proxmox hosts | YAML `inventory_path` |
 
@@ -157,11 +178,11 @@ See also root `config.yaml` and `scripts/qemu-lab/README.md`.
 | Phase | Description | Status |
 |--------|--------------|--------|
 | 1 | Minimal IMDSv2 API with EC2-compatible paths | done |
-| 2 | TPM attestation endpoints | done (hardening ongoing) |
-| 3 | JWT/JWS identity + JWKS | partial |
+| 2 | TPM attestation endpoints | removed — affirmed without verifying |
+| 3 | JWT/JWS identity + JWKS | removed — unreachable key set, see below |
 | 4 | YAML inventory + QEMU lab; Proxmox as backend | done |
 | 5 | TPM DevID enroll (go-tpm) + cloud-init client + EK/MAC auth | done |
-| 6 | Host TPM key sealing for JWT signing | planned |
+| 6 | Host TPM key sealing for JWT signing | dropped with the JWT path |
 | 7 | Proxmox hook integration (`swtpm_localca`) | planned |
 | 8 | End-to-end SPIRE / Vault / Teleport demos | planned |
 

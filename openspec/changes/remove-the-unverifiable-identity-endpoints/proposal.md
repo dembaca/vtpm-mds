@@ -120,6 +120,16 @@ depend on the JWT — SPIRE's JWT path, Vault `auth/jwt`, Kubernetes node labels
 - `imds/handlers_test.go` — the test asserting `/latest/identity` is a
   refused path.
 - `ARCHITECTURE.md` — as listed above.
+- `README.md` — its API endpoint table lists all four removed endpoints, and
+  its configuration example shows `jwks_path` and `attestation_ca`. **Found by
+  task 1.3, not by this section when it was written**; recorded here so the
+  omission is visible rather than quietly repaired. Leaving it would repeat the
+  defect AGENTS.md records, where `README.md` documented flags that no commit
+  contained.
+- `debian/vtpm-mds.8` — the refused-path list in the `require_vm_identity`
+  entry names `/latest/identity` as its fourth path. Same omission, same
+  source.
+- `config.yaml` — the same refused-path list in a comment.
 - `openspec/specs/workload-identity/spec.md` — removed at archive time.
 - Any operator whose `config.yaml` sets `jwt_ttl`, `jwks_path` or
   `attestation_ca`: the keys keep loading and keep doing nothing. `jwt_ttl`

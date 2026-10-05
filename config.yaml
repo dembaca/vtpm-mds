@@ -17,8 +17,8 @@ mds:
   host_tpm_device: "/dev/tpmrm0"
   signing_key_path: "/var/lib/vtpm-mds/signing-key.pem"
   # Refuse a caller the inventory could not bind to a VM record at the
-  # endpoints that report its instance identity: /latest/meta-data/instance-id,
-  # both /latest/dynamic/instance-identity/ endpoints and /latest/identity.
+  # endpoints that report its instance identity: /latest/meta-data/instance-id
+  # and both /latest/dynamic/instance-identity/ endpoints.
   # The refusal is a 404 indistinguishable from an unknown route, and is
   # logged with the caller's peer address. The rest of the metadata tree,
   # PUT /latest/api/token and /health stay available to an unbound caller.

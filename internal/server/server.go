@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dembaca/vtpm-mds/attest"
-	"github.com/dembaca/vtpm-mds/identity"
 	"github.com/dembaca/vtpm-mds/imds"
 	"github.com/dembaca/vtpm-mds/internal/config"
 	"github.com/dembaca/vtpm-mds/internal/devid"
@@ -27,7 +25,6 @@ type Server struct {
 	httpServer *http.Server
 	cfg        *config.Config
 	tokenStore *imds.TokenStore
-	nonceStore *attest.NonceStore
 	devid      *devid.Enroller
 }
 
@@ -35,7 +32,6 @@ func New(cfg *config.Config) (*Server, error) {
 	srv := &Server{
 		cfg:        cfg,
 		tokenStore: imds.NewTokenStore(cfg),
-		nonceStore: attest.NewNonceStore(),
 	}
 
 	activeServerMu.Lock()
@@ -49,8 +45,6 @@ func New(cfg *config.Config) (*Server, error) {
 
 	// Initialize handlers with stores
 	imds.SetStore(srv.tokenStore)
-	attest.SetStore(srv.nonceStore)
-	identity.SetStore(srv.tokenStore)
 
 	mux := http.NewServeMux()
 
@@ -88,13 +82,11 @@ func New(cfg *config.Config) (*Server, error) {
 		handle("GET /latest/dynamic/instance-identity/signature", imds.HandleInstanceIdentitySignature)
 	}
 
-	// TPM attestation endpoints
+	// DevID enrollment. The setting is still named enable_tpm_attestation
+	// because renaming a configuration key is a migration of its own; the
+	// attestation and JWT identity endpoints it also used to gate were
+	// removed, so today it gates enrollment alone.
 	if cfg.MDS.EnableTPMAttestation {
-		mux.HandleFunc("GET /latest/attest/nonce", attest.HandleNonce)
-		mux.HandleFunc("POST /latest/attest", attest.HandleAttest)
-		handle("GET /latest/identity", identity.HandleIdentity(srv.tokenStore))
-		handle("GET /.well-known/jwks.json", identity.HandleJWKS)
-
 		if enroller, err := loadDevIDEnroller(cfg); err != nil {
 			log.Printf("Warning: DevID enrollment disabled: %v", err)
 		} else if enroller != nil {
