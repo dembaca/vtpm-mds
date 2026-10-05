@@ -46,10 +46,9 @@ Default
 A caller whose connection the VM inventory could not bind to a VM record is
 refused at the endpoints that report its instance identity:
 .IR /latest/meta\-data/instance\-id ,
-.IR /latest/dynamic/instance\-identity/document ,
-.I /latest/dynamic/instance\-identity/signature
+.I /latest/dynamic/instance\-identity/document
 and
-.IR /latest/identity .
+.IR /latest/dynamic/instance\-identity/signature .
 The refusal is
 .B 404
 with the body an unknown route returns, so the caller cannot tell the two
