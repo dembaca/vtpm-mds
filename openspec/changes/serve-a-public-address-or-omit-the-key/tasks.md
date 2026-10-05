@@ -2,16 +2,16 @@
 
 Nothing is ticked: this is a planning record, no code has been touched.
 
-**Blocked before task 2.** The open question in `design.md` — *where does the
-address come from* — decides whether sections 2 and 3 exist at all. If the
-maintainer picks option D (leave it unimplemented), this change shrinks to
-section 4 plus the index half of section 5, and the spec delta must be
-rewritten to say the key never appears rather than appearing conditionally.
+**No longer blocked.** The open question in `design.md` — *where does the
+address come from* — was answered by the maintainer on 2026-10-05: **option A**,
+an operator-declared per-VM value in the inventory. Sections 2 and 3 stand as
+written, and the spec delta needs no change because it was written for that
+option.
 
-**Ordering.** Apply **after** `fix-client-ip-fallback`, which edits
-`imds/handlers.go`. Different functions — `getPublicIP` and
-`HandleMetaDataIndex` here, `getClientIP` and `InstanceID` there — so the
-conflict is mechanical, but the two must not be implemented in parallel.
+**Ordering.** The prerequisite is met: `fix-client-ip-fallback` was implemented
+and merged as PR #20 (`main` at `396b05f`), and it left `getPublicIP` and
+`HandleMetaDataIndex` untouched. This change is free to proceed against that
+tree.
 
 ## 1. Record the baseline
 
@@ -24,10 +24,10 @@ conflict is mechanical, but the two must not be implemented in parallel.
 
 ## 2. Add the source — blocked on the maintainer's choice
 
-- [ ] 2.1 **Blocked**: record the maintainer's answer to the source question here before writing code, and verify the chosen option matches what the spec delta already says
-      The delta is written for option A (an operator-declared per-VM value).
-      Options B and C change the delta's wording about what the service may
-      derive; option D removes the conditional listing entirely.
+- [ ] 2.1 Verify the implementation reads the address from the bound VM record and from nowhere else — the maintainer chose option A on 2026-10-05, an operator-declared per-VM value
+      Answered, so this task is a check rather than a decision. Options B
+      (Proxmox `ipconfig0`) and C (guest agent) were rejected because a public
+      address is not something this service can observe; see `design.md`.
 - [ ] 2.2 Implement the chosen source and verify a VM with a declared address serves it while a VM without one still answers `404` with an empty body
       For option A, `VMConfig.RawConfig` already exists and is documented as
       "Optional key/value metadata", so no struct change is needed.

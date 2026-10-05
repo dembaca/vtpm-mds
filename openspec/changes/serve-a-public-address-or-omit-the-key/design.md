@@ -69,9 +69,21 @@ a `text/plain` metadata key is indistinguishable from a truncated response, and
 `local-ipv4` already answers `404` for the analogous "no IPv4 address" case.
 Two keys with the same question should not have two different answers.
 
-## Open question for the maintainer — this is the one that matters
+## Decided by the maintainer on 2026-10-05: option A, the inventory field
 
-**Where does the address come from?** Four candidates, with what each costs.
+**Where does the address come from?** This was the open question; it is now
+answered. The maintainer chose **option A**, an operator-declared per-VM value
+in the inventory. The four candidates and the reasoning are kept below, because
+the reasons a thing was *not* chosen are what stop it being re-proposed.
+
+Consequences, now binding rather than recommended:
+
+- The address is read from the bound VM record, not derived from anything the
+  service observes.
+- `tasks.md` section 2 is unblocked and implements this option.
+- The spec delta needs no change: it was written for option A.
+
+**Four candidates, with what each costs.**
 
 ### A. An explicit inventory field — *recommended*
 
@@ -112,22 +124,22 @@ Parse `ipconfig0` from `/etc/pve/qemu-server/<vmid>.conf`.
   a synchronous call into the guest, which is a new failure and latency mode on
   a path that currently touches nothing but a cache. Recommended against.
 
-### D. Leave it unimplemented and drop the key from the index
+### D. Leave it unimplemented and drop the key from the index — not chosen
 
 The honest minimum if no deployment has public addresses.
 
 - **For:** smallest change; nothing can be stale or wrong.
 - **Against:** closes the feature. See the decision above.
 
-**Recommendation: A**, with the value read from `RawConfig["public-ipv4"]` so
+**Chosen: A** (recommended here, confirmed by the maintainer), with the value read from `RawConfig["public-ipv4"]` so
 no struct change is needed, validated as an IPv4 address at load time, and the
 load failing loudly on a malformed value in the manner
 `fail-fast-on-unusable-configuration` established. If the maintainer prefers
 D, this change shrinks to the index line and `tasks.md` loses sections 2 and 3.
 
-**Not for me to decide**, and recorded here rather than guessed, in the same
-way the `422`, the IPv6 treatment and the LDevID subject were decided by the
-maintainer.
+This followed the same route as the `422`, the IPv6 treatment and the LDevID
+subject: proposed with reasons, decided by the maintainer, recorded here rather
+than guessed.
 
 ## Second open question
 
