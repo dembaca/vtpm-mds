@@ -141,13 +141,31 @@ Installing the host package now reloads the systemd manager, so an installed
 unit is the unit systemd runs, and the documented `dpkg -i` names one package
 instead of globbing.
 
-The agent user cannot build a `.deb`: `dpkg-buildpackage` needs
-`dpkg --print-architecture` and `/usr/local/sbin/hogan-lab` allows only
-`dpkg -i`. It can install one and inspect it with `dpkg-deb`, so packaging work
-splits into a source half here and a build-and-verify half for the maintainer.
-`make deb-local` run as root leaves `.deb-build/` root-owned, which blocks the
-next build by another user — `sudo rm -rf .deb-build` first, or override
-`DEB_STAGE`.
+The agent user **can** build a `.deb`. An earlier version of this file said it
+could not, because `dpkg-buildpackage` needs `dpkg --print-architecture`; both
+the conclusion and the cause were wrong. `/usr/bin/dpkg --print-architecture`
+answers `amd64` for this user and always did. What refused it was `~/bin/dpkg`,
+a PATH wrapper that forwarded only `dpkg -i` and rejected everything else — so
+packaging was never split between a source half here and a build half for the
+maintainer, it only looked that way. Since 2026-10-16 that wrapper passes
+read-only queries through as well, which also restores the `dpkg -l vtpm-mds`
+this file asks for as evidence. Options that change state, other than `-i`, are
+still refused; the real boundary is the sudoers entry, which grants nothing but
+`/usr/local/sbin/hogan-lab`.
+
+The second half of the blocker was `.deb-build/` left root-owned by a
+`make deb-local` run as root. Its Go module cache has `0555` root-owned
+directories, so the Makefile's own `chmod -R u+w` cannot help — the agent is not
+the owner — and the `rm -rf` before it fails. That directory has been removed.
+**Do not run `make deb-local` as root inside the checkout**; if it must be root,
+pass a `DEB_STAGE` outside the checkout and `chown` the result back to
+`coding-agent`.
+
+`scripts/deb-local.sh` stamps the version `.dirty` whenever
+`git status --porcelain` is non-empty, and untracked files count — an untracked
+`.envrc` alone is enough. Move such a file aside for the build if the version
+has to identify the tree exactly; the version string is fixed when the script
+starts, so putting it back mid-build is safe.
 
 Two defects are found, reproduced and still unwritten; each needs its own
 change before anyone touches them, and both live in `imds/handlers.go` (one
@@ -317,15 +335,26 @@ each before anyone touches them:
   — a made-up identity, in the one mode where unbound callers are served at
   all.
 
-One thing needs root on the lab host, so it needs the maintainer:
+Two things used to need the maintainer and no longer do. A root session widened
+`/usr/local/sbin/hogan-lab` on 2026-10-16:
 
-- `/usr/local/sbin/hogan-lab` whitelists only `dist/vtpm-mds_*.deb` for
-  `dpkg-install`, so the guest package cannot be installed through the wrapper.
-  Its argument loop also assigns every `*.deb` it is handed to one variable, so
-  a caller whose shell expanded that glob to several files installs the last
-  one silently — the same ambiguity
-  `make-host-package-install-deterministic` removed from the repository, still
-  present in the wrapper.
+- `dpkg-install` accepts `dist/{vtpm-mds,devid-enroll}_*.deb`, so the guest
+  package installs through the wrapper too. It also refuses more than one
+  `.deb` instead of silently installing the last match of an expanded glob —
+  the same ambiguity `make-host-package-install-deterministic` removed from the
+  repository.
+- `hogan-lab qm fresh-tpm 399` replaces VM 399's vTPM with an empty one. It
+  requires the VM to be stopped, and it detaches the old state volume rather
+  than deleting it, so that volume stays as `unusedN` and a wrong call is
+  recoverable. Clearing it out is a human decision. Item 6 task 4.2 needs a vTPM
+  that has never enrolled: on a reused one the dictionary-attack lockout trips
+  and the failure reads as a regression in the daemon.
+
+Know what `dpkg-install` is: a path allowlist, not a content one. `dist/` is
+writable by `coding-agent` and `dpkg -i` runs maintainer scripts as root, so
+anything placed there under a matching name is root code. That has always been
+true of this wrapper, and it is accepted for this host, where the agent user
+builds the package anyway — a documented property rather than an oversight.
 
 `openspec init` has been run — see
 `openspec/changes/initialize-openspec-agent-tooling/`. It needed no root: the
@@ -340,7 +369,12 @@ The Proxmox lab host is `hogan.bgl.dembach.org`; the checkout is
 `/usr/local/src/vtpm-mds`. The daemon under test must come from a git-stamped
 package (`make deb-local`, then `dpkg -i --force-confold`), never from
 `make build`, so `dpkg -l vtpm-mds` and `vtpm-mds -version` identify exactly
-which tree is running. There is no passwordless sudo for the agent user.
+which tree is running. The agent user has no general sudo: its single
+`NOPASSWD` entry is `/usr/local/sbin/hogan-lab`, whose allowlist is the whole
+of what it may do as root. `~/bin/` holds thin forwarders — `qm`, `systemctl`,
+`nft`, `dpkg-lab-install` — so those names on `PATH` are the wrapper, not the
+real tool. Reading the journal needs no sudo: the user is in
+`systemd-journal`.
 
 The OpenSpec CLI is installed here — `/usr/local/bin/openspec` with node in
 `/usr/bin/node` — so `openspec validate --all --strict` runs on this host. An
