@@ -1,0 +1,7 @@
+schema: spec-driven
+created: 2026-10-05
+# This change removes every requirement the workload-identity capability has, so
+# archiving retires the capability and deletes its spec rather than leaving an
+# empty one behind. Task 7.4 asks for exactly that; without this flag the CLI
+# refuses the archive with "Spec must have at least one requirement".
+retire_capabilities: true

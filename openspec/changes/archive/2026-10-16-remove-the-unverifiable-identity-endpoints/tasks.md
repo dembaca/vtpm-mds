@@ -260,4 +260,26 @@ deletion an explicit, reviewable conflict.
       does not exist, so a silent run proves nothing on its own.
       Tasks 2.2, 3.4 and 4.2 were then re-run against the installed daemon and
       carry their own evidence above.
-- [ ] 7.4 Archive the change — move the three deltas into `openspec/specs/`, **delete** `openspec/specs/workload-identity/spec.md` rather than leaving an empty capability, move this directory under `openspec/changes/archive/`, update the `README.md` status table — and verify `openspec validate --all --strict` is still clean afterwards and `openspec/specs/` no longer contains `workload-identity`
+- [x] 7.4 Archive the change — move the three deltas into `openspec/specs/`, **delete** `openspec/specs/workload-identity/spec.md` rather than leaving an empty capability, move this directory under `openspec/changes/archive/`, update the `README.md` status table — and verify `openspec validate --all --strict` is still clean afterwards and `openspec/specs/` no longer contains `workload-identity`
+      **Done** 2026-10-16, after `fix-client-ip-fallback` was archived first —
+      both carried an `instance-metadata` delta, so the order decides which
+      text survives.
+      Archived with the CLI rather than by hand: `openspec archive
+      remove-the-unverifiable-identity-endpoints -y` reported
+      `instance-metadata: ~ 1 modified`, `vm-inventory: ~ 1 modified`,
+      `Retiring openspec/specs/workload-identity/spec.md: all requirements
+      removed`, `Totals: + 0, ~ 2, - 4, → 0`.
+      **The capability deletion needed a step this task did not know about.**
+      The first attempt aborted with `Spec must have at least one requirement`
+      and wrote nothing; the CLI named the remedy itself, so this change gained
+      a `.openspec.yaml` carrying `retire_capabilities: true` beside its
+      `schema:`. That flag is what turns "every requirement removed" into
+      "capability retired" instead of an error — worth knowing for the next
+      change that empties a capability.
+      Afterwards: `openspec validate --all --strict` → `Totals: 5 passed, 0
+      failed`; `openspec/specs/` holds `debian-packaging`, `devid-enrollment`,
+      `instance-metadata`, `operability`, `vm-inventory` and **no**
+      `workload-identity`; `openspec/changes/` holds only `archive/`.
+      `README.md`'s status table had gone stale in a way task 1.3 did not
+      catch: two rows still read "endpoints present", which stopped being true
+      when the routes went. Both now say removed, with the reason.

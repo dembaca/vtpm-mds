@@ -322,8 +322,6 @@ Handlers that require a VM identity SHALL refuse the request:
   `instance-id` and instance identity document endpoints — SHALL refuse an
   unbound caller as specified by `instance-metadata`, which also enumerates
   those paths and defines the one configuration setting that relaxes the rule.
-- `GET /latest/identity` SHALL refuse an unbound caller as specified by
-  `workload-identity`.
 
 Handlers that report nothing about the caller's instance SHALL NOT refuse it.
 The remaining metadata paths echo the caller's own request, report its own peer
