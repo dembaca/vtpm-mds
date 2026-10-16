@@ -107,10 +107,14 @@ committed everything and the proposals and designs were untouched on both.
   has a site CA named in `/etc/swtpm_setup.conf` and `pve-edk2-firmware`. A run
   that only covers one of those should say which.
 
-## Known gaps, and the queue as of 2026-09-20
+## Known gaps, and the queue as of 2026-10-16
 
-Items 1 to 5 below are **implemented, verified and archived**. The queue's
-first five entries are closed.
+All six numbered entries below are **implemented, verified and archived** —
+item 6 as a removal rather than an implementation, which is what the analysis
+under it concluded. What is left of the queue is the two unnumbered defects
+further down: `public-ipv4`, whose change record is written and waiting to be
+implemented, and the vTPM dictionary-attack lockout, whose record is written
+and waiting for a maintainer go.
 
 Verification used the real Proxmox stack rather than the QEMU lab wherever it
 could: VM **399** (`vtpm-pilot`) on `vmbr_imds` with MAC `bc:24:11:06:1d:b2`
@@ -120,15 +124,23 @@ host itself, which has no ARP entry for its own address, serves as an unbound
 caller without needing a netns. Prefer both to `scripts/qemu-lab/`, which
 cannot run here — see the warning below.
 
-Item 6 is still unwritten. Write a proposal, design, tasks and spec delta for it
-before touching code — do not fix it inline. Its design decisions — signing key
-type, where the key lives, rotation, which PCRs a quote must cover — belong to
-the maintainer; explore and propose, do not settle them alone.
+Item 6 was written, implemented and archived on 2026-10-16, as a **removal**:
+`openspec/changes/archive/2026-10-16-remove-the-unverifiable-identity-endpoints/`.
+Its design decisions — signing key type, key location, rotation, which PCRs a
+quote must cover — never had to be settled, because the conclusion was that
+nothing should consume them. The analysis is kept under item 6 so it is not
+re-derived.
 
-### Open changes as of 2026-10-03
+### Open changes as of 2026-10-16
 
-None. `openspec/changes/` holds only `archive/`. Everything specified has
-shipped and been verified; what remains unwritten is listed above and below.
+One: `openspec/changes/serve-a-public-address-or-omit-the-key/`, the
+`public-ipv4` defect. Written, validated, **0 of 15 tasks done** — a
+planning-only record, ready for whoever picks it up. It replaces
+`Serve The EC2 Metadata Tree` via `REMOVED` + `ADDED` because two of its
+scenarios invert; that requirement is byte-identical before and after the
+2026-10-16 archives, so the delta still applies.
+
+Everything else specified has shipped and been verified.
 
 The split that got there is worth keeping: the cloud lab agents verified what
 needs a lab, this host verified what needs the Proxmox stack, and three tasks
@@ -167,16 +179,24 @@ pass a `DEB_STAGE` outside the checkout and `chown` the result back to
 has to identify the tree exactly; the version string is fixed when the script
 starts, so putting it back mid-build is safe.
 
-Two defects are found, reproduced and still unwritten; each needs its own
-change before anyone touches them, and both live in `imds/handlers.go` (one
-also in `identity/handlers.go`), so they are a third disjoint set:
+Three defects were found and reproduced here. Two now have records and one is
+implemented; they live in `imds/handlers.go` and in `scripts/qemu-lab/`, so they
+stay a disjoint set from product work elsewhere:
 
 - `GET /latest/meta-data/public-ipv4` always answers `404` because
   `getPublicIP` is an unimplemented `TODO`. Where the address should come from
   is an open question, not just an implementation.
+  → **record written, not implemented**:
+  `openspec/changes/serve-a-public-address-or-omit-the-key/`.
 - `imds.getClientIP` falls back to the literal `"127.0.0.1"` when `PeerIP`
   cannot parse `RemoteAddr`, so with `mds.require_vm_identity: false` an
   unparseable peer is served the invented id `i-127-0-0-1`.
+  → **fixed and archived** 2026-10-16, verified against the installed
+  git-stamped package on the real Proxmox stack:
+  `openspec/changes/archive/2026-10-16-fix-client-ip-fallback/`. The
+  `127.0.0.1` opt-out path is covered by unit tests only — the daemon listens
+  on `169.254.169.1:80` alone, so no connection here ever arrives with that
+  peer.
 - Reusing one guest vTPM across `scripts/qemu-lab/e2e-devid-guest.sh` runs can
   end in TPM dictionary-attack lockout: a run on a reused vTPM failed with
   `Certify: ... DA lockout mode`, and after a single successful run on a fresh
@@ -219,8 +239,10 @@ merge). Everything else is independent.
    → **fixed and archived** 2026-10-03, verified against VM 399 and an
    unbound host caller on the real Proxmox stack:
    `openspec/changes/archive/2026-10-03-refuse-unbound-metadata-callers/`.
-   Adds `mds.require_vm_identity` (default true) and the `workload-identity`
-   capability for `/latest/identity`.
+   Adds `mds.require_vm_identity` (default true). It also added a
+   `workload-identity` capability for `/latest/identity`; item 6 retired both
+   on 2026-10-16, so `identity/handlers.go` and that capability no longer
+   exist. `mds.require_vm_identity` stays.
 4. **A clean stop leaves the unit failed**: `main.go` calls `log.Fatalf` on the
    error from `srv.Start()`, including `http.ErrServerClosed`, so every
    `systemctl stop`/`restart` exits 1 and ends in `failed`. Verified on 0.2.0.
@@ -238,7 +260,11 @@ merge). Everything else is independent.
 6. **Probably remove rather than implement: the attest and JWT identity path.**
    Deferred 2026-10-03 — not relevant to the two use cases that matter (SPIRE
    via `tpm_devid`, Teleport via TPM join). Written up here so the analysis is
-   not repeated; **no change record yet, deliberately**.
+   not repeated. **Written, implemented and archived on 2026-10-16** as the
+   removal this analysis argued for:
+   `openspec/changes/archive/2026-10-16-remove-the-unverifiable-identity-endpoints/`.
+   The `workload-identity` capability was retired with it, so
+   `openspec/specs/` no longer carries it.
 
    This was queued as "implement TPM quote verification and real signing keys
    for the identity JWTs". Looking at it with the maintainer, that is the wrong
@@ -307,8 +333,9 @@ order rather than by design. Run the QEMU lab on the cloud lab host. The same
 goes for `e2e-netns.sh`: it expects `i-100` for the lab YAML inventory, while
 `hogan` resolves callers from `/etc/pve`.
 
-Eight tooling defects surfaced while implementing and verifying the above, and
-are now written up as three changes — none of them implemented:
+Eight tooling defects surfaced while implementing and verifying the above. They
+were written up as three changes, and **all three are implemented and
+archived** (2026-10-03):
 
 - `make-host-package-install-deterministic` — `README.md` documents an
   ambiguous `dpkg -i dist/vtpm-mds_*.deb`, and the host package's `postinst`
