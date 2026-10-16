@@ -42,11 +42,6 @@ bound to the connection, the service SHALL respond `404` with an empty body and
 `Content-Type: text/plain`. That response SHALL stay distinct from the
 catch-all handler's `404 page not found`, which carries a body.
 
-
-`GET /latest/meta-data/public-ipv4` SHALL respond `404` with an empty body and
-`Content-Type: text/plain` for every caller, because no source of a public
-address is implemented. The path SHALL nonetheless remain listed in the index.
-
 The metadata index SHALL be registered as a subtree, so any path under
 `/latest/meta-data/` that is not one of the registered keys SHALL be answered by
 the index handler with `200` and the index listing rather than `404`. This
@@ -70,7 +65,6 @@ includes the `placement/` and `services/` prefixes that the index advertises.
   public address is `203.0.113.7`
 - **WHEN** it sends `GET /latest/meta-data/`
 - **THEN** the service responds `200` and the listing contains `public-ipv4`
-
 
 #### Scenario: Local address reflects the connection
 
@@ -114,7 +108,6 @@ includes the `placement/` and `services/` prefixes that the index advertises.
 - **WHEN** it sends `GET /latest/meta-data/public-ipv4`
 - **THEN** the service responds `404` with an empty body, and in particular
   never serves the caller's own peer address
-
 
 #### Scenario: Unknown metadata key returns the index
 

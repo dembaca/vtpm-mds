@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -892,6 +893,162 @@ func TestIdentityEndpointIsGone(t *testing.T) {
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("%s: expected 404 from the catch-all, got %d (is the route registered again?)",
 				path, rec.Code)
+		}
+	}
+}
+
+// declaringRequest is boundRequest with a declared public address in the VM
+// record's raw configuration, which is the only source PublicIPv4 reads.
+func declaringRequest(t *testing.T, path, vmid, publicIP string) *http.Request {
+	t.Helper()
+	req := unboundRequest(t, path)
+	return req.WithContext(context.WithValue(req.Context(),
+		inventory.VMConfigContextKey, &inventory.VMConfig{
+			VMID:      vmid,
+			RawConfig: map[string]string{"public-ipv4": publicIP},
+		}))
+}
+
+func indexLines(t *testing.T, req *http.Request) []string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	HandleMetaDataIndex(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("index: expected 200, got %d", rec.Code)
+	}
+	var out []string
+	for _, l := range strings.Split(rec.Body.String(), "\n") {
+		if l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// TestIndexListsPublicIPv4OnlyWhenDeclared covers the delta's two index
+// scenarios. The index is the first metadata value that depends on which VM is
+// asking, so the point is the difference between the two listings, not either
+// one alone.
+func TestIndexListsPublicIPv4OnlyWhenDeclared(t *testing.T) {
+	setupTestStore()
+	always := []string{"instance-id", "local-hostname", "local-ipv4", "placement/", "services/"}
+
+	undeclared := indexLines(t, boundRequest(t, "/latest/meta-data/", "100"))
+	if len(undeclared) != 5 {
+		t.Errorf("no declared address: expected 5 lines, got %d: %v", len(undeclared), undeclared)
+	}
+	for _, k := range always {
+		if !slices.Contains(undeclared, k) {
+			t.Errorf("no declared address: %q missing from the index: %v", k, undeclared)
+		}
+	}
+	if slices.Contains(undeclared, "public-ipv4") {
+		t.Errorf("no declared address: public-ipv4 must not be listed: %v", undeclared)
+	}
+
+	declared := indexLines(t, declaringRequest(t, "/latest/meta-data/", "100", "203.0.113.7"))
+	if len(declared) != 6 {
+		t.Errorf("declared address: expected 6 lines, got %d: %v", len(declared), declared)
+	}
+	if !slices.Contains(declared, "public-ipv4") {
+		t.Errorf("declared address: public-ipv4 must be listed: %v", declared)
+	}
+	for _, k := range always {
+		if !slices.Contains(declared, k) {
+			t.Errorf("declared address: %q missing from the index: %v", k, declared)
+		}
+	}
+}
+
+// TestIndexIsRenderedPerRequest is the delta's "SHALL NOT be cached across
+// callers" clause: two different VMs read the index in the same process and
+// must get different listings. Nothing caches it today; this test exists so
+// that stays true.
+func TestIndexIsRenderedPerRequest(t *testing.T) {
+	setupTestStore()
+	withAddr := indexLines(t, declaringRequest(t, "/latest/meta-data/", "100", "203.0.113.7"))
+	without := indexLines(t, boundRequest(t, "/latest/meta-data/", "101"))
+	again := indexLines(t, declaringRequest(t, "/latest/meta-data/", "100", "203.0.113.7"))
+
+	if slices.Equal(withAddr, without) {
+		t.Errorf("the two callers got identical listings, so the index is not caller-dependent: %v", withAddr)
+	}
+	if !slices.Equal(withAddr, again) {
+		t.Errorf("the same caller got two different listings: %v then %v", withAddr, again)
+	}
+}
+
+// TestUnboundCallerStillGetsAnIndex is task 3.3: the index asserts no identity,
+// so RequireVMIdentity deliberately leaves it open. An unbound caller must get
+// a listing, without public-ipv4, rather than a refusal.
+func TestUnboundCallerStillGetsAnIndex(t *testing.T) {
+	setupTestStore()
+	lines := indexLines(t, unboundRequest(t, "/latest/meta-data/"))
+	if len(lines) != 5 {
+		t.Errorf("unbound caller: expected 5 lines, got %d: %v", len(lines), lines)
+	}
+	if slices.Contains(lines, "public-ipv4") {
+		t.Errorf("unbound caller: public-ipv4 must not be listed: %v", lines)
+	}
+}
+
+// TestPublicIPv4IsNeverDerivedFromTheConnection is the one way this change
+// could go wrong without any other test failing: quietly falling back to the
+// peer address would look correct in a lab where the two happen to match.
+func TestPublicIPv4IsNeverDerivedFromTheConnection(t *testing.T) {
+	setupTestStore()
+
+	req := boundRequest(t, "/latest/meta-data/public-ipv4", "100")
+	req.RemoteAddr = "203.0.113.7:5000"
+	rec := httptest.NewRecorder()
+	HandlePublicIPv4(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("peer 203.0.113.7, nothing declared: expected 404, got %d", rec.Code)
+	}
+	if body := rec.Body.String(); body != "" {
+		t.Errorf("expected an empty body, got %q", body)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/plain" {
+		t.Errorf("expected Content-Type text/plain, got %q", ct)
+	}
+
+	// A forwarded-for header must not reach it either.
+	req = boundRequest(t, "/latest/meta-data/public-ipv4", "100")
+	req.Header.Set("X-Forwarded-For", "203.0.113.9")
+	rec = httptest.NewRecorder()
+	HandlePublicIPv4(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("X-Forwarded-For set, nothing declared: expected 404, got %d", rec.Code)
+	}
+}
+
+// TestPublicIPv4ServesTheDeclaredAddress covers the delta's two public-ipv4
+// scenarios, and that a malformed or non-IPv4 declaration is treated as absent
+// rather than served.
+func TestPublicIPv4ServesTheDeclaredAddress(t *testing.T) {
+	setupTestStore()
+
+	rec := httptest.NewRecorder()
+	HandlePublicIPv4(rec, declaringRequest(t, "/latest/meta-data/public-ipv4", "100", "203.0.113.7"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("declared address: expected 200, got %d", rec.Code)
+	}
+	if body := rec.Body.String(); body != "203.0.113.7" {
+		t.Errorf("declared address: expected body 203.0.113.7, got %q", body)
+	}
+
+	for _, bad := range []string{"not-an-address", "2001:db8::1", "203.0.113.7/32", "203.0.113.999", " "} {
+		rec := httptest.NewRecorder()
+		HandlePublicIPv4(rec, declaringRequest(t, "/latest/meta-data/public-ipv4", "100", bad))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("declared %q: expected 404, got %d", bad, rec.Code)
+		}
+		if body := rec.Body.String(); body != "" {
+			t.Errorf("declared %q: expected an empty body, got %q", bad, body)
+		}
+		lines := indexLines(t, declaringRequest(t, "/latest/meta-data/", "100", bad))
+		if slices.Contains(lines, "public-ipv4") {
+			t.Errorf("declared %q: must not be advertised in the index: %v", bad, lines)
 		}
 	}
 }
