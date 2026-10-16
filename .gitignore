@@ -37,6 +37,10 @@ config.local.yaml
 *.pem
 *.key
 
+# Local environment (direnv). Untracked files make scripts/deb-local.sh stamp
+# every build .dirty, so this one has to be ignored rather than merely absent.
+.envrc
+
 # Debian build artifacts
 debian/prox-mds
 debian/vtpm-mds
