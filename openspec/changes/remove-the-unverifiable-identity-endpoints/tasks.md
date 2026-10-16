@@ -5,8 +5,8 @@ Implemented on 2026-10-05 against `main` at `396b05f`. Both open questions in
 endpoints **stay** (task 5.1), and nothing outside the repository is known to
 call the removed endpoints.
 
-Three tasks are **deliberately left unticked** — 3.4, 4.2 and 7.3. All three
-need a git-stamped `.deb`, and the agent user cannot build one:
+Four tasks are **deliberately left unticked** — 2.2, 3.4, 4.2 and 7.3. All
+four need a git-stamped `.deb`, and the agent user cannot build one:
 `dpkg-buildpackage` needs `dpkg --print-architecture` and
 `/usr/local/sbin/hogan-lab` allows only `dpkg -i`. They belong to the
 maintainer. Saying so is better than implying they ran.
@@ -69,17 +69,24 @@ deletion an explicit, reviewable conflict.
       `identity.SetStore` from `internal/server/server.go`. `go build ./...`
       exits 0. The only surviving `attest` matches are `internal/devid`'s own
       `attestData` and `CheckAKProp`, which are DevID residency checks.
-- [x] 2.2 Verify `GET /latest/attest/nonce` and `POST /latest/attest` now answer `404` with the body `404 page not found`, byte for byte identical to `GET /latest/no-such-thing`
+- [ ] 2.2 **Half done, needs the package** — verify `GET /latest/attest/nonce` and `POST /latest/attest` now answer `404` with the body `404 page not found`, byte for byte identical to `GET /latest/no-such-thing`
       Compare the two responses against the installed daemon on VM 399, not in
       a unit test: the point is that the catch-all handler, not a new handler,
       is what answers.
-      **Done against a running daemon rather than a unit test — but a locally
-      built binary, not the installed package.** Served on `127.0.0.1:18080`.
+      **Unticked on 2026-10-16.** It was ticked on the strength of a locally
+      built binary on `127.0.0.1:18080`, but this task says *the installed
+      daemon on VM 399*, and the note below said so itself — "Re-run in 7.3".
+      A tick that needs a later task to make it true is not a tick.
+      `agent-mac-vtpm-mds-e69517` flagged it; the catch is correct.
+
+      What **was** established, and still holds at binary level:
       Reference `GET /latest/no-such-thing` → `404 '404 page not found\n'`.
       All four removed routes return exactly that, byte for byte:
       `GET /latest/attest/nonce`, `POST /latest/attest`, `GET /latest/identity`,
       `GET /.well-known/jwks.json`. The catch-all, not a new handler, answers.
-      `instance-id`, `local-ipv4` and `/health` still served. Re-run in 7.3.
+      `instance-id`, `local-ipv4` and `/health` still served. That is good
+      evidence the routing change is right; it is not evidence about the
+      package the service actually runs from. Re-run under 7.3.
 
 ## 3. Remove the identity document and the key set
 
@@ -100,7 +107,7 @@ deletion an explicit, reviewable conflict.
       would previously have been served a token. It fails if either route is
       reinstated. `TestIdentityBearingPathsIsExactlyTheSpecifiedSet` now pins
       three paths. `go test ./...` passes.
-- [ ] 3.4 **Half done, needs the package** — verify Verify `GET /latest/identity` and `GET /.well-known/jwks.json` answer `404 page not found` on the real daemon, and that `GET /latest/meta-data/instance-id` still returns `i-399` for VM 399
+- [ ] 3.4 **Half done, needs the package** — verify that `GET /latest/identity` and `GET /.well-known/jwks.json` answer `404 page not found` on the real daemon, and that `GET /latest/meta-data/instance-id` still returns `i-399` for VM 399
       The migration note on `Name The Bound VM In The Identity Document`
       promises exactly that substitution. This task proves it rather than
       asserting it.
@@ -117,7 +124,7 @@ deletion an explicit, reviewable conflict.
       `loadDevIDEnroller` and `devid.Register`; only the four route
       registrations were removed from inside it, and a comment now records that
       the setting gates enrollment alone.
-- [ ] 4.2 **Needs the package and a fresh vTPM** — run Run a guest end-to-end enrollment against VM 399 and verify an LDevID is still issued whose subject CN is `i-399`
+- [ ] 4.2 **Needs the package and a fresh vTPM** — run a guest end-to-end enrollment against VM 399 and verify an LDevID is still issued whose subject CN is `i-399`
       **Use a fresh vTPM.** A reused one risks the DA lockout recorded as
       known-gaps item 4 — unrelated to this change, but it will masquerade as a
       regression.
@@ -192,7 +199,7 @@ deletion an explicit, reviewable conflict.
       `internal/devid/devid_test.go` — all **pre-existing** trailing whitespace,
       confirmed by stashing this change and re-running on `main`. Deliberately
       not reformatted: unrelated churn.
-- [ ] 7.3 **Maintainer** — build Build and install a git-stamped package and verify `vtpm-mds -version` and `dpkg -l vtpm-mds` identify this tree, then re-run tasks 2.2, 3.4 and 4.2 against the installed daemon
+- [ ] 7.3 **Maintainer** — build and install a git-stamped package and verify `vtpm-mds -version` and `dpkg -l vtpm-mds` identify this tree, then re-run tasks 2.2, 3.4 and 4.2 against the installed daemon
       The agent user **cannot** build a `.deb`: `dpkg-buildpackage` needs
       `dpkg --print-architecture`, and `/usr/local/sbin/hogan-lab` allows only
       `dpkg -i`. The build half belongs to the maintainer — say so explicitly
