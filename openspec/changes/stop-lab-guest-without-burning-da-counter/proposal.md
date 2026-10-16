@@ -15,6 +15,12 @@ attached — the persisted state reads **1**. Enrollment never increments the
 counter; hard teardown does. Three hard stops explain the lockout on reuse.
 `internal/devid` needs no change.
 
+Counter-evidence from the Proxmox stack (2026-10-16, VM 399, installed package
+`0.2.0+git20261005.5a60c877cd9c`): `TPM2_PT_LOCKOUT_COUNTER` was `0x0` before
+and after a successful enrollment (`inLockout: 0`, `TPM2_PT_MAX_AUTH_FAIL: 0x3`).
+Same enrollment path, two environments — only the cloud lab's hard teardown
+bumped the counter.
+
 ## What Changes
 
 - `stop-guest.sh` shuts the guest down **gracefully** (QMP `system_powerdown`

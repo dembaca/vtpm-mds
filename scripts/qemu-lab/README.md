@@ -113,11 +113,15 @@ Notes:
   and skips without a lab. It is a **separate** swtpm with its own state: QEMU
   fails (`CMD_SET_DATAFD`) when the guest's instance also has `--server`, and two
   instances over one state directory would race on NVRAM.
-- Reusing one guest vTPM across `e2e-devid-guest.sh` runs can end in
-  `Certify: ... DA lockout mode`: one run on a fresh vTPM left the dictionary-attack
-  counter at 1 of 3 (recovery interval 1000 s), and a vTPM reused over several
-  runs was locked at 3 of 3. Move `vms/guest100/tpm` aside to start over. The cause
-  is not yet understood and is not addressed here.
+- Reusing one guest vTPM across `e2e-devid-guest.sh` runs used to end in
+  `Certify: ... DA lockout mode` because `stop-guest.sh` hard-killed QEMU while
+  the guest swtpm was still attached, which increments `lockoutCounter`
+  (`maxAuthFail` defaults to 3). Enrollment itself does not burn the counter —
+  measured live in the guest after a successful enroll, and again after a
+  graceful ACPI poweroff. `stop-guest.sh` now issues QMP `system_powerdown`,
+  waits for QEMU to exit, then SIGTERMs the guest swtpm. A fallback SIGKILL may
+  still bump the counter once; prefer letting powerdown finish. If a vTPM is
+  already locked, move `vms/guest100/tpm` aside to start over.
 - Nested KVM currently hits a host `kvm` BUG (`vmx_vcpu_create`); the lab defaults to **TCG**.
 - Guest SSH via user-net hostfwd can be flaky under TCG; prefer `e2e-netns.sh` for IMDS-only checks and `e2e-devid-guest.sh` (9p DONE file) for DevID.
 - Guest SSH (when working): `ssh -p 2222 ubuntu@127.0.0.1`
