@@ -20,6 +20,43 @@
 ## 4. Confirm nothing else moved
 
 - [x] 4.1 Verify a caller from `127.0.0.1` with `require_vm_identity` false still receives `i-127-0-0-1`, and a bound caller still receives `i-<vmid>`
+      **Second half done on the real stack, first half is not reachable there.**
+      2026-10-16, installed daemon `0.2.0+git20261005.5a60c877cd9c` on `hogan`:
+      from VM 399, `GET /latest/meta-data/instance-id` → `200 'i-399'`, so a
+      bound caller still receives `i-<vmid>`.
+      The `127.0.0.1` half **cannot** be produced here and is covered by unit
+      tests only: the daemon listens on `169.254.169.1:80` alone, so a
+      connection from the host arrives with peer `169.254.169.1`, never
+      `127.0.0.1`; and `mds.require_vm_identity` is absent from
+      `/etc/vtpm-mds/config.yaml`, which this user cannot write. Saying so
+      beats implying the opt-out path was exercised against the package.
 - [x] 4.2 Verify the default configuration still refuses an unbound caller with `404 page not found`, unchanged, and that `local-ipv4`, `local-hostname`, `public-ipv4` and the index are byte-for-byte unchanged
+      **Done on the real stack**, 2026-10-16, installed
+      `0.2.0+git20261005.5a60c877cd9c`, `/etc/vtpm-mds/config.yaml` carrying no
+      `require_vm_identity` key so the built-in default of true applies.
+      Unbound caller — the host itself, which has no ARP entry for its own
+      address: `PUT /latest/api/token` → `200` (the token endpoint is not
+      identity-bearing), then `GET /latest/meta-data/instance-id` → `404`,
+      `text/plain; charset=utf-8`, body `404 page not found`.
+      Bound caller, from VM 399 with a valid token:
+      `local-ipv4` → `200 '169.254.169.10'`;
+      `local-hostname` → `200 '169.254.169.254'` (the address the caller used,
+      as the spec says, not the guest's own hostname);
+      `public-ipv4` → `404` with an **empty** body — still the unimplemented
+      `getPublicIP`, which is queue item 2 and not this change;
+      the index → `200 'instance-id\nlocal-hostname\nlocal-ipv4\npublic-ipv4\nplacement/\nservices/\n'`.
+      Also re-checked for task 3.3 on the same run:
+      `GET /latest/dynamic/instance-identity/signature` → `200
+      'dGVzdC1zaWduYXR1cmU='`, and the document still carries
+      `"instanceId":"i-399"`.
 - [x] 4.3 Run `go vet ./...` and `go test ./...` and verify both pass, reporting the output
+      **Done** 2026-10-16 on `hogan`, Go 1.24.4. `go vet ./...` exits 0 with no
+      output. `go test ./...`: `ok imds 0.026s`, `ok internal/config 0.008s`,
+      `ok internal/devid 29.682s`, `ok internal/inventory 0.008s`,
+      `ok internal/server 0.111s`; `no test files` for the root package,
+      `cmd/devid-enroll` and `internal/proxmox`. No failures.
 - [x] 4.4 Run `openspec validate --all --strict` and verify it passes
+      **Done** 2026-10-16 with the authoritative CLI at `/usr/local/bin/openspec`:
+      `Totals: 8 passed, 0 failed (8 items)` — six living specs plus this change
+      and `remove-the-unverifiable-identity-endpoints`. Only `[INFO]`
+      "requirement text is very long" notes, which are advisory.
