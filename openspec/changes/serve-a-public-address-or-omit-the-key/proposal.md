@@ -70,7 +70,21 @@ itself the signal.
 
 ### Modified Capabilities
 
-- `instance-metadata`: `Serve The EC2 Metadata Tree` is modified. Its index
+- `instance-metadata`: two requirements change.
+
+  `Refuse An Instance Identity To Callers With No VM Record` is **modified**.
+  It lists, as the reason the remaining metadata paths need no refusal, that
+  "`public-ipv4` is always unavailable, and the index is a static listing".
+  This change makes the first conditional and the second plainly false. The
+  reasoning survives — neither path asserts an identity the service vouches for
+  — but two of its premises do not, so the sentence is rewritten. Behaviour for
+  an unbound caller is unchanged: no record means no declared address, so
+  `public-ipv4` stays unavailable and absent from that caller's index. Found by
+  `agent-mac-vtpm-mds-52ae2f` while writing
+  `remove-the-constant-instance-identity-signature`, which modifies the same
+  requirement for a different clause.
+
+  `Serve The EC2 Metadata Tree` is modified. Its index
   clause gains the condition under which `public-ipv4` is listed, and its
   `public-ipv4` clause gains the source and the condition under which an
   address is served. The scenario `Public address is never available` inverts,
