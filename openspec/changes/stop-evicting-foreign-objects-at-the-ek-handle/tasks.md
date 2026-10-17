@@ -61,8 +61,26 @@ record and the maintainer's decision in `design.md`.**
       3.2 and 4.1 are open until the lab and hogan have run.
 - [ ] 3.1 **Cloud lab** — a stock client from this branch, fresh vTPM, with a foreign persistent object pre-created at `0x81010001`: verify enrollment succeeds, SPIRE `1.14.0` attests, and the object's public area is byte-identical before and after
       Say which layout was used (`swtpm-localca`, `/usr/share/OVMF/`).
-- [ ] 3.2 **hogan** — with a git-stamped package, verify on VM 399's TPM, into a scratch directory, that the persistent objects at `0x81000001`, `0x81010001` and `0x81010016` are unchanged and the enrollment succeeds
+- [x] 3.2 **hogan** — with a git-stamped package, verify on VM 399's TPM, into a scratch directory, that the persistent objects at `0x81000001`, `0x81010001` and `0x81010016` are unchanged and the enrollment succeeds
       Back up `/var/lib/spire/agent/` first, and do not re-enroll VM 399.
+      **Done, 2026-10-17, coordinator on hogan, against `77cfeaa`:** passed.
+      `make deb-local` gave `devid-enroll_0.2.0+git20261017.77cfeaa52496`,
+      lintian clean; `go vet` and `go test -count=1 ./...` green without
+      `tpmsim`. The binary was extracted from the `.deb` and run in the guest,
+      not installed; the daemon stays `...5efb34ba374a`. `devid-enroll -tpm
+      /dev/tpmrm0 -out /tmp/enroll42.d/out` exited 0. The daemon journal shows
+      `enroll/start 200` and `enroll/finish 200`, so **`ActivateCredential` with
+      the newly derived EK worked** and the EK binding held. Certificate
+      `CN=399`. `readpublic` hashes of `0x81000001`, `0x81010001` and
+      `0x81010016` and the lockout counter (`0x0`) were identical before and
+      after, no transient handle was left, and there were **no object-slot
+      problems** on `libtpms 0.9.7`. Loading the new blobs as SPIRE does: OK
+      under the H-1 template, `0x1f` under the old 256 x `0x00` template and the
+      256 x `0x01` control. The SPIRE material and the running `spire-agent` were
+      untouched, and the scratch directory was deleted.
+      **Not shown on hogan:** a foreign object at `0x81010001`. The real, matching
+      EK sits there, and placing another object would endanger the pilot; 3.1
+      shows it in the lab.
 
 ## 4. Archive
 
