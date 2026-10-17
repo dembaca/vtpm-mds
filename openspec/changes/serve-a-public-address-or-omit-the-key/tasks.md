@@ -89,6 +89,11 @@ tree.
       distinguishable from an empty one.
       `TestLoadYAMLAcceptsAnAbsentOrEmptyPublicIPv4` keeps the field optional,
       so every inventory written before this change still loads.
+      **Both halves are verified here at handler and loader level only.** The
+      daemon-level checks are 5.2a for the YAML source and 5.2b for the Proxmox
+      one, and neither has run. This tick means the code does what the delta
+      says when exercised directly — not that anyone has watched the service do
+      it.
 - [x] 2.3 Validate a declared address at inventory load time and verify a malformed value fails the load loudly rather than being served
       Follow the precedent `fail-fast-on-unusable-configuration` set: an
       unusable value stops the service instead of degrading silently. Verify a
@@ -205,9 +210,29 @@ tree.
       `scripts/openspec-validate.py --strict` reports `all tasks ticked` twice,
       once for each of those two changes, which is correct: both still have
       open tasks by design.
-- [ ] 5.2 Build and install a git-stamped package and verify `vtpm-mds -version` and `dpkg -l vtpm-mds` identify this tree, then re-run tasks 1.1, 1.2, 2.2 and 3.1 against the installed daemon
-      The agent user **cannot** build a `.deb` — `dpkg-buildpackage` needs
-      `dpkg --print-architecture` and `/usr/local/sbin/hogan-lab` allows only
-      `dpkg -i`. That half belongs to the maintainer; say so explicitly rather
-      than implying it ran.
+**5.2 was one task and is now two.** It named only VM 399, which covers the
+Proxmox source and leaves the YAML source — the half the maintainer decided to
+add on 2026-10-17 — verified by unit tests alone. A test is not a daemon, and
+`AGENTS.md` already says where each half belongs: *"A cloud agent verifies what
+only it can … Conversely, anything needing the Proxmox stack, VM 399 or the
+installed package belongs here."* The split follows the precedent
+`fail-loudly-when-the-lab-is-unprepared` set, where tasks were deliberately
+recorded as half done on each host until both halves existed. Raised by
+@dembaca, given this shape by `agent-mac-vtpm-mds-52ae2f`.
+
+- [ ] 5.2a **Cloud lab** — verify the YAML source on a running daemon, not in a unit test: a guest entry declaring `public_ipv4` is served that address with a six-line index, an entry declaring none answers `404` with an empty body and a five-line index, and an inventory carrying a malformed value stops the service from starting at all
+      The last one is what no unit test can show: `LoadYAML` returning an error
+      is not the same observation as the daemon refusing to come up. Build from
+      this branch with `make deb-local` on the lab host — the QEMU lab **must
+      not** run on `hogan`, and the YAML inventory is the lab's backend, so
+      this half can only happen there.
+- [ ] 5.2b **hogan** — build and install a git-stamped package, verify `vtpm-mds -version` and `dpkg -l vtpm-mds` identify this tree, then re-run tasks 1.1, 1.2, 2.2 and 3.1 against the installed daemon with the Proxmox source
+      The Proxmox half needs a `public-ipv4:` line in
+      `/etc/pve/qemu-server/399.conf`, which this user cannot write — that part
+      is the maintainer's, as is installing the package, which Claude Code's
+      auto-mode classifier refuses regardless of any go.
+      The note here used to say the agent user **cannot** build a `.deb`. That
+      was wrong in cause and conclusion; see `AGENTS.md`. The package for this
+      branch is already built:
+      `dist/vtpm-mds_0.2.0+git20261017.1fab0f8b2504_amd64.deb`.
 - [ ] 5.3 Archive: move the delta into `openspec/specs/`, move this directory under `openspec/changes/archive/`, update the `README.md` status table, and verify `openspec validate --all --strict` is still clean afterwards
