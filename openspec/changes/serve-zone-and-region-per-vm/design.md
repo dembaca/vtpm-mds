@@ -112,6 +112,9 @@ These fill gaps the sheet left; none changes M1–M5.
   questions.
 - **Other `placement/` keys** (`availability-zone-id`, `region` aliases) and any
   tag beyond the two.
+- **A listing of `placement/`.** `GET /latest/meta-data/placement/` answers the
+  index of `meta-data/`, as it always did, where AWS lists `availability-zone` and
+  `region`. Seen on hogan during 3.2; a possible follow-up.
 - **The SPIRE side** (D8/D9): untouched.
 
 ## Risks

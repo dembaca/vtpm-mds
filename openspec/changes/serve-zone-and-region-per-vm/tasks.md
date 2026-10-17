@@ -77,7 +77,7 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
       **Done:** `openspec validate --all --strict` → 7 passed, 0 failed. The
       fallback validator's problems are `all tasks ticked (--strict)` for the
       tasks of sections 3 and 4, and for the EK change still in `changes/`.
-- [ ] 3.1 **hogan, read-only, before any code** — verify as the service's user that `/etc/pve/corosync.conf` is readable and names a cluster, that `/etc/pve/local` links to the node, and record both names
+- [x] 3.1 **hogan, read-only, before any code** — verify as the service's user that `/etc/pve/corosync.conf` is readable and names a cluster, that `/etc/pve/local` links to the node, and record both names
       Decides whether the region default is a cluster name or `local` there.
       **Partly done, 2026-10-17, coordinator on hogan, read-only:** the service runs
       as `root` (unit with `ProtectHome=true` and `NoNewPrivileges=true`, no
@@ -86,7 +86,23 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
       `nodes/hogan`, **node `hogan`**. **Not read:** the cluster name itself; the
       agent user is neither root nor in `www-data`. It becomes visible in 3.2 on
       the installed service. Not ticked until then.
-- [ ] 3.2 **hogan** — with a git-stamped package, verify that VM 399 without tags answers `placement/availability-zone` with the node name and `placement/region` with the cluster name, and that its identity document agrees
+      **Completed by 3.2, 2026-10-17:** the service reports the cluster name with
+      its **capitals kept**, as the maintainer decided; the name itself is not
+      written here. Node `hogan`.
+- [x] 3.2 **hogan** — with a git-stamped package, verify that VM 399 without tags answers `placement/availability-zone` with the node name and `placement/region` with the cluster name, and that its identity document agrees
+      **Done, 2026-10-17, coordinator on hogan, against `7918274`:** passed. Package
+      `vtpm-mds 0.2.0+git20261017.7918274ef686` installed with the maintainer's go and
+      started; `dpkg -l` and the start log name the version, and the log shows `3
+      VMs, 5 MAC addresses`, as before. VM 399 has no tags and hogan has no node
+      `config`, so the names apply: `placement/availability-zone` answered `200`
+      `hogan`, `placement/region` `200` with the cluster name in its original
+      spelling, `instance-id` `200` `i-399`, and the identity document `200` with
+      the same zone and region. **Not shown:** the description step (no node config
+      on hogan; task 3.5) and the tag path (task 3.3).
+      **Observation, out of scope:** `GET /latest/meta-data/placement/` answers the
+      index of `meta-data/`, not a listing of `availability-zone` and `region`, as
+      it did before: the index handler answers unknown paths. AWS lists the keys
+      there. A possible follow-up record, not part of this change.
 - [ ] 3.3 **Maintainer's go needed** — add `mds.zone.<name>` and `mds.region.<name>` tags to VM 399, send SIGHUP, and verify both keys and the document show them; then remove the tags
       Changes a shared resource, VM 399's config, so it needs the maintainer's go
       in the session of whoever runs it. Without it the tag path is verified on
