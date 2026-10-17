@@ -38,9 +38,15 @@ func DefaultKeyFactory() *KeyFactory {
 	}
 }
 
-// CreateEK loads or creates a cached EK under the endorsement hierarchy.
+// CreateEK derives the endorsement key as a transient primary key in the
+// endorsement hierarchy. The caller flushes it. It never makes the key
+// persistent and never reads, reuses, replaces or evicts a persistent object at
+// client.EKReservedHandle or any other handle: the EK certificate certifies
+// the key this template yields on this TPM, so a derived EK is the right one
+// whatever else sits at the reserved handle, and deleting that object could
+// remove a key that belongs to other software or to the platform.
 func (f *KeyFactory) CreateEK(rw io.ReadWriter) (*KeyInfo, error) {
-	return cachedPrimary(rw, f.EKTemplate, tpm2.HandleOwner, tpm2.HandleEndorsement, client.EKReservedHandle)
+	return createPrimaryKey(rw, tpm2.HandleEndorsement, f.EKTemplate)
 }
 
 // CreateSRK derives the storage root key as a transient primary key in the
@@ -72,39 +78,6 @@ func createUnderSRK(rw io.ReadWriter, f *KeyFactory, template tpm2.Public) (*Key
 	// the caller flushes with the rest of its resources.
 	defer tpm2.FlushContext(rw, srk.Handle)
 	return createLoadedKey(rw, srk.Handle, template)
-}
-
-func cachedPrimary(rw io.ReadWriter, template tpm2.Public, owner, parent, cachedHandle tpmutil.Handle) (*KeyInfo, error) {
-	cachedPub, _, _, err := tpm2.ReadPublic(rw, cachedHandle)
-	if err == nil {
-		if cachedPub.MatchesTemplate(template) {
-			pubBlob, err := cachedPub.Encode()
-			if err != nil {
-				return nil, err
-			}
-			return &KeyInfo{
-				Handle:     cachedHandle,
-				Template:   template,
-				Public:     cachedPub,
-				PublicBlob: pubBlob,
-			}, nil
-		}
-		if err := tpm2.EvictControl(rw, "", owner, cachedHandle, cachedHandle); err != nil {
-			return nil, fmt.Errorf("evict stale cached key: %w", err)
-		}
-	}
-
-	info, err := createPrimaryKey(rw, parent, template)
-	if err != nil {
-		return nil, err
-	}
-	defer tpm2.FlushContext(rw, info.Handle)
-
-	if err := tpm2.EvictControl(rw, "", owner, info.Handle, cachedHandle); err != nil {
-		return nil, fmt.Errorf("persist primary key: %w", err)
-	}
-	info.Handle = cachedHandle
-	return info, nil
 }
 
 func createPrimaryKey(rw io.ReadWriter, hierarchy tpmutil.Handle, template tpm2.Public) (*KeyInfo, error) {
