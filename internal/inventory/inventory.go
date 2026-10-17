@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -32,6 +33,8 @@ type fileFormat struct {
 		MACs       []string `yaml:"macs"`
 		EKSHA256   string   `yaml:"ek_sha256"`
 		PublicIPv4 string   `yaml:"public_ipv4"`
+		Zone       string   `yaml:"zone"`
+		Region     string   `yaml:"region"`
 	} `yaml:"vms"`
 }
 
@@ -72,6 +75,20 @@ func LoadYAML(path string) (VMConfigMap, error) {
 				return nil, fmt.Errorf("inventory entry %q: public_ipv4 %q is not an IPv4 address", vm.ID, declared)
 			}
 			raw["public-ipv4"] = ip.To4().String()
+		}
+
+		// A declared zone or region degrades to the host's value when it is
+		// not a valid name, so unlike public_ipv4 it is logged and ignored
+		// rather than failing the load.
+		for field, declared := range map[string]string{"zone": vm.Zone, "region": vm.Region} {
+			declared = strings.TrimSpace(declared)
+			switch {
+			case declared == "":
+			case ValidPlacementName(declared):
+				raw[field] = declared
+			default:
+				log.Printf("inventory entry %q: %s %q is not a valid placement name, ignored", vm.ID, field, declared)
+			}
 		}
 
 		out[vm.ID] = &VMConfig{
