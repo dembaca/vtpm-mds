@@ -54,8 +54,7 @@ matches its DevID key.
 - **WHEN** `devid-enroll` runs and the resulting `devid.pub.blob` and
   `devid.priv.blob` are loaded under a primary key created in the owner
   hierarchy from the H-1 template, as SPIRE's `tpm_devid` attestor does
-- **THEN** the load succeeds, and loading the same blobs under a primary key
-  created from the template with 256 zero bytes of `unique` fails
+- **THEN** the load succeeds
 
 #### Scenario: A persistent object at the reserved SRK handle is left alone
 

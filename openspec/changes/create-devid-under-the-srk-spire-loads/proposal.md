@@ -17,11 +17,13 @@ different ones.
 - **`devid-enroll`** creates its parent with `client.SRKTemplateRSA()` itself,
   whose `ModulusRaw` is 256 zero bytes, and makes it persistent at `0x81000001`.
 
-A TPM derives a primary key from its seed and the **whole template, including
-`unique`**. Two templates that differ only there give two different keys, and a
-child blob only loads under the parent it was created under. On a TPM with no
-persistent SRK, `devid-enroll` therefore enrolls a DevID that SPIRE then fails
-to load with `tpm2.Load … integrity check failed (0x1f)`.
+A child blob only loads under the parent it was created under, and a TPM
+derives a primary key from its seed and the template. **Whether the `unique`
+field takes part in that derivation depends on the TPM implementation.** In the
+cloud lab the two templates give different keys, so on a TPM with no persistent
+SRK `devid-enroll` enrolls a DevID that SPIRE then fails to load with
+`tpm2.Load … integrity check failed (0x1f)`. On hogan's vTPM they give the
+**same** key, and nothing fails (measured, below).
 
 This was found by `agent-cursor-vtpm-22e0` on 2026-10-17, while showing the
 node-alias route end to end in the cloud lab (`declare-per-vm-metadata`, #33).
@@ -31,16 +33,30 @@ the reverse. The lab needed a lab-only binary with an empty `ModulusRaw` to
 finish. **VM 399 on hogan works**: its agent attests with material from
 2026-09-14.
 
-**Why VM 399 works is a hypothesis, not a finding.** `cachedPrimary` in
-`internal/devid/keys.go` reuses a persistent object at `0x81000001` when
-`MatchesTemplate` says it fits, and go-tpm's `MatchesTemplate` for RSA compares
-`Symmetric`, `Sign`, `KeyBits` and `ExponentRaw`, **not** `ModulusRaw`. VM 399
-has persistent objects at `0x81000001`, `0x81010001` and `0x81010016`
-(coordinator, `tpm2_getcap handles-persistent`, 2026-10-17). If the one at
-`0x81000001` was created with an empty `unique`, for example by `tpm2-tools`,
-it would match, be reused, and give material that SPIRE loads. That is
-consistent with every observation and has not been checked: nobody has read the
-public area of that object.
+**Why VM 399 works: measured, and the first hypothesis was wrong.** This record
+first guessed that VM 399's persistent SRK had been made with an empty `unique`
+and was reused by `cachedPrimary`. The coordinator tested it on 2026-10-17.
+`tpm2_readpublic` shows only the generated modulus, not the template's
+`unique`, so it created transient owner primaries in the guest's TPM, with the
+attributes of `SRKTemplateRSA` including `noda`, flushed them afterwards, and
+compared the moduli:
+
+| Template | Modulus |
+|---|---|
+| persistent object at `0x81000001` | `e36d99c0…a603e857` |
+| `unique` empty (SPIRE's high template) | `e36d99c0…a603e857` |
+| `unique` = 256 × `0x00` (this client) | `e36d99c0…a603e857` |
+| `unique` = 256 × `0x01` (control) | `cda672bb…665e6827` |
+| empty `unique`, without `noda` (control) | `ca4dbae6…37991007` |
+
+On hogan's vTPM (`swtpm 0.8.0+pve3`, `libtpms0 0.9.7+pve2`) an empty `unique`
+and 256 zero bytes give the **same** SRK, while a different `unique` or
+different attributes give a different one. VM 399 therefore attests because
+both templates yield the same key there. The persistent object's own history
+no longer matters. What this means is that the defect **depends on the TPM
+implementation**: the lab's TPM, whose `swtpm` and `libtpms` versions the lab
+agent has been asked to report, tells the two templates apart, and hogan's does
+not. The fix, an empty `unique` as SPIRE uses, is correct on both.
 
 ## What Changes
 

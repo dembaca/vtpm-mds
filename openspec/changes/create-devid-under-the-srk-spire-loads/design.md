@@ -70,10 +70,15 @@ template do the reverse. From hogan, `agent-vtpm-hogan-ead994124`: `keys.go`
 is unchanged since `0c2623c` (2026-09-09), and VM 399 has persistent objects
 at `0x81000001`, `0x81010001` and `0x81010016`.
 
-That a TPM derives a primary key from its seed and the entire template,
-`unique` included, is the standard TPM 2.0 behaviour, and it is what the lab
-observation shows in both directions. The TPM specification itself was **not
-re-read** for this record.
+**Measured on hogan by the coordinator, 2026-10-17** (table in `proposal.md`):
+on `swtpm 0.8.0+pve3` with `libtpms0 0.9.7+pve2` an empty `unique` and 256 zero
+bytes give the **same** SRK as the persistent object at `0x81000001`, while
+256 bytes of `0x01`, or an empty `unique` without `noda`, give different ones.
+So a template's `unique` does not always take part in the derivation, and the
+lab's failure cannot be explained by "a TPM derives a primary from the whole
+template" in general. It depends on the implementation. The TPM specification
+was **not re-read**, and the lab's `swtpm` and `libtpms` versions are not yet
+known (task 1.4).
 
 ## Goals
 
@@ -129,17 +134,18 @@ reserved handle holds something, and what.
   fingerprint then changes, so the agent's SPIFFE ID changes with it and any
   registration that selects on the old one stops matching (see the SPIRE
   section of `declare-per-vm-metadata`).
-- **On a TPM like VM 399's, if the hypothesis holds,** nothing changes for the
-  material already there, and a re-enrollment under option 1 gives a key under
-  the same primary.
+- **On a TPM like VM 399's,** where the two templates give the same key,
+  nothing changes for the material already there, and a re-enrollment under
+  option 1 gives a key under the same primary.
 - **One more `CreatePrimary` per enrollment.** Enrollment is rare.
 
 ## Risks
 
-- **The hypothesis about VM 399 may be wrong.** If its persistent SRK has a
-  different `unique` and SPIRE nevertheless loads the material, something else
-  in this account is incomplete. The record asks for the public area of that
-  object to be read before anything is built (task 1.1).
+- **The defect depends on the TPM implementation.** Hogan's vTPM cannot
+  reproduce it, so its verification can show only that nothing breaks. The
+  reproduction exists only where the lab's TPM is. Until its versions are known,
+  it is not clear which hardware or software TPMs are affected; a physical TPM
+  has not been tried at all.
 - **Another SPIRE version may use another template.** This record is written
   against `1.14.0`, the deployed version. `SRKTemplateHighRSA`,
   `SRKTemplateHighECC` and their use in `loadKey` and `createAttestationKey`
