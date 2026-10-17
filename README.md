@@ -139,6 +139,9 @@ sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.yaml
 `GET /.well-known/jwks.json` were removed: they reported results they had not
 computed, and the published key set could not verify the token it accompanied.
 See `ARCHITECTURE.md`, "Removed: the attestation and JWT identity path".
+`GET /latest/dynamic/instance-identity/signature` was removed for the same
+reason: it returned one constant to every caller. The document it claimed to
+sign is still served, unchanged.
 
 **Exact behaviour — authentication, status codes, response shapes and edge cases — is
 specified in [`openspec/specs/`](openspec/specs/):**

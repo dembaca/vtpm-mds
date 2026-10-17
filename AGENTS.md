@@ -113,7 +113,8 @@ All six numbered entries below are **implemented, verified and archived** —
 item 6 as a removal rather than an implementation, which is what the analysis
 under it concluded. So are the three unnumbered defects further down —
 `public-ipv4`, the `127.0.0.1` fallback and the vTPM dictionary-attack
-lockout. What is left of the queue is the one open change listed next.
+lockout, and so is the constant identity signature. Nothing specified is
+open; the queue holds only the deferred work listed next.
 
 Verification used the real Proxmox stack rather than the QEMU lab wherever it
 could: VM **399** (`vtpm-pilot`) on `vmbr_imds` with MAC `bc:24:11:06:1d:b2`
@@ -132,17 +133,27 @@ re-derived.
 
 ### Open changes as of 2026-10-17
 
-One: `openspec/changes/remove-the-constant-instance-identity-signature/`, the
-`dGVzdC1zaWduYXR1cmU=` placeholder. Its code is in PR #32, waiting for a rebase
-onto the archive below; what remains after the merge needs the installed
-package on this host. Do not archive it before those tasks are done, or
-`openspec/specs/` would describe behaviour the code has never shown.
+None. The last two were archived on 2026-10-17, in this order:
 
-`public-ipv4` was archived first, on 2026-10-17:
-`openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`.
-Both changes carry a `MODIFIED` block on `Refuse An Instance Identity To
-Callers With No VM Record`, so the signature change's block **was rebuilt
-against the text the archive left** in the same commit — its two edits applied
+- `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
+  the `public-ipv4` defect.
+- `openspec/changes/archive/2026-10-17-remove-the-constant-instance-identity-signature/`,
+  the `dGVzdC1zaWduYXR1cmU=` placeholder. `GET
+  /latest/dynamic/instance-identity/signature` no longer exists for any
+  caller and answers the router's `404 page not found`; `document` stays,
+  byte-identical. Verified on VM 399 and from the host against the installed
+  `0.2.0+git20261017.4ba058c78e7b`.
+
+Deferred by the maintainer until the above was closed, and needing a record
+and a go before any code: per-VM metadata (`declare-per-vm-metadata`, PR #33)
+and the `internal/proxmox/vmconfig.go` fixes — read this node via
+`/etc/pve/local` rather than the first node alphabetically, section awareness
+so snapshot sections do not contribute MACs, and ignoring a hand-written
+`public-ipv4:` line.
+
+Both archived changes carry a `MODIFIED` block on `Refuse An Instance Identity
+To Callers With No VM Record`, so the signature change's block **was rebuilt
+against the text the first archive left** — its two edits applied
 to the new paragraph, not a verbatim copy of the old one, which would silently
 have reverted the `public-ipv4` correction. No test and no validator catches
 that loss; a trial `openspec archive` on a scratch copy of `openspec/` showed
@@ -340,6 +351,10 @@ merge). Everything else is independent.
    returns the constant `dGVzdC1zaWduYXR1cmU=` to every caller — the same
    defect as `/latest/attest`, in an endpoint there may be a compatibility
    reason to keep.
+   → **answered and archived** 2026-10-17: `document` stays, `signature` was
+   removed, because cloud-init reaches leaves only through the listing and
+   never requests `signature` by name:
+   `openspec/changes/archive/2026-10-17-remove-the-constant-instance-identity-signature/`.
 
    Before writing any of this, check Teleport's TPM join against its current
    documentation rather than from memory, to confirm what `vtpm-mds` would have

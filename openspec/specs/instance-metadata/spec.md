@@ -118,66 +118,6 @@ thereafter unknown.
 - **WHEN** it presents that token on a metadata read
 - **THEN** the service responds `401`
 
-### Requirement: Serve An Unsigned Instance Identity Document
-
-With `mds.enable_ec2_compat` enabled,
-`GET /latest/dynamic/instance-identity/document` SHALL respond `200` with
-`Content-Type: application/json` and a JSON object carrying exactly the keys
-`instanceId`, `imageId`, `instanceType`, `region`, `availabilityZone`,
-`privateIp`, `devpayProductCodes`, `version`, `billingProducts` and `accountId`.
-
-`imageId` SHALL be `proxmox-unknown`, `instanceType` SHALL be `vm`, `region`
-SHALL be `local`, `availabilityZone` SHALL be `proxmox`, `version` SHALL be
-`2017-09-30`, `accountId` SHALL be `012345678901`, and `devpayProductCodes` and
-`billingProducts` SHALL both be `null`. Only `instanceId` and `privateIp` vary
-by caller.
-
-`privateIp` SHALL be the IPv4 address of the connection's peer, derived exactly
-as `local-ipv4` is, and SHALL NOT honour `X-Forwarded-For`, even though
-`instanceId` does. When the peer has no IPv4 address `privateIp` SHALL be the
-empty string; the key SHALL remain present, so the document keeps its fixed key
-set.
-
-When no instance id can be derived, as specified by
-`Derive The Instance Id From The Bound VM Record`, the service SHALL NOT serve a
-document with an empty or invented `instanceId`; it SHALL respond `422` with an
-empty body and `Content-Type: text/plain`.
-
-`GET /latest/dynamic/instance-identity/signature` SHALL respond `200` with
-`Content-Type: text/plain` and the fixed placeholder string
-`dGVzdC1zaWduYXR1cmU=`. No signing key is involved and the value is identical
-for every caller, so the endpoint SHALL NOT be treated as evidence of the
-document's authenticity.
-
-#### Scenario: Guest reads its identity document
-
-- **GIVEN** a valid session token and a caller from `10.0.0.5`
-- **WHEN** it sends `GET /latest/dynamic/instance-identity/document`
-- **THEN** the service responds `200` with `Content-Type: application/json`, and
-  the document reports `imageId` `proxmox-unknown`, `instanceType` `vm`,
-  `region` `local`, `availabilityZone` `proxmox` and `privateIp` `10.0.0.5`
-
-#### Scenario: Identity document for a peer with no IPv4 address
-
-- **GIVEN** a valid session token and a caller bound to VM `100` whose peer
-  address is `[fe80::1]:5000`
-- **WHEN** it sends `GET /latest/dynamic/instance-identity/document`
-- **THEN** the response is `200`, the `privateIp` key is present with the empty
-  string as its value, and it is in particular not `[fe80`
-
-#### Scenario: No document for a caller with no derivable instance id
-
-- **GIVEN** `mds.require_vm_identity` is false, a valid session token, and an
-  unbound caller whose `RemoteAddr` is `not-an-address`
-- **WHEN** it sends `GET /latest/dynamic/instance-identity/document`
-- **THEN** the service responds `422` with an empty body
-
-#### Scenario: Identity signature is a constant placeholder
-
-- **GIVEN** a valid session token
-- **WHEN** any guest sends `GET /latest/dynamic/instance-identity/signature`
-- **THEN** the service responds `200` with the body `dGVzdC1zaWduYXR1cmU=`
-
 ### Requirement: Answer Health Checks Without A Token
 
 The service SHALL register `GET /health` unconditionally and SHALL answer it
@@ -315,11 +255,6 @@ these paths SHALL be refused:
 
 - `GET /latest/meta-data/instance-id`
 - `GET /latest/dynamic/instance-identity/document`
-- `GET /latest/dynamic/instance-identity/signature`
-
-The signature endpoint is refused with the document although it serves a
-constant: the two form one feature, and a detached signature over a document
-the caller cannot obtain reports nothing.
 
 The remaining metadata paths SHALL NOT be refused, because none of them asserts
 an identity the service vouches for. `local-hostname` echoes the caller's own
@@ -368,7 +303,10 @@ and the instance identity SHALL be derived as specified by
   valid session token
 - **WHEN** it sends `GET /latest/dynamic/instance-identity/document` and
   `GET /latest/dynamic/instance-identity/signature`
-- **THEN** both responses are `404`
+- **THEN** both responses are `404` with the body `404 page not found`: the
+  document because it is refused, the signature because the path does not
+  exist for any caller, as `Serve The Instance Identity Document Without A
+  Signature` specifies
 
 #### Scenario: Unbound caller keeps the caller-derived metadata
 
@@ -606,3 +544,75 @@ includes the `placement/` and `services/` prefixes that the index advertises.
 
 - **WHEN** a guest sends `GET /latest/meta-data`
 - **THEN** the service responds `301` with `Location: /latest/meta-data/`
+
+### Requirement: Serve The Instance Identity Document Without A Signature
+
+With `mds.enable_ec2_compat` enabled,
+`GET /latest/dynamic/instance-identity/document` SHALL respond `200` with
+`Content-Type: application/json` and a JSON object carrying exactly the keys
+`instanceId`, `imageId`, `instanceType`, `region`, `availabilityZone`,
+`privateIp`, `devpayProductCodes`, `version`, `billingProducts` and `accountId`.
+
+`imageId` SHALL be `proxmox-unknown`, `instanceType` SHALL be `vm`, `region`
+SHALL be `local`, `availabilityZone` SHALL be `proxmox`, `version` SHALL be
+`2017-09-30`, `accountId` SHALL be `012345678901`, and `devpayProductCodes` and
+`billingProducts` SHALL both be `null`. Only `instanceId` and `privateIp` vary
+by caller.
+
+`privateIp` SHALL be the IPv4 address of the connection's peer, derived exactly
+as `local-ipv4` is, and SHALL NOT honour `X-Forwarded-For`, even though
+`instanceId` does. When the peer has no IPv4 address `privateIp` SHALL be the
+empty string; the key SHALL remain present, so the document keeps its fixed key
+set.
+
+When no instance id can be derived, as specified by
+`Derive The Instance Id From The Bound VM Record`, the service SHALL NOT serve a
+document with an empty or invented `instanceId`; it SHALL respond `422` with an
+empty body and `Content-Type: text/plain`.
+
+The document is not signed, and the service SHALL NOT serve a signature over
+it. `GET /latest/dynamic/instance-identity/signature`, `.../pkcs7` and
+`.../rsa2048` SHALL NOT be registered routes: each SHALL be answered by the
+catch-all handler with `404` and the body `404 page not found`, byte for byte
+what `GET /latest/no-such-thing` returns, whether or not the request carries a
+valid session token and whether or not the caller is bound to a VM record. A
+signature path SHALL be served only by a change that names a consumer which
+verifies it against a key this service holds.
+
+#### Scenario: Guest reads its identity document
+
+- **GIVEN** a valid session token and a caller from `10.0.0.5`
+- **WHEN** it sends `GET /latest/dynamic/instance-identity/document`
+- **THEN** the service responds `200` with `Content-Type: application/json`, and
+  the document reports `imageId` `proxmox-unknown`, `instanceType` `vm`,
+  `region` `local`, `availabilityZone` `proxmox` and `privateIp` `10.0.0.5`
+
+#### Scenario: Identity document for a peer with no IPv4 address
+
+- **GIVEN** a valid session token and a caller bound to VM `100` whose peer
+  address is `[fe80::1]:5000`
+- **WHEN** it sends `GET /latest/dynamic/instance-identity/document`
+- **THEN** the response is `200`, the `privateIp` key is present with the empty
+  string as its value, and it is in particular not `[fe80`
+
+#### Scenario: No document for a caller with no derivable instance id
+
+- **GIVEN** `mds.require_vm_identity` is false, a valid session token, and an
+  unbound caller whose `RemoteAddr` is `not-an-address`
+- **WHEN** it sends `GET /latest/dynamic/instance-identity/document`
+- **THEN** the service responds `422` with an empty body
+
+#### Scenario: Signature path does not exist
+
+- **GIVEN** a caller bound to VM `100` with a valid session token
+- **WHEN** it sends `GET /latest/dynamic/instance-identity/signature` and
+  `GET /latest/no-such-thing`
+- **THEN** both responses are `404` with the body `404 page not found`, and the
+  first is in particular not `dGVzdC1zaWduYXR1cmU=`
+
+#### Scenario: Signature path does not exist without a token either
+
+- **GIVEN** a caller with no session token
+- **WHEN** it sends `GET /latest/dynamic/instance-identity/signature`
+- **THEN** the response is `404` with the body `404 page not found`, not `401`,
+  because there is no handler to ask for a token
