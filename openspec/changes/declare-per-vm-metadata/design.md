@@ -189,8 +189,15 @@ documentation, not from memory. Sources are `spiffe/spire`:
      fingerprint.
   3. This means D8 is not only about the future: a change to what the
      certificate says can orphan existing registration entries.
-- **Not checked:** which SPIRE version is deployed, whether any registration
-  entries or node aliases exist today, and the attestor's source code.
+- **The deployed SPIRE is `1.14.0`** (`spire-server --version`, read by the
+  coordinator on hogan on 2026-10-17). The server plugin page at tag `v1.14.0`
+  lists the same three selector rows as `v1.15.4`: `subject:cn`, `issuer:cn`
+  and the chain fingerprint, with no `subject:oid`. So on the deployed version
+  only `subject:cn` is usable for a readable name, and `subject:oid` would need
+  a release that does not exist yet, plus an upgrade from 1.14.
+- **Not checked:** whether any registration entries or node aliases exist
+  today (`spire-server entry show` needs the admin socket, which belongs to
+  `spire`), and the attestor's source code.
 
 ### D8. Where the readable name comes from
 

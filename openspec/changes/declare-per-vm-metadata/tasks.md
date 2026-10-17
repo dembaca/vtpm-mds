@@ -46,8 +46,8 @@ hand-written key, into a Proxmox guest config, including VM 399's.
       `v1.15.4`. Cross-checked on 2026-10-17 against `spire-server agent show`
       on hogan, which showed `subject:cn:vtpm-pilot` rather than `399`; the coordinator
       traced it to a certificate issued 2026-09-14, before the subject was
-      enforced (see `design.md`). Not checked: the SPIRE version actually deployed, existing
-      registration entries, and the attestor's source code.
+      enforced (see `design.md`). The deployed SPIRE is 1.14.0 (coordinator, hogan). Not checked:
+      existing registration entries, and the attestor's source code.
 
 ## 2. Under every decision
 
