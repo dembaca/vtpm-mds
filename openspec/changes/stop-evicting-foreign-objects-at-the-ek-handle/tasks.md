@@ -59,8 +59,22 @@ record and the maintainer's decision in `design.md`.**
       **Done:** `openspec validate --all --strict` → 6 passed, 0 failed. The
       fallback validator's only problem is `all tasks ticked (--strict)`: 3.1,
       3.2 and 4.1 are open until the lab and hogan have run.
-- [ ] 3.1 **Cloud lab** — a stock client from this branch, fresh vTPM, with a foreign persistent object pre-created at `0x81010001`: verify enrollment succeeds, SPIRE `1.14.0` attests, and the object's public area is byte-identical before and after
+- [x] 3.1 **Cloud lab** — a stock client from this branch, fresh vTPM, with a foreign persistent object pre-created at `0x81010001`: verify enrollment succeeds, SPIRE `1.14.0` attests, and the object's public area is byte-identical before and after
       Say which layout was used (`swtpm-localca`, `/usr/share/OVMF/`).
+      **Done, 2026-10-17, `agent-cursor-vtpm-22e0`, against `77cfeaa`:** passed.
+      Layout `swtpm-localca` and `/usr/share/OVMF/OVMF_CODE_4M.fd`, `swtpm 0.7.3`,
+      `libtpms0 0.9.3`, SPIRE `1.14.0`, stock `devid-enroll` from this commit, no
+      lab patch. Setup: a fresh guest vTPM, the manufactured EK at `0x81010001`
+      evicted, a **foreign storage primary** (`userwithauth|noda|restricted|decrypt`)
+      made persistent there, the EK certificate at NV `0x01c00002` unchanged.
+      Enrollment exited 0, with `enroll/start` and `enroll/finish` both `200`, so
+      **`ActivateCredential` with the newly derived transient EK worked**. **No
+      object-memory error on swtpm**: the flush design keeps the peak at three or
+      fewer. The foreign object's public area and name were **byte-identical**
+      before and after (public-area SHA-256 `617512e7...95c5635`), and afterwards
+      only `0x81010001` and `0x81010016` were persistent. SPIRE `tpm_devid`
+      attested the agent (`.../tpm_devid/4307f45a...`, `subject:cn:100`, agent
+      healthy).
 - [x] 3.2 **hogan** — with a git-stamped package, verify on VM 399's TPM, into a scratch directory, that the persistent objects at `0x81000001`, `0x81010001` and `0x81010016` are unchanged and the enrollment succeeds
       Back up `/var/lib/spire/agent/` first, and do not re-enroll VM 399.
       **Done, 2026-10-17, coordinator on hogan, against `77cfeaa`:** passed.
