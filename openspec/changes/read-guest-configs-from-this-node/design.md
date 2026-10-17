@@ -82,5 +82,16 @@ caller that names a node is the scan problem in another form.
   whenever `pmxcfs` is running, so its absence means `/etc/pve` is not usable
   and reading some other node's directory would hide that. The error must name
   the path.
+- **A failed load at startup is not fatal today.** Per `Load The Cache At
+  Startup And Refresh It On SIGHUP`, the daemon then starts with an empty cache
+  and `/health` still answers `200`. With `mds.require_vm_identity: true` every
+  caller is unbound and refused; with `false` callers get ids derived from
+  their peer address. D1 makes that path likelier than the scan did (one
+  missing link instead of no node at all), so the error has to be visible in
+  the journal. Changing the startup behaviour is not part of this change.
+- **The missing directory must be detected explicitly.** `filepath.Glob` on a
+  directory that does not exist returns an empty list and no error, so the
+  path has to be checked with `os.Stat`/`os.ReadDir` before globbing, or a
+  missing link would silently load zero VMs.
 - **A config with text before the first section that is not the live config**
   does not exist in Proxmox's format; if it ever did, D2 would read it as live.

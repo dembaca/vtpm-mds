@@ -147,6 +147,13 @@ the YAML inventory.
 - **THEN** the load fails with an error naming that path and the cache is left
   unchanged
 
+#### Scenario: An unreadable config file is skipped
+
+- **GIVEN** this node's `qemu-server` directory holds a readable `100.conf`
+  and a `101.conf` that cannot be read
+- **WHEN** the inventory cache is loaded
+- **THEN** the load succeeds with a record for `100` and none for `101`
+
 #### Scenario: This node is read, not the first node by name
 
 - **GIVEN** `/etc/pve/nodes` holds `aaa` and `bbb`, both with a `qemu-server`
@@ -175,7 +182,8 @@ the YAML inventory.
 #### Scenario: A hand-written public address is not stored
 
 - **GIVEN** a guest config whose live section contains
-  `public-ipv4: 203.0.113.7`
+  `public-ipv4: 203.0.113.7`, or the same line written as
+  `public-ipv4=203.0.113.7`
 - **WHEN** the inventory cache is loaded
 - **THEN** the record's raw configuration map has no `public-ipv4` key, so
   `instance-metadata` neither lists nor serves a public address for that VM
