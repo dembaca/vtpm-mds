@@ -12,16 +12,16 @@ SPIRE agent attests with material that works.
 ## 1. Settle the facts and the decision
 
 - [x] 1.1 On hogan, find out why VM 399's SRK works with SPIRE, and verify the finding is recorded in `proposal.md`
-      **Done** on 2026-10-17 by `agent-vtpm-hogan-ead994124`. The first plan,
-      reading the public area of the object at `0x81000001`, could not answer
-      it, because `tpm2_readpublic` shows the generated modulus and not the
-      template's `unique`. It created transient owner primaries with an empty
-      `unique`, with 256 zero bytes, and two controls, flushed them, and
-      compared moduli. Empty and 256 zero bytes give the same key as the
-      persistent object; the controls differ. The hypothesis that VM 399's SRK
-      has an empty `unique` was wrong, and not needed: through tpm2-tools both
-      templates give one key on hogan's vTPM. Through go-tpm it is untested
-      there (task 1.5). See `proposal.md` for the table.
+      **Done** on 2026-10-17 by `agent-vtpm-hogan-ead994124`. Reading the public
+      area of the object at `0x81000001` could not answer it, because
+      `tpm2_readpublic` shows the generated modulus and not the template's
+      `unique`. It created transient owner primaries through tpm2-tools, with an
+      empty `unique`, 256 zero bytes and two controls, flushed them, and compared
+      moduli. **The persistent object has the same modulus as the empty-`unique`
+      primary, so it is SPIRE's H-1 SRK.** That explains why VM 399 attests, by
+      the reuse in `cachedPrimary`; the reuse itself was not observed. The
+      equal result for 256 zero bytes is a property of tpm2-tools (see 1.4), not
+      of the client.
 - [ ] 1.2 **Maintainer** — decide what the client does with a persistent object at `0x81000001` (option 1, 2 or 3 in `design.md`), and verify the answer is recorded there under a dated "Decided" heading
       The delta is written for option 1. If another option is chosen, the
       delta changes with it.
@@ -33,14 +33,14 @@ SPIRE agent attests with material that works.
       `libtpms0 0.9.3`. Through tpm2-tools the lab, like hogan, does **not**
       tell an empty and a 256-zero `unique` apart; through go-tpm,
       `SRKTemplateRSA` and `SRKTemplateHighRSA` give different primaries on the
-      same guest. This **refuted** the guess that the lab's TPM and hogan's
-      differ, and moved the cause into go-tpm's encoding.
-- [ ] 1.5 **hogan** — create transient owner primaries through **go-tpm** from `client.SRKTemplateRSA()` and from the template with an empty `ModulusRaw` on VM 399's TPM, flush them, and verify whether their moduli differ, with the output recorded in `proposal.md`
-      This is the missing half of the comparison. It uses the same library the
-      client and SPIRE use, so it settles whether hogan's TPM shows the defect.
-      Read-only for persistent objects; flush every transient handle and say so.
-      Also state how the 2026-09-14 material on VM 399 was created (this
-      client or `tpm2-tools`), if that can be found out.
+      same guest. So tpm2-tools is unsuited to compare these templates, and the
+      defect does not depend on which TPM it is.
+- [ ] 1.5 **hogan** — create transient owner primaries through **go-tpm** from `client.SRKTemplateRSA()` and from the template with an empty `ModulusRaw` on VM 399's TPM, flush them, and verify whether their moduli differ and whether the empty one equals the persistent object, with the output recorded in `proposal.md`
+      Confirmatory, not blocking: the defect is already shown at the library
+      level on the lab's TPM. It uses the library the client and SPIRE use, so it
+      also checks the inference about `cachedPrimary`. Read-only for persistent
+      objects; flush every transient handle and say so. Also state how the
+      2026-09-14 material on VM 399 was created, if that can be found out.
 
 ## 2. Implement, after the coordinator's ACK on this record
 
@@ -69,8 +69,8 @@ SPIRE agent attests with material that works.
       `/usr/share/OVMF/`).
 - [ ] 3.2 **Cloud lab** — repeat with a persistent object pre-created at `0x81000001` and verify it is untouched and SPIRE still attests
 - [ ] 3.3 **hogan** — with a git-stamped package, verify on VM 399's TPM that the persistent objects at `0x81000001`, `0x81010001` and `0x81010016` are unchanged after an enrollment run into a **scratch directory**, not into `/var/lib/spire/agent/`
-      This shows that nothing breaks. Whether hogan reproduces the defect is
-      what 1.5 finds out; if it does not, say so here.
+      This shows that nothing breaks. The persistent SRK there already is the
+      H-1 primary, so this run is not expected to reproduce the defect.
       The scratch directory keeps the working pilot material in place. Back up
       `/var/lib/spire/agent/` on the guest before any run that could replace
       it, and say so.
