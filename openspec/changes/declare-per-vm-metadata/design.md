@@ -115,6 +115,74 @@ availability zone are the first keys; `public-ipv4` is the test case for a
 still apply, but D2 (the carrier for values) is no longer urgent. D1, D3, D4
 and D7 are what unlock region and zone.
 
+## What SPIRE's `tpm_devid` attestor can use (read 2026-10-17)
+
+Raised by the maintainer: more data in the certificate than `CN=<vmid>`, and
+a more telling SPIFFE ID than one built on VM IDs. Read from the current SPIRE
+documentation, not from memory. Sources are `spiffe/spire`:
+`doc/plugin_server_nodeattestor_tpm_devid.md` (on `main` at `9dbd864e89`,
+2026-10-08), the same file at tag `v1.15.4`, and
+`doc/tpm_deployment_walkthrough.md` (`main` at `562b3f4d6d`).
+
+- **The agent's SPIFFE ID is not configurable.** It is
+  `spiffe://<trust_domain>/spire/agent/tpm_devid/<fingerprint>`, where the
+  fingerprint is the SHA1 of the DER-encoded identity certificate. The
+  walkthrough says so in as many words: "That identity is not configurable."
+  Nothing in the certificate subject changes it. Even a re-issued certificate
+  for the same VM gets a new agent ID.
+- **What the attestor offers as selectors, in release `v1.15.4`:**
+  `tpm_devid:subject:cn:<cn>`, `tpm_devid:issuer:cn:<cn>`, and
+  `tpm_devid:fingerprint:<sha1>` for each certificate in the proof chain except
+  the leaf. Nothing is read from a SAN, and no selector is listed for O or OU.
+- **What `main` adds** (`tpm_devid: add subject attribute selectors by OID
+  (#7312)`, 2026-10-08): `tpm_devid:subject:oid:<OID>:<value>` for any
+  string-valued attribute of the subject, standard or custom, so O, OU and
+  `serialNumber` become possible. **It is in no release tag.** `v1.15.4`
+  (published 2026-10-15) does not contain it, and the commit is 82 commits
+  ahead of that tag. It can only be relied on once a release ships it. The
+  deployment walkthrough is also on `main` only.
+- **A readable identity comes from a node alias, not from the certificate.**
+  The walkthrough's "Node Aliases" section: `spire-server entry create
+  -spiffeID spiffe://example.org/node/primary -node -selector
+  tpm_devid:subject:cn:node-01.example.org` creates an additional identity,
+  "shared by every node matching the given selectors", to use as the stable
+  `parentID` of workload entries. Without an alias, workload entries must be
+  parented to each node's fingerprint-based ID individually. This works today
+  on `v1.15.4` with `CN=<vmid>` and needs **no change to this service**: the
+  operator maps a VM ID to a readable alias in SPIRE.
+- **The trust statement is SPIRE's own:** "The trusted DevID issuer must
+  validate subject attribute claims before signing. Certificate validation and
+  TPM proofs do not independently establish the accuracy or uniqueness of
+  those claims." Here the issuer is this service's DevID CA, so any field it
+  puts into a certificate is a claim this service vouches for.
+- **One inconsistency in the documentation, not resolved here:** the server
+  plugin page lists the CA-chain selector as `tpm_devid:fingerprint:<sha1>`,
+  while the walkthrough calls it `ca:fingerprint:`. The code is not read.
+
+### D8. Where the readable name comes from
+
+1. **A SPIRE node alias keyed on `CN=<vmid>`.** It needs nothing from us and
+   works on the released version. The mapping from VM ID to name lives in
+   SPIRE, maintained by whoever runs it.
+2. **A descriptive name in the certificate**, for example as `CN`. That changes
+   `devid-enrollment`, whose archived change `enforce-authenticated-ldevid-
+   subject` pins `CN=<vmid>`, and it breaks the existing registrations that
+   select on `subject:cn`.
+3. **`CN=<vmid>` stays, and a second subject attribute carries the name or
+   labels** (for example in OU or a custom OID), matched through
+   `subject:oid`. This needs a SPIRE release that contains #7312, and a
+   subject carrying values from Proxmox tags.
+
+### D9. Trust of values that reach the certificate
+
+A tag or a VM name is only as trustworthy as the Proxmox privilege needed to
+change it (`VM.Config.Options`, per the coordinator), whereas a VM ID is
+assigned only by whoever creates VMs. Anything from option 3 above is therefore
+a statement a lower-privileged operator can influence. D7 applies: it must come
+from the operator or the host, never from the guest, and the question is which
+Proxmox role is allowed to edit it. This is the open question the coordinator
+named for the record.
+
 ## Goals
 
 - Choose a carrier **per category of data**, not per key.

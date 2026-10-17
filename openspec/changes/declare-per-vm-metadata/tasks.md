@@ -15,7 +15,7 @@ hand-written key, into a Proxmox guest config, including VM 399's.
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer** — answer D1 to D5 and D7 in `design.md`, and verify the answers are recorded there under a dated "Decided" heading
+- [ ] 1.1 **Maintainer** — answer D1 to D5, D7, D8 and D9 in `design.md`, and verify the answers are recorded there under a dated "Decided" heading
 - [ ] 1.2 Check D6 against current Kubernetes documentation — how a node obtains `topology.kubernetes.io/region` and `.../zone` without an in-tree cloud provider — and verify the finding is recorded in `design.md` with the URLs read
       Read current documentation, not memory, as `AGENTS.md` requires for
       Teleport. If a consumer needs anything beyond `placement/region` and
@@ -37,6 +37,14 @@ hand-written key, into a Proxmox guest config, including VM 399's.
 - [ ] 1.5 Replace this section's follow-on with implementation and verification tasks for the decision, numbered `N.N`, and verify `scripts/openspec-validate.py --strict` counts every new task
       A suffix such as `5.2a` is not recognised as a task by the fallback
       validator, so it is never reported as unticked.
+
+- [x] 1.6 Read what SPIRE's `tpm_devid` attestor takes from the certificate and how a readable SPIFFE ID arises, and verify the finding is recorded in `design.md` with sources and the release it holds for
+      **Done** on 2026-10-17 by `agent-mac-vtpm-mds-0172be`, from `spiffe/spire`
+      at the commits named in `design.md`. The agent ID is fixed
+      (`…/spire/agent/tpm_devid/<sha1 of the certificate>`); a readable identity
+      is a node alias; `subject:oid` selectors exist only on `main`, not in
+      `v1.15.4`. Not checked: the SPIRE version actually deployed, and the
+      attestor's source code.
 
 ## 2. Under every decision
 
