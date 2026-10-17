@@ -78,8 +78,19 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
       Changes a shared resource, VM 399's config, so it needs the maintainer's go
       in the session of whoever runs it. Without it the tag path is verified on
       constructed trees only; say so when archiving.
-- [ ] 3.4 **Cloud lab** — declare `zone` and `region` for one entry of the lab inventory, and verify a guest reads them through both keys and the document, and that an entry declaring neither reads `proxmox` and `local`
+- [x] 3.4 **Cloud lab** — declare `zone` and `region` for one entry of the lab inventory, and verify a guest reads them through both keys and the document, and that an entry declaring neither reads `proxmox` and `local`
       Say which layout was used (`swtpm-localca`, `/usr/share/OVMF/`).
+      **Done, 2026-10-17, `agent-cursor-vtpm-22e0`, against `99cc9f4`:** passed.
+      Layout `swtpm-localca` and `/usr/share/OVMF/OVMF_CODE_4M.fd`. Pure
+      verification: `zone` and `region` were declared only in the lab inventory
+      outside the repository (`/var/lib/mds-lab/inventory/lab.yaml`), nothing
+      under `scripts/qemu-lab/` was touched. A guest, `i-100` through
+      `169.254.169.254`, read `zone: lab-zone-a` and `region: lab-region-west`
+      through `placement/availability-zone` and `placement/region`, and the
+      identity document agreed. After a SIGHUP with neither declared, it read
+      `proxmox` and `local`, again agreeing with the document.
+      **Not shown in the lab:** the Proxmox half (tags, host placement), which only
+      hogan can show.
 
 ## 4. Archive
 
