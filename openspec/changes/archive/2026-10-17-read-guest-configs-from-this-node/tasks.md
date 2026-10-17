@@ -61,11 +61,22 @@ after the record has been read back on the bus, on this branch, in
       From VM 399 with a token, `GET /latest/meta-data/instance-id` → `200 i-399`,
       `instance-identity/document` → `200`. As expected, hogan shows no change:
       it sorts first and has no snapshots or `public-ipv4:` lines.
-- [ ] 2.3 **Maintainer, optional** — take a snapshot of VM 399, change nothing else, restart `vtpm-mds`, and verify the startup log's MAC count is unchanged and `instance-id` still answers `i-399`; then delete the snapshot
+- [x] 2.3 **Maintainer, optional** — take a snapshot of VM 399, change nothing else, restart `vtpm-mds`, and verify the startup log's MAC count is unchanged and `instance-id` still answers `i-399`; then delete the snapshot
       The agent user's `hogan-lab` wrapper allows no `qm snapshot`. Without
       this task the section handling is verified on constructed trees only;
       say so when archiving.
+      **Not executable, closed 2026-10-17.** The maintainer tried and Proxmox
+      refused: "The current guest configuration does not support taking new
+      snapshots" (cause not checked; VM 399's `tpmstate0` is a `raw` volume on
+      `proxmox-nfs-0`). Section handling is therefore verified on constructed
+      config trees only (`TestASnapshotDoesNotBindARemovedNIC`,
+      `TestPendingAndSpecialSectionsAreNotLiveConfiguration`), whose layout was
+      taken from `write_vm_config` on hogan, not from a live snapshot.
 
 ## 3. Archive
 
-- [ ] 3.1 Archive with `openspec archive`, update `AGENTS.md` where it lists the `vmconfig.go` fixes as deferred, and verify `openspec validate --all --strict` is still clean
+- [x] 3.1 Archive with `openspec archive`, update `AGENTS.md` where it lists the `vmconfig.go` fixes as deferred, and verify `openspec validate --all --strict` is still clean
+      **Done 2026-10-17 by the coordinator** from `main` at `eda487e` (the #40
+      merge). `openspec archive` applied `vm-inventory` `~2`. `AGENTS.md` no
+      longer lists the `vmconfig.go` fixes as deferred. Validation results are
+      in the archive commit.

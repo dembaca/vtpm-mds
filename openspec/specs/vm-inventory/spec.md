@@ -71,16 +71,13 @@ not having declared one.
 
 The record's raw configuration map SHALL contain `name`, holding the entry's
 `name` value, and SHALL contain `public-ipv4` holding the validated address
-when, and only when, one is declared. That key is spelled as the Proxmox
-backend spells it, so a reader of a VM record need not know which backend
-produced it.
+when, and only when, one is declared.
 
-The Proxmox backend validates no address: it stores every `key: value` line
-verbatim, as `Derive VM Records From Proxmox Guest Configuration` requires, and
-a malformed `public-ipv4:` line there is therefore carried into the record and
-rejected where it is read instead. That asymmetry is deliberate. Failing the
-whole inventory load over one typo in a file this service does not own would
-deny metadata to every VM on the host, which is a worse outcome than the typo.
+The YAML inventory is the only backend that can declare a public address. The
+Proxmox backend never stores a `public-ipv4` key, as `Derive VM Records From
+Proxmox Guest Configuration` requires: Proxmox itself cannot write such a key,
+so a line carrying one was added by hand and disappears on the next edit of
+that VM.
 
 When two entries share an `id`, the last one read SHALL win. The loader SHALL
 NOT validate MAC syntax, SHALL NOT reject a MAC that appears under more than
@@ -137,20 +134,29 @@ an error.
 
 ### Requirement: Derive VM Records From Proxmox Guest Configuration
 
-With the Proxmox backend the service SHALL locate a node directory by scanning
-`/etc/pve/nodes` for the first entry that contains a `qemu-server`
-subdirectory, and SHALL fail with an error when the nodes directory cannot be
-read or when no such node exists.
+With the Proxmox backend the service SHALL read the guest configuration of
+the node it runs on, from `/etc/pve/local/qemu-server`. `/etc/pve/local` is the
+link Proxmox maintains to this node's directory under `/etc/pve/nodes`. The
+service SHALL NOT scan `/etc/pve/nodes` or choose a node by any other rule, and
+SHALL fail with an error naming `/etc/pve/local/qemu-server` when that
+directory cannot be read. A guest of another node cannot reach this service
+over the IMDS bridge, so this node's guests are the only callers there are.
 
-Every `*.conf` file in that node's `qemu-server` directory SHALL yield one VM
-record whose ID is the file name without its `.conf` suffix. A config file
-that cannot be read SHALL be skipped without failing the load.
+Every `*.conf` file in that directory SHALL yield one VM record whose ID is the
+file name without its `.conf` suffix. A config file that cannot be read SHALL
+be skipped without failing the load.
 
-Within a config file, blank lines and lines starting with `#` SHALL be
+Only the live configuration SHALL be read: the lines before the first line
+whose trimmed form starts with `[`. Proxmox writes the live configuration
+first and every snapshot, pending-change and special section after it, under
+such a header, so nothing in those sections describes the running guest. Their
+lines SHALL contribute neither keys nor MAC addresses.
+
+Within the live configuration, blank lines and lines starting with `#` SHALL be
 ignored. Every other line SHALL be split on the first `:` — or, failing that,
 the first `=` — and stored key/value in the record's raw configuration map
-with both sides trimmed. The record name SHALL be the `name` key of that map
-when present.
+with both sides trimmed, except that a `public-ipv4` key SHALL NOT be stored.
+The record name SHALL be the `name` key of that map when present.
 
 A MAC address SHALL be taken only from a line matching
 `^net<N>[:=]\s*virtio=<17 characters of hex and colons>`, and SHALL be stored
@@ -179,10 +185,51 @@ the YAML inventory.
 
 #### Scenario: No Proxmox node directory
 
-- **GIVEN** `/etc/pve/nodes` is unreadable or holds no directory with a
-  `qemu-server` subdirectory
+- **GIVEN** `/etc/pve/local/qemu-server` does not exist or cannot be read
 - **WHEN** the inventory cache is loaded
-- **THEN** the load fails with an error and the cache is left unchanged
+- **THEN** the load fails with an error naming that path and the cache is left
+  unchanged
+
+#### Scenario: An unreadable config file is skipped
+
+- **GIVEN** this node's `qemu-server` directory holds a readable `100.conf`
+  and a `101.conf` that cannot be read
+- **WHEN** the inventory cache is loaded
+- **THEN** the load succeeds with a record for `100` and none for `101`
+
+#### Scenario: This node is read, not the first node by name
+
+- **GIVEN** `/etc/pve/nodes` holds `aaa` and `bbb`, both with a `qemu-server`
+  directory, and `/etc/pve/local` links to `nodes/bbb`
+- **WHEN** the inventory cache is loaded
+- **THEN** the records are exactly those of `bbb`
+
+#### Scenario: A snapshot does not bind a removed NIC
+
+- **GIVEN** a guest config whose live section has `name: guest-b` and
+  `net0: virtio=52:54:00:00:00:01,bridge=vmbr0`, followed by a `[before-change]`
+  snapshot section with `name: guest-old` and
+  `net0: virtio=52:54:00:00:00:02,bridge=vmbr0`
+- **WHEN** the inventory cache is loaded
+- **THEN** the record has name `guest-b` and the single MAC `52:54:00:00:00:01`,
+  and no caller with MAC `52:54:00:00:00:02` is bound to it
+
+#### Scenario: Pending and special sections are not live configuration
+
+- **GIVEN** a guest config whose live section has one `virtio=` NIC, followed
+  by a `[PENDING]` section adding `net1: virtio=52:54:00:00:00:03` and a
+  `[special:cloudinit]` section
+- **WHEN** the inventory cache is loaded
+- **THEN** the record has only the live NIC's MAC
+
+#### Scenario: A hand-written public address is not stored
+
+- **GIVEN** a guest config whose live section contains
+  `public-ipv4: 203.0.113.7`, or the same line written as
+  `public-ipv4=203.0.113.7`
+- **WHEN** the inventory cache is loaded
+- **THEN** the record's raw configuration map has no `public-ipv4` key, so
+  `instance-metadata` neither lists nor serves a public address for that VM
 
 ### Requirement: Bind A Caller To A VM Record By ARP Lookup
 

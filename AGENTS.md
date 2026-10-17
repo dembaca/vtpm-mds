@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-17
 
-None. Three were archived on 2026-10-17; the first two in this order:
+None. Four were archived on 2026-10-17; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -162,16 +162,23 @@ Left for a separate change, by that record's non-goals: `CreateEK` still evicts
 a non-matching persistent object at `0x81010001`. **Before any SPIRE upgrade,**
 re-check that the new release's `SRKTemplateHighRSA` is unchanged.
 
-Deferred by the maintainer until the above was closed, and needing a record
-and a go before any code: per-VM metadata (`declare-per-vm-metadata`, PR #33;
-its D8 is decided: the LDevID CN stays the VM ID and a readable SPIFFE ID comes
-from a SPIRE node alias on `tpm_devid:subject:cn:<vmid>`, shown end to end in
-the lab; host-side names as extra subject attributes wait for a SPIRE release
-with `subject:oid` selectors)
-and the `internal/proxmox/vmconfig.go` fixes — read this node via
-`/etc/pve/local` rather than the first node alphabetically, section awareness
-so snapshot sections do not contribute MACs, and ignoring a hand-written
-`public-ipv4:` line.
+The `internal/proxmox/vmconfig.go` fixes followed the same day:
+`openspec/changes/archive/2026-10-17-read-guest-configs-from-this-node/`. The
+Proxmox backend reads only `/etc/pve/local/qemu-server` (no scan, no fallback;
+a missing link fails the load with that path), stops at the first `[…]`
+section so snapshot, `[PENDING]` and `[special:…]` lines contribute neither
+keys nor MACs, and never stores `public-ipv4`. `internal/proxmox` has tests
+now, on constructed `/etc/pve` trees. On hogan nothing visible changed (it
+sorts first and has no snapshots); VM 399 cannot take snapshots, so section
+handling was never seen on the live stack.
+
+Deferred by the maintainer, and needing a record and a go before any code:
+per-VM metadata (`declare-per-vm-metadata`, PR #33; its D8 is decided: the
+LDevID CN stays the VM ID and a readable SPIFFE ID comes from a SPIRE node
+alias on `tpm_devid:subject:cn:<vmid>`, shown end to end in the lab; host-side
+names as extra subject attributes wait for a SPIRE release with `subject:oid`
+selectors), and `CreateEK` evicting a non-matching persistent object at
+`0x81010001`.
 
 Those first two both carry a `MODIFIED` block on `Refuse An Instance Identity
 To Callers With No VM Record`, so the signature change's block **was rebuilt
@@ -232,8 +239,8 @@ stay a disjoint set from product work elsewhere:
   The key is listed and served only when the bound VM record declares an
   address — `public_ipv4` in the YAML inventory. The Proxmox backend has no
   supported source: Proxmox itself never writes such a key, and a hand-written
-  `public-ipv4:` line, which `internal/proxmox` would still read, is dropped by
-  the next `qm set`. Ignoring it is part of the pending `vmconfig.go` change. The YAML half was verified on
+  `public-ipv4:` line is dropped by the next `qm set`, and since
+  `read-guest-configs-from-this-node` the Proxmox backend ignores it anyway. The YAML half was verified on
   the cloud lab, the Proxmox half on VM 399 against the installed package.
   Where a declared address should come from on Proxmox is deferred, with the
   wider per-VM metadata question, to PR #33.
