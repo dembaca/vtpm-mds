@@ -70,6 +70,22 @@ itself the signal.
 
 ### Modified Capabilities
 
+- `vm-inventory`: `Load VM Records From The YAML Inventory` is **modified**.
+  The entry gains an optional `public_ipv4`, validated as IPv4 at load time and
+  failing the load loudly on a malformed value, and the record's raw
+  configuration map gains `public-ipv4` when one is declared — spelled as the
+  Proxmox backend spells it, so a reader need not know which backend produced
+  the record. The requirement previously said the map holds "exactly one key,
+  `name`", which is why this delta exists at all: without it, option A is
+  forbidden for the YAML backend. **This delta was missing from the record
+  until 2026-10-17**, found while implementing it; the maintainer then decided
+  the YAML inventory should be on par with the Proxmox one.
+
+  The Proxmox backend is deliberately left validating nothing. It stores every
+  `key: value` line verbatim, so a malformed address there is rejected where it
+  is read instead. Failing a whole host's inventory over one typo in a file
+  this service does not own is the worse outcome.
+
 - `instance-metadata`: two requirements change.
 
   `Refuse An Instance Identity To Callers With No VM Record` is **modified**.

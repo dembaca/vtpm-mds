@@ -57,11 +57,10 @@ tree.
       Answered, so this task is a check rather than a decision. Options B
       (Proxmox `ipconfig0`) and C (guest agent) were rejected because a public
       address is not something this service can observe; see `design.md`.
-- [ ] 2.2 Implement the chosen source and verify a VM with a declared address serves it while a VM without one still answers `404` with an empty body
+- [x] 2.2 Implement the chosen source and verify a VM with a declared address serves it while a VM without one still answers `404` with an empty body
       For option A, `VMConfig.RawConfig` already exists and is documented as
       "Optional key/value metadata", so no struct change is needed.
-      **Half done, and the other half needs a decision this record does not
-      carry.** The reading side is implemented and tested:
+      **Done, both halves.** The reading side:
       `TestPublicIPv4ServesTheDeclaredAddress` serves `203.0.113.7` for a VM
       that declares it, answers `404` with an empty body for one that does not,
       and treats `not-an-address`, `2001:db8::1`, `203.0.113.7/32`,
@@ -73,36 +72,48 @@ tree.
       raw configuration map", so a `public-ipv4: 203.0.113.7` line in
       `/etc/pve/qemu-server/<vmid>.conf` reaches `RawConfig["public-ipv4"]`
       today.
-      **With the YAML backend it is forbidden.**
-      `Load VM Records From The YAML Inventory` says entries support "`id`,
-      `name`, `macs` and `ek_sha256`, and keys outside that set SHALL be
-      ignored", and that the raw configuration map "SHALL contain exactly one
-      key, `name`". A `public_ipv4:` field would contradict both clauses. This
-      change has **no `vm-inventory` delta**, so the contract does not cover
-      it — a gap in this record, found while implementing it, not a gap in the
-      spec. See the note under 2.3.
-- [ ] 2.3 Validate a declared address at inventory load time and verify a malformed value fails the load loudly rather than being served
+      **With the YAML backend it was forbidden until this record gained a
+      `vm-inventory` delta.** `Load VM Records From The YAML Inventory` said
+      entries support "`id`, `name`, `macs` and `ek_sha256`, and keys outside
+      that set SHALL be ignored", and that the raw configuration map "SHALL
+      contain exactly one key, `name`" — both of which a `public_ipv4:` field
+      contradicts. The gap was in this record, not in the spec: the Impact
+      section named `internal/inventory/inventory.go` while no delta covered
+      it. **The maintainer decided on 2026-10-17** that the YAML inventory may
+      declare a public IPv4 so it is on par with the Proxmox one, so the delta
+      went into this change rather than a separate one.
+      `TestLoadYAMLPublicIPv4` proves the declared address reaches
+      `RawConfig["public-ipv4"]` — the same key the Proxmox backend produces,
+      so a reader need not know which backend built the record — while an
+      entry that declares nothing carries **no such key at all**, which is
+      distinguishable from an empty one.
+      `TestLoadYAMLAcceptsAnAbsentOrEmptyPublicIPv4` keeps the field optional,
+      so every inventory written before this change still loads.
+- [x] 2.3 Validate a declared address at inventory load time and verify a malformed value fails the load loudly rather than being served
       Follow the precedent `fail-fast-on-unusable-configuration` set: an
       unusable value stops the service instead of degrading silently. Verify a
       non-IPv4 string and an IPv6 string are both rejected.
-      **Blocked on the maintainer, with the question stated rather than
-      guessed.** Load-time validation and the YAML field both change
-      `vm-inventory`, which this change has no delta for. Three routes, and the
-      choice is not the implementer's:
-      **(i)** add a `vm-inventory` delta to *this* change, modifying
-      `Load VM Records From The YAML Inventory` — the record's Impact section
-      already names `internal/inventory/inventory.go`, so the file was in scope
-      even though the spec consequence was never written down;
-      **(ii)** keep this change to the Proxmox source and the index, which is
-      spec-complete as it stands, and raise a separate change for the YAML
-      field; **(iii)** drop the YAML field, leaving the lab inventory unable to
-      declare an address.
-      Until then the reading side is the second line of defence on its own:
-      `PublicIPv4` treats a malformed declaration as absent, so one can never
-      be served as an address, and the index never advertises it. That is not a
-      substitute for failing the load — a typo stays silent, which is exactly
-      what `fail-fast-on-unusable-configuration` argued against — which is why
-      this task stays open rather than being ticked against the fallback.
+      **Done for the YAML inventory, and deliberately not for Proxmox.**
+      `LoadYAML` parses a declared `public_ipv4` and returns
+      `inventory entry "100": public_ipv4 "…" is not an IPv4 address`,
+      producing **no inventory at all** rather than a partial one.
+      `TestLoadYAMLRejectsAMalformedPublicIPv4` covers five shapes, each
+      required to fail and to name both the entry and the field:
+      `not-an-address`, `2001:db8::1` (a valid address, but not IPv4),
+      `203.0.113.7/32` (a prefix), `203.0.113.999` (out of range) and
+      `203.0.113.7:80` (host and port). That is the loud failure
+      `fail-fast-on-unusable-configuration` argued for: a typo stops the
+      service instead of degrading to "no public address", which would be
+      indistinguishable from not having declared one.
+      **The Proxmox backend validates nothing, on purpose.** It stores every
+      `key: value` line of a guest config verbatim, as its own requirement
+      demands, so a malformed `public-ipv4:` line there is carried into the
+      record and rejected by `PublicIPv4` where it is read. Failing a whole
+      host's inventory over one typo in a file this service does not own would
+      deny metadata to **every** VM on that host — a worse outcome than the
+      typo, and a different posture from the YAML file, which this project owns
+      and an operator writes by hand. The asymmetry is written into the
+      `vm-inventory` delta rather than left for a reader to discover.
 - [x] 2.4 Verify a declared address is never derived from the connection — assert that a caller whose peer is `203.0.113.7` but whose VM declares nothing still gets `404`
       **Done.** `TestPublicIPv4IsNeverDerivedFromTheConnection` asserts exactly
       that peer and that status, with an empty body and
@@ -143,9 +154,22 @@ tree.
 
 ## 4. Confirm nothing else moved
 
-- [ ] 4.1 Verify `local-hostname`, `local-ipv4`, `placement/availability-zone`, `services/domain`, the unknown-key subtree behaviour and the `301` on `/latest/meta-data` are byte for byte unchanged
+- [x] 4.1 Verify `local-hostname`, `local-ipv4`, `placement/availability-zone`, `services/domain`, the unknown-key subtree behaviour and the `301` on `/latest/meta-data` are byte for byte unchanged
       Every one of these is carried verbatim into the replacement requirement,
       so any difference is a regression, not a decision.
+      **Done at source level; re-checked on the wire under 5.2.**
+      `git diff origin/main...HEAD -- imds/handlers.go` has hunks in exactly
+      two functions, `HandleMetaDataIndex` and `HandlePublicIPv4`. Zero changed
+      lines mention `HandleLocalHostname`, `HandleLocalIPv4`,
+      `HandleAvailabilityZone` or `HandleDomain`, and no changed line touches
+      `LocalIPv4`'s body — the third hunk header names it only because
+      `getPublicIP` sat directly beneath it. Route registration is untouched,
+      so the subtree behaviour for unknown keys and the `301` on
+      `/latest/meta-data` cannot have moved: both come from the mux, not from a
+      handler.
+      Their tests pass unchanged: `TestHandleLocalIPv4`,
+      `TestHandleLocalIPv4_IPv6Peer`, `TestHandleLocalIPv4_IPv4MappedPeer`,
+      `TestHandleAvailabilityZone`.
 - [x] 4.2 Verify `getAvailabilityZone` and `getRegion` are untouched, including their `TODO` comments
       **Done.** `git diff imds/handlers.go` shows `func getAvailabilityZone`
       only as an unchanged context line; neither function nor its
@@ -170,10 +194,17 @@ tree.
 
 ## 5. Validate and archive
 
-- [ ] 5.1 Verify `openspec validate --all --strict` exits 0 on `hogan`, where the CLI is at `/usr/local/bin/openspec`
+- [x] 5.1 Verify `openspec validate --all --strict` exits 0 on `hogan`, where the CLI is at `/usr/local/bin/openspec`
       Also run `scripts/openspec-validate.py --strict`: it is a floor, not a
       replacement, but it enforces one rule the CLI does not — every checkbox
       line must contain its own verification.
+      **Done** 2026-10-17 on this branch, rebased onto `main` at `bb27143`:
+      `openspec validate --all --strict` → `Totals: 7 passed, 0 failed` — five
+      living specs plus this change and
+      `remove-the-constant-instance-identity-signature`.
+      `scripts/openspec-validate.py --strict` reports `all tasks ticked` twice,
+      once for each of those two changes, which is correct: both still have
+      open tasks by design.
 - [ ] 5.2 Build and install a git-stamped package and verify `vtpm-mds -version` and `dpkg -l vtpm-mds` identify this tree, then re-run tasks 1.1, 1.2, 2.2 and 3.1 against the installed daemon
       The agent user **cannot** build a `.deb` — `dpkg-buildpackage` needs
       `dpkg --print-architecture` and `/usr/local/sbin/hogan-lab` allows only
