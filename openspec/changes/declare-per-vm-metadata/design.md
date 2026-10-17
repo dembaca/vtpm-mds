@@ -75,8 +75,14 @@ Both were raised on 2026-10-17.
   `RawConfig["ipconfig0"]`. But it is what the guest is *told* to configure
   on NIC N, which is meaning (b), not (c). It equals a public address only
   when that NIC is on the public network without NAT. It is also intent, not
-  observation, and it is absent with `ip=dhcp` or without cloud-init — VM 399
-  uses none. **Conclusion:** a sound Proxmox-native source for a (b) key where
+  observation, and it is absent with `ip=dhcp`. **Measured on VM 399**
+  by the coordinator on 2026-10-17. VM 399 *does* use cloud-init
+  (`ide0: …vm-399-cloudinit.qcow2,media=cdrom`, `ciuser: ansible`), and its
+  config shows both cases: `ipconfig0: ip=dhcp` (no address for the main NIC)
+  and `ipconfig1: ip=169.254.169.10/16` (static, on the IMDS bridge). A static
+  `ipconfigN` is therefore an operator declaration in a field that means
+  "configure this on first boot", and it can go stale without anyone
+  noticing. **Conclusion:** a sound Proxmox-native source for a (b) key where
   it exists. #29 rejected it for `public-ipv4` because (b) is not (c), not
   because the source is unsound.
 - **The address the Proxmox UI shows.** The VM summary takes it from the
@@ -84,9 +90,14 @@ Both were raised on 2026-10-17.
   guest, it would repeat what that guest reported about itself. The guest has
   that already, and the guest controls it, so it is worthless as something the
   service vouches for. Behind NAT the public address is not on the guest, so
-  the UI cannot show it either. This is #29's option C, still rejected. That
-  the summary's addresses come from the agent is not yet checked against VM
-  399.
+  the UI cannot show it either. This is #29's option C, still rejected for
+  anything the service vouches for. **Measured on VM 399:**
+  `qm guest cmd 399 network-get-interfaces` reports `lo 127.0.0.1`,
+  `eth0 10.7.10.21` (what the UI shows, and an RFC1918 address, so meaning b)
+  and `eth1 169.254.169.10` (the IMDS bridge). Meaning (b) therefore has an
+  observable value, but a guest-asserted one. Trusting it for anything in the
+  identity document is the same class of mistake as honouring
+  `X-Forwarded-For` (queue item 3) or a guest-chosen CN (queue item 2).
 
 ### Evidence: what has already been rejected
 
@@ -171,6 +182,21 @@ where SDN IPAM exists, it could be added later.
 - **Data in Proxmox's files** (tags, Notes) is logged and treated as absent.
   Failing the whole inventory over one VM's tag would deny metadata to every
   VM on the host. #29 already wrote this asymmetry down.
+
+### D7. Trust source per key
+
+This was raised by the coordinator after the measurements above. The question
+is no longer only *where* a value is stored, but *whose statement* it is.
+There are three possible sources:
+- **the operator**, through a declaration;
+- **the host**, by derivation, as with the node and the cluster;
+- **the guest**, through the agent.
+
+The answer may differ per key. If a guest-asserted value is served at all,
+for example the guest's own view of its network address (b), it must say so
+in its **name**, not only in this document. It must never appear in the
+instance identity document. The default for every key is "operator or host,
+never guest".
 
 ### D6. The consumer
 
