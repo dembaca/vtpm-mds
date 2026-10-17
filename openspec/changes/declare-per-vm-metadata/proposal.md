@@ -42,6 +42,16 @@ Four facts brought it here.
    own node. It reads the alphabetically first node directory of the cluster.
    That finding belongs to the coordinator's separate change.
 
+## Maintainer's steer, 2026-10-17
+
+`public-ipv4` is **deferred**. It matters little in this cluster: on a cloud it
+tells an instance the public NAT address it can be reached on, which is not
+needed for a VM identity. It stays as one of many per-VM metadata fields,
+configured through a tag, or through another method this record proposes. So
+`public-ipv4` is no longer the lead case. Region and availability zone are the
+first keys to design for, and `public-ipv4` is only a test of whether the
+carrier also holds a *value*. #29's YAML field stays as it is.
+
 ## What Changes
 
 **Not decided.** This record asks the maintainer to settle the category before

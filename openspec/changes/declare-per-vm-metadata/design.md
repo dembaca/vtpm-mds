@@ -107,6 +107,14 @@ about a public address". The guest agent "returns all addresses with nothing
 marking which is public" and "turns a metadata read into a synchronous call
 into the guest". Both stay rejected here; see Non-Goals.
 
+## Maintainer's steer, 2026-10-17
+
+`public-ipv4` is deferred, and is no longer the lead case. Region and
+availability zone are the first keys; `public-ipv4` is the test case for a
+*value*, and may follow later through the same carrier. The decisions below
+still apply, but D2 (the carrier for values) is no longer urgent. D1, D3, D4
+and D7 are what unlock region and zone.
+
 ## Goals
 
 - Choose a carrier **per category of data**, not per key.
