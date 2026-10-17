@@ -151,24 +151,43 @@ be stored like any other.
 `mds.zone.<name>` and its region by a tag `mds.region.<name>`, read from the
 live configuration's `tags` key. The tags SHALL be split at `;`, `,` and
 whitespace. `<name>` SHALL be every character after the prefix and SHALL be
-valid when it is 1 to 63 characters from `a-z`, `0-9`, `_`, `-`, `+` and `.`,
-starting with a letter or digit. A VM with exactly one valid tag of a kind
+valid when it is 1 to 63 characters from `a-z`, `A-Z`, `0-9`, `_`, `-`, `+` and
+`.`, starting with a letter or digit. A name SHALL be served exactly as its
+source spells it: the service SHALL NOT change its case. A VM with exactly one valid tag of a kind
 SHALL carry that value in its raw configuration map, under `zone` or `region`.
 A VM with two or more tags of one kind, valid or not, SHALL carry no value of
 that kind, and the service SHALL log the VM id and the kind. A tag with the
 prefix and an invalid name SHALL be logged and ignored. A fault in one VM's
 tags SHALL NOT affect another VM's record or the load.
 
-**Host placement.** The backend SHALL also determine the host's placement: the
-zone is the name of the node, the target name of the `/etc/pve/local` link, and
-the region is the `cluster_name` of `/etc/pve/corosync.conf`, or `local` when
-that file is absent, unreadable or names no cluster. It SHALL be determined
-whenever the inventory is loaded, so a SIGHUP reload refreshes it. The node name
-and the cluster name SHALL be lowercased before they are checked, because Proxmox
-allows capitals in both and a placement name has none. One that is still not a
-valid placement name SHALL be logged and replaced by `proxmox` and `local`
-respectively. Only the guests of this node reach this
-service, so this node's name is the zone of every caller it can bind.
+**Host placement.** The backend SHALL also determine the host's placement, the
+zone and the region each from the first of three sources that gives a valid
+name: first the `topology.kubernetes.io/zone` and `topology.kubernetes.io/region`
+lines of the description of the node the service runs on; then the node name, the
+target name of the `/etc/pve/local` link, as the zone, and the `cluster_name` of
+`/etc/pve/corosync.conf` as the region; then `proxmox` and `local`. The two are
+resolved independently, so a description that names a zone only leaves the region
+to the cluster name.
+
+The description of a node is stored in `/etc/pve/local/config`, which most nodes
+do not have, as lines that start with `#`, each the URL-encoded text of one line
+of the description, so that `topology.kubernetes.io/zone: DUS4` is stored as
+`#topology.kubernetes.io/zone%3A DUS4`. The service SHALL decode each such line
+and read a placement from a decoded line of the form
+`topology.kubernetes.io/zone: <name>` or `topology.kubernetes.io/region: <name>`.
+A line that does not decode or does not have that form SHALL be ignored. A
+missing file SHALL declare nothing and SHALL NOT be logged as a fault. Two or
+more lines of one kind, valid or not, SHALL declare nothing of that kind, and a
+single line whose name is not a valid placement name SHALL be logged and ignored;
+the next source is then used.
+
+A name from any source SHALL be kept exactly as spelled: the service SHALL NOT
+change its case, so that a zone copied from the same description by another
+program reads alike. A node name or cluster name that is not a valid placement
+name SHALL be logged and the next source used. The host placement SHALL be
+determined whenever the inventory is loaded, so a SIGHUP reload refreshes it.
+Only the guests of this node reach this service, so the placement of this node is
+that of every caller it can bind.
 
 A MAC address SHALL be taken only from a line matching
 `^net<N>[:=]\s*virtio=<17 characters of hex and colons>`, and SHALL be stored
@@ -276,12 +295,43 @@ the YAML inventory.
 - **WHEN** the inventory cache is loaded
 - **THEN** the host's zone is `hogan` and its region is `bgl-cluster`
 
-#### Scenario: Capitals in a node or cluster name are lowercased
+#### Scenario: Capitals in a node or cluster name are kept
 
 - **GIVEN** `/etc/pve/local` links to `nodes/Hogan` and `/etc/pve/corosync.conf`
   names the cluster `BGL-Cluster`
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's zone is `hogan` and its region is `bgl-cluster`
+- **THEN** the host's zone is `Hogan` and its region is `BGL-Cluster`
+
+#### Scenario: The node description gives the host's placement
+
+- **GIVEN** the node's `config` holds the description lines `Location:
+  DUS4.M1.02.03`, `topology.kubernetes.io/region: DUS` and
+  `topology.kubernetes.io/zone: DUS4`, each stored as a `#` line with its `:`
+  encoded as `%3A`, and the node and cluster have other names
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `DUS4` and its region is `DUS`
+
+#### Scenario: A description naming one kind leaves the other to the names
+
+- **GIVEN** a description with `topology.kubernetes.io/zone: DUS4` only, on node
+  `hogan` in cluster `bgl-cluster`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `DUS4` and its region is `bgl-cluster`
+
+#### Scenario: An invalid description value falls back to the names
+
+- **GIVEN** a description with `topology.kubernetes.io/zone: bad!zone` and a
+  valid region, on node `hogan`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `hogan`, the region is the description's, and the
+  log names the invalid value
+
+#### Scenario: Two description lines of one kind declare nothing
+
+- **GIVEN** a description with two `topology.kubernetes.io/zone` lines and one
+  region line, on node `hogan`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `hogan` and the region is the description's
 
 #### Scenario: A host without a cluster file has region local
 

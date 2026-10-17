@@ -31,8 +31,8 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
       `TestAHostWithoutAClusterFileHasRegionLocal`,
       `TestAClusterFileWithoutAClusterNameHasRegionLocal`, `TestHostNamesAreLowercased`,
       `TestAnInvalidHostNameFallsBackToTheDefault`, `TestASuccessfulLoadSetsTheHostPlacement`.
-      **Added while implementing:** names are lowercased before the check (D-h,
-      the delta has the scenario).
+      **Superseded by 2.8:** this task lowercased names before the check; the
+      maintainer then decided against any case change, and 2.8 removed it.
 - [x] 2.3 Add `zone` and `region` to the YAML loader, and verify with tests that a valid value reaches the record, an invalid one is logged and ignored, and an invalid one does not stop the load
       **Done:** `zone` and `region` in the YAML loader, logged and ignored when
       invalid. Tests: `TestLoadYAMLZoneAndRegion`, `TestLoadYAMLIgnoresAnInvalidZone`,
@@ -51,13 +51,26 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
       `TestAnInvalidTagNextToAValidOneDeclaresNothing`; a handler that ignores the
       record fails `TestADeclaredZoneAndRegionAreServed`,
       `TestOneValueDeclaredTheOtherFromTheHost` and
-      `TestTheDocumentAndThePlacementKeysAgree`; no lowercasing fails
-      `TestHostNamesAreLowercased`. With the real code all pass.
+      `TestTheDocumentAndThePlacementKeysAgree`; no lowercasing failed
+      `TestHostNamesAreLowercased`, a test 2.8 replaced. With the real code all
+      pass.
 - [x] 2.6 Run `go vet ./...` and `go test ./...` and verify both pass, quoting the result
       **Done:** `go vet` clean and `go test -count=1` `ok` for `cmd/devid-enroll`,
       `imds`, `internal/...` and the root, with the untracked `cmd/prox-mds`
       leftover left out.
 - [x] 2.7 Run `openspec validate --all --strict` and `scripts/openspec-validate.py --strict` and verify both pass
+- [x] 2.8 Read the node description as the first source of the host placement and keep every name as spelled, and verify with tests on constructed trees that a description gives zone and region ahead of the names, that one kind leaves the other to the names, that an invalid or doubled line falls back, and that no source's case is changed
+      **Done, 2026-10-17,** after the maintainer's "ja" and "kein lc() uc()":
+      `descriptionPlacement` in `internal/proxmox/vmconfig.go`, the name syntax
+      allows capitals, and the lowercasing of task 2.2 is gone. Tests:
+      `TestTheNodeDescriptionGivesTheHostPlacement`,
+      `TestADescriptionWithOneKindTakesTheOtherFromTheNames`,
+      `TestANodeWithoutAConfigFileUsesTheNames`,
+      `TestAnInvalidDescriptionValueFallsBackToTheNames`,
+      `TestTwoDescriptionLinesOfOneKindDeclareNothing`, `TestHostNamesKeepTheirCase`,
+      `TestACapitalInATagIsKept`. By mutation, as in 2.5: a description step that
+      reads nothing, the first of two lines winning, lowercasing put back and no
+      URL decoding each turn the matching tests red, and are taken out again.
 
 ## 3. Verify on real artifacts
 
@@ -91,6 +104,11 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
       `proxmox` and `local`, again agreeing with the document.
       **Not shown in the lab:** the Proxmox half (tags, host placement), which only
       hogan can show.
+
+- [ ] 3.5 **A host whose node has a description, maintainer's go needed** — put `topology.kubernetes.io/zone` and `.../region` lines in a node's description (or run on a data-centre node that has them), restart or SIGHUP the service, and verify a guest without tags reads them through both keys and the document, with their case unchanged
+      hogan has no node config, so 3.2 cannot show this step. Without 3.5 the
+      description step is verified on constructed trees only, with the format
+      taken from Proxmox's source; say so when archiving.
 
 ## 4. Archive
 

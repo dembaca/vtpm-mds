@@ -3,6 +3,7 @@ package proxmox
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -148,12 +149,18 @@ func placementOfKind(vmid, kind, prefix string, tags []string) string {
 
 var clusterNamePattern = regexp.MustCompile(`(?m)^\s*cluster_name:\s*(\S+)`)
 
-// HostPlacement returns the placement of the node this service runs on. The zone
-// is the node name, the target of <pveRoot>/local, and the region is the
-// cluster_name of <pveRoot>/corosync.conf, or "local" without one. Both are
-// lowercased, since cluster and node names may carry capitals the placement
-// names do not, and one that is still not a valid name is logged and replaced
-// by the default. pveRoot "" means DefaultRoot.
+// descriptionLine matches a line of a node description that declares a placement.
+var descriptionLine = regexp.MustCompile(`^\s*topology\.kubernetes\.io/(zone|region):\s*(\S+)\s*$`)
+
+// HostPlacement returns the placement of the node this service runs on, from
+// three sources in this order: the zone and region lines of the node's
+// description (topology.kubernetes.io/zone and .../region), then the node name,
+// the target of <pveRoot>/local, as the zone and the cluster_name of
+// <pveRoot>/corosync.conf as the region, then the defaults, "proxmox" and
+// "local". Each of the two is resolved on its own, so a description that names a
+// zone only still takes the region from the cluster. A name is kept as its source
+// spells it, capitals included. One that is not a valid placement name is logged
+// and the next source is used. pveRoot "" means DefaultRoot.
 func HostPlacement(pveRoot string) inventory.Placement {
 	if pveRoot == "" {
 		pveRoot = DefaultRoot
@@ -162,7 +169,7 @@ func HostPlacement(pveRoot string) inventory.Placement {
 
 	if target, err := os.Readlink(filepath.Join(pveRoot, "local")); err != nil {
 		log.Printf("host placement: cannot read the %s link: %v", filepath.Join(pveRoot, "local"), err)
-	} else if node := strings.ToLower(filepath.Base(filepath.Clean(target))); inventory.ValidPlacementName(node) {
+	} else if node := filepath.Base(filepath.Clean(target)); inventory.ValidPlacementName(node) {
 		placement.Zone = node
 	} else {
 		log.Printf("host placement: node name %q is not a valid placement name, zone stays %q", node, placement.Zone)
@@ -170,12 +177,66 @@ func HostPlacement(pveRoot string) inventory.Placement {
 
 	if data, err := os.ReadFile(filepath.Join(pveRoot, "corosync.conf")); err == nil {
 		if m := clusterNamePattern.FindSubmatch(data); m != nil {
-			if cluster := strings.ToLower(string(m[1])); inventory.ValidPlacementName(cluster) {
+			if cluster := string(m[1]); inventory.ValidPlacementName(cluster) {
 				placement.Region = cluster
 			} else {
 				log.Printf("host placement: cluster name %q is not a valid placement name, region stays %q", cluster, placement.Region)
 			}
 		}
 	}
+
+	zone, region := descriptionPlacement(filepath.Join(pveRoot, "local", "config"))
+	if zone != "" {
+		placement.Zone = zone
+	}
+	if region != "" {
+		placement.Region = region
+	}
 	return placement
+}
+
+// descriptionPlacement reads the zone and region a node declares in its
+// description. Proxmox keeps the description in <node>/config as '#' lines, each
+// URL-encoded, so "topology.kubernetes.io/zone: DUS4" is stored as
+// "#topology.kubernetes.io/zone%3A DUS4". A kind is declared by exactly one line
+// with a valid name; two or more lines of one kind declare nothing, as two tags
+// do. A missing file declares nothing and is not an error: most nodes have no
+// node config.
+func descriptionPlacement(path string) (zone, region string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("host placement: cannot read %s: %v", path, err)
+		}
+		return "", ""
+	}
+	found := map[string][]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "#") {
+			continue
+		}
+		decoded, err := url.PathUnescape(strings.TrimPrefix(line, "#"))
+		if err != nil {
+			continue
+		}
+		if m := descriptionLine.FindStringSubmatch(decoded); m != nil {
+			found[m[1]] = append(found[m[1]], m[2])
+		}
+	}
+	pick := func(kind string) string {
+		values := found[kind]
+		switch {
+		case len(values) == 0:
+			return ""
+		case len(values) > 1:
+			log.Printf("host placement: %d %s lines in the description of %s, none used", len(values), kind, path)
+			return ""
+		case !inventory.ValidPlacementName(values[0]):
+			log.Printf("host placement: description %s %q is not a valid placement name, ignored", kind, values[0])
+			return ""
+		}
+		return values[0]
+	}
+	return pick("zone"), pick("region")
 }

@@ -220,7 +220,7 @@ func TestAnInvalidPlacementTagIsIgnored(t *testing.T) {
 		"hogan": {
 			"100.conf": "tags: mds.zone.\n",
 			"101.conf": "tags: mds.zone.rack-b\n",
-			"102.conf": "tags: mds.zone.UPPER\n",
+			"102.conf": "tags: mds.zone.bad!\n",
 		},
 	}))
 	if _, ok := m["100"].RawConfig["zone"]; ok {
@@ -302,15 +302,23 @@ func TestAClusterFileWithoutAClusterNameHasRegionLocal(t *testing.T) {
 	}
 }
 
-// Capitals in a cluster or node name are lowercased before validation.
-func TestHostNamesAreLowercased(t *testing.T) {
+// A node name and a cluster name are served as spelled, capitals included.
+func TestHostNamesKeepTheirCase(t *testing.T) {
 	got := HostPlacement(hostTree(t, "Hogan", strings.Replace(corosyncConf, "%s", "BGL-Cluster", 1)))
-	if want := (inventory.Placement{Zone: "hogan", Region: "bgl-cluster"}); got != want {
+	if want := (inventory.Placement{Zone: "Hogan", Region: "BGL-Cluster"}); got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
 
-// A name that is still not valid after lowercasing is replaced by the default.
+// A capital in a tag is served as spelled too.
+func TestACapitalInATagIsKept(t *testing.T) {
+	r := raw(t, "tags: mds.zone.DUS4;mds.region.DUS\n")
+	if r["zone"] != "DUS4" || r["region"] != "DUS" {
+		t.Fatalf("got zone %q, region %q; want DUS4 and DUS", r["zone"], r["region"])
+	}
+}
+
+// A name that is not valid is replaced by the default.
 func TestAnInvalidHostNameFallsBackToTheDefault(t *testing.T) {
 	got := HostPlacement(hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bad!name", 1)))
 	if got.Region != "local" {
@@ -320,5 +328,69 @@ func TestAnInvalidHostNameFallsBackToTheDefault(t *testing.T) {
 	noLink := t.TempDir()
 	if got := HostPlacement(noLink); got != inventory.DefaultPlacement {
 		t.Fatalf("got %+v, want %+v", got, inventory.DefaultPlacement)
+	}
+}
+
+// nodeConfig writes the node's own config file with the given description
+// lines, each stored the way Proxmox stores a description: as '#' plus the URL
+// encoding of the line.
+func nodeConfig(t *testing.T, root, node string, lines ...string) {
+	t.Helper()
+	var b strings.Builder
+	for _, l := range lines {
+		b.WriteString("#" + strings.NewReplacer(":", "%3A", " ", "%20").Replace(l) + "\n")
+	}
+	b.WriteString("wakeonlan: aa:bb:cc:dd:ee:ff\n")
+	if err := os.WriteFile(filepath.Join(root, "nodes", node, "config"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The description of the node gives the host's placement, ahead of the names, and
+// the lines that declare nothing are ignored.
+func TestTheNodeDescriptionGivesTheHostPlacement(t *testing.T) {
+	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
+	nodeConfig(t, root, "hogan", "Location: DUS4.M1.02.03", "topology.kubernetes.io/region: DUS", "topology.kubernetes.io/zone: DUS4")
+	got := HostPlacement(root)
+	if want := (inventory.Placement{Zone: "DUS4", Region: "DUS"}); got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+// A description that names one kind leaves the other to the names.
+func TestADescriptionWithOneKindTakesTheOtherFromTheNames(t *testing.T) {
+	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
+	nodeConfig(t, root, "hogan", "topology.kubernetes.io/zone: DUS4")
+	got := HostPlacement(root)
+	if want := (inventory.Placement{Zone: "DUS4", Region: "bgl-cluster"}); got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+// A node with no config file, which is the usual case, uses the names.
+func TestANodeWithoutAConfigFileUsesTheNames(t *testing.T) {
+	got := HostPlacement(hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1)))
+	if want := (inventory.Placement{Zone: "hogan", Region: "bgl-cluster"}); got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+// An invalid value in the description is ignored, and the names stand in.
+func TestAnInvalidDescriptionValueFallsBackToTheNames(t *testing.T) {
+	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
+	nodeConfig(t, root, "hogan", "topology.kubernetes.io/zone: bad!zone", "topology.kubernetes.io/region: DUS")
+	got := HostPlacement(root)
+	if want := (inventory.Placement{Zone: "hogan", Region: "DUS"}); got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+// Two lines of one kind declare nothing, as two tags do.
+func TestTwoDescriptionLinesOfOneKindDeclareNothing(t *testing.T) {
+	root := hostTree(t, "hogan", "")
+	nodeConfig(t, root, "hogan", "topology.kubernetes.io/zone: DUS3", "topology.kubernetes.io/zone: DUS4", "topology.kubernetes.io/region: DUS")
+	got := HostPlacement(root)
+	if want := (inventory.Placement{Zone: "hogan", Region: "DUS"}); got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }

@@ -184,7 +184,8 @@ func TestValidPlacementName(t *testing.T) {
 	long := strings.Repeat("a", 63)
 	for name, want := range map[string]bool{
 		"hogan": true, "rack-b": true, "a": true, "0x": true, "a_b.c+d-e": true, long: true,
-		"": false, "-a": false, ".a": false, "Rack": false, "a b": false, "a!": false,
+		"DUS4": true, "BGL-Cluster": true,
+		"": false, "-a": false, ".a": false, "a b": false, "a!": false,
 		long + "a": false, "a/b": false,
 	} {
 		if got := ValidPlacementName(name); got != want {

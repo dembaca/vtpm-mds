@@ -17,8 +17,10 @@ type Placement struct {
 var DefaultPlacement = Placement{Zone: "proxmox", Region: "local"}
 
 // placementName is a valid zone or region name: 1 to 63 characters from the
-// characters of a Proxmox tag, starting with a letter or digit.
-var placementName = regexp.MustCompile(`^[a-z0-9][a-z0-9_.+-]{0,62}$`)
+// characters of a Proxmox tag, starting with a letter or digit. Capitals are
+// allowed and kept: a name is served as its source spells it, so that the zone
+// and region a node label controller copies from the same source read alike.
+var placementName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.+-]{0,62}$`)
 
 // ValidPlacementName reports whether s may be served as a zone or region.
 func ValidPlacementName(s string) bool {
