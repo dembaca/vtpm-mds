@@ -18,7 +18,8 @@ SPIRE agent attests with material that works.
       SPIRE's H-1 SRK. The second, task 1.5 through go-tpm, showed the client's
       template gives a different parent there. VM 399's pilot material most
       likely came from a tpm2-tools script of 2026-09-14, not from the client.
-- [ ] 1.2 **Maintainer** — decide what the client does with a persistent object at `0x81000001` (option 1, 2 or 3 in `design.md`), and verify the answer is recorded there under a dated "Decided" heading
+- [x] 1.2 **Maintainer** — decide what the client does with a persistent object at `0x81000001` (option 1, 2 or 3 in `design.md`), and verify the answer is recorded there under a dated "Decided" heading
+      **Done** on 2026-10-17: option 1, recorded in `design.md`, "Decided".
       The delta is written for option 1. If another option is chosen, the
       delta changes with it.
 - [ ] 1.3 Check that SPIRE `1.14.0` is the version to design against and that the helper is unchanged in the version the maintainer plans to run next, and verify the finding is recorded in `design.md`
@@ -43,13 +44,35 @@ SPIRE agent attests with material that works.
 
 ## 2. Implement, after the coordinator's ACK on this record
 
-- [ ] 2.1 Create the DevID key and the attestation key under a transient owner-hierarchy primary made from the H-1 template, and flush it afterwards, and verify with a unit test that the template has an empty `ModulusRaw` and equals SPIRE's `SRKTemplateHighRSA()`
+- [x] 2.1 Create the DevID key and the attestation key under a transient owner-hierarchy primary made from the H-1 template, and flush it afterwards, and verify with a unit test that the template has an empty `ModulusRaw` and equals SPIRE's `SRKTemplateHighRSA()`
       `SRKTemplateHighRSA()` is `client.SRKTemplateRSA()` with
       `RSAParameters.ModulusRaw = []byte{}`. Compare the two as values; do not
       hard-code one from the other.
-- [ ] 2.2 Remove the use of `cachedPrimary` and `EvictControl` for the SRK, and verify with `git grep` that nothing evicts or persists the SRK handle, and with a swtpm test that a persistent object at `0x81000001` survives an enrollment with the same public area
+      **Done** on 2026-10-17 by `agent-mac-vtpm-mds-0172be`. `SRKTemplateHighRSA()`
+      in `internal/devid/templates.go` is `client.SRKTemplateRSA()` with
+      `ModulusRaw = []byte{}`, and `DefaultKeyFactory` uses it. `CreateSRK` now
+      derives a transient owner primary, and `createUnderSRK` flushes it after
+      creating the key. `TestSRKTemplateIsSPIREHighTemplate` compares both to a
+      template rebuilt in the test from SPIRE's source (`reflect.DeepEqual`,
+      including that `ModulusRaw` is empty and non-nil), and
+      `TestSRKTemplateIsNotTheGoTPMToolsDefault` pins that it is not the
+      256-zero-byte stock template. Both pass.
+
+- [x] 2.2 Remove the use of `cachedPrimary` and `EvictControl` for the SRK, and verify with `git grep` that nothing evicts or persists the SRK handle, and with a swtpm test that a persistent object at `0x81000001` survives an enrollment with the same public area
       The EK keeps `cachedPrimary`; this task must not change it.
-- [ ] 2.3 Add a test that loads the enrolled blobs the way SPIRE does, with `CreatePrimaryEx` in the owner hierarchy from the H-1 template followed by `tpm2.Load`, and verify it passes
+      **Done.** `git grep -n 'cachedPrimary\|EvictControl\|SRKReservedHandle'
+      internal/devid` finds `cachedPrimary` only in the EK path (`keys.go:43`) and
+      `EvictControl` only inside `cachedPrimary` (`keys.go:92`, `:103`);
+      `SRKReservedHandle` appears only in a comment. The EK is unchanged. The
+      survival test, `TestPersistentObjectAtSRKHandleIsLeftAlone`, persists a
+      storage key with a different `unique` at `0x81000001`, runs `CreateDevID`
+      and `CreateAK`, and finds the object's public area byte-identical
+      afterwards. **It ran on go-tpm-tools' in-process simulator** (the
+      Microsoft reference implementation, build tag `tpmsim`), **not on swtpm**:
+      swtpm is not installed on the Mac, and the swtpm harness
+      (`TestEnrollAgainstSwtpm`) skips without its socket.
+
+- [x] 2.3 Add a test that loads the enrolled blobs the way SPIRE does, with `CreatePrimaryEx` in the owner hierarchy from the H-1 template followed by `tpm2.Load`, and verify it passes
       For the negative control, load the same blobs under a primary made from a
       template whose `unique` is **certainly** different, 256 bytes of `0x01`,
       and verify that load fails with the integrity error. That is what shows the
@@ -57,8 +80,32 @@ SPIRE agent attests with material that works.
       "256 zero bytes" as the control when driven through tpm2-tools: both
       `libtpms` versions measured give the same key as the empty one there.
       Name the `swtpm` and `libtpms` versions of the harness in the output.
-- [ ] 2.4 Run `go vet ./...` and `go test ./...` and verify both pass, quoting the output
-- [ ] 2.5 Run `openspec validate --all --strict` and `scripts/openspec-validate.py --strict` and verify both pass
+      **Done**, on the same simulator: `TestDevIDLoadsUnderSPIREParent` loads the
+      DevID and the AK the way SPIRE does, `CreatePrimaryEx` in the owner
+      hierarchy from an H-1 template and then `tpm2.Load`, and they load. The
+      negative control, a parent whose `unique` is 256 bytes of `0x01`, makes the
+      same load fail. **Checked that the tests catch the defect:** with
+      `keys.go` put back to `HEAD`, `TestDevIDLoadsUnderSPIREParent` and
+      `TestPersistentObjectAtSRKHandleIsLeftAlone` failed with `parameter 1,
+      error code 0x1f : integrity check failed`, the error SPIRE reports, and
+      both template tests failed; with the new `keys.go` restored they pass.
+      The old code reused the foreign persistent object as its parent, which is
+      what the second test shows. A further data point, logged and not
+      asserted: on this simulator a DevID made under SPIRE's parent also fails to
+      load under go-tpm-tools' 256-zero-byte template, so the two templates are
+      different parents on a third TPM implementation as well. Simulator build:
+      `CGO_CFLAGS=-I<openssl>/include CGO_LDFLAGS=-L<openssl>/lib go test -tags
+      tpmsim ./internal/devid/`. The swtpm harness was not run.
+
+- [x] 2.4 Run `go vet ./...` and `go test ./...` and verify both pass, quoting the output
+      **Done** on the Mac: `go vet` clean and `go test -count=1` `ok` for `imds`,
+      `internal/config`, `internal/devid`, `internal/inventory` and
+      `internal/server`, run over `go list ./...` minus `cmd/prox-mds`, an
+      untracked, gitignored leftover of the old project name in that checkout.
+      `go test -tags tpmsim ./internal/devid/` `ok`.
+
+- [x] 2.5 Run `openspec validate --all --strict` and `scripts/openspec-validate.py --strict` and verify both pass
+      **Done**: `openspec validate --all --strict` → 6 passed, 0 failed.
 
 ## 3. Verify on the real artifacts
 

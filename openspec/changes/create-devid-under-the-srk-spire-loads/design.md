@@ -129,6 +129,34 @@ the client does about an object at `0x81000001`.
 Option 1 also removes a state the code has to reason about: whether the
 reserved handle holds something, and what.
 
+## Decided
+
+**2026-10-17, by the maintainer: option 1.** The client derives a transient H-1
+primary, flushes it after use, and never reads, reuses, replaces or evicts a
+persistent object at `0x81000001`. Options 2 and 3 are not taken. The decision
+was given on the agent bus as "E1: 1", in answer to the coordinator's
+decision sheet, and the coordinator had already acknowledged this record.
+
+## Implementation notes
+
+- **Peak of loaded objects.** The parent is a transient object. Creating the
+  DevID while the AK is loaded holds three objects at once: the AK, the parent
+  and the new key. Three is also the number of object slots some TPMs have, the
+  simulator used here among them; before, with a persistent SRK as the parent,
+  the peak during creation was two, and what the rest of the enrollment needs was
+  not measured. The creation flow fits on the simulator, and
+  `TestParentKeyIsFlushed` checks that only the two keys stay loaded afterwards. A real TPM with fewer slots would fail with an object-memory
+  warning; the lab and hogan runs (3.1, 3.3) are where that would show.
+- **Two parent derivations per enrollment**, one for the AK and one for the
+  DevID. Deriving once and creating both would hold the same three objects at
+  its peak and save a `CreatePrimary`, at the cost of threading the parent
+  through `CreateSigningRequest`. Not done; enrollment is rare.
+- **The tests' simulator is not swtpm.** `TestDevIDLoadsUnderSPIREParent` and
+  the others run on go-tpm-tools' in-process simulator (ms-tpm-20-ref) behind the
+  `tpmsim` build tag, because they need cgo and OpenSSL headers that a plain
+  build lacks. They show the logic, and the old code fails them with SPIRE's own
+  error. They do not show behaviour on swtpm/libtpms; that is for 3.1 and 3.3.
+
 ## What it costs
 
 - **A DevID made by an earlier client, on a TPM where the client created the

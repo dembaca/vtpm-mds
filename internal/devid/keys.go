@@ -26,11 +26,13 @@ type KeyFactory struct {
 	DevIDTemplate tpm2.Public
 }
 
-// DefaultKeyFactory returns RSA templates using go-tpm-tools EK/SRK defaults.
+// DefaultKeyFactory returns RSA templates: the go-tpm-tools default for the EK,
+// and for the SRK the H-1 template SPIRE derives its parent from, see
+// SRKTemplateHighRSA.
 func DefaultKeyFactory() *KeyFactory {
 	return &KeyFactory{
 		EKTemplate:    client.DefaultEKTemplateRSA(),
-		SRKTemplate:   client.SRKTemplateRSA(),
+		SRKTemplate:   SRKTemplateHighRSA(),
 		AKTemplate:    DefaultAKTemplateRSA(),
 		DevIDTemplate: DefaultDevIDTemplateRSA(),
 	}
@@ -41,9 +43,14 @@ func (f *KeyFactory) CreateEK(rw io.ReadWriter) (*KeyInfo, error) {
 	return cachedPrimary(rw, f.EKTemplate, tpm2.HandleOwner, tpm2.HandleEndorsement, client.EKReservedHandle)
 }
 
-// CreateSRK loads or creates a cached SRK under the owner hierarchy.
+// CreateSRK derives the storage root key as a transient primary key in the
+// owner hierarchy. The caller flushes it. It never makes the key persistent and
+// never reads, reuses, replaces or evicts a persistent object at
+// client.SRKReservedHandle or any other handle: SPIRE derives its parent afresh
+// each time, so a persistent SRK is irrelevant to loading, and deleting one
+// would remove a key that may belong to other software on the TPM.
 func (f *KeyFactory) CreateSRK(rw io.ReadWriter) (*KeyInfo, error) {
-	return cachedPrimary(rw, f.SRKTemplate, tpm2.HandleOwner, tpm2.HandleOwner, client.SRKReservedHandle)
+	return createPrimaryKey(rw, tpm2.HandleOwner, f.SRKTemplate)
 }
 
 // CreateAK creates an attestation key under the SRK.
@@ -61,7 +68,9 @@ func createUnderSRK(rw io.ReadWriter, f *KeyFactory, template tpm2.Public) (*Key
 	if err != nil {
 		return nil, err
 	}
-	// SRK is persistent; do not flush it.
+	// The parent is transient. Flushing it does not unload the child, which
+	// the caller flushes with the rest of its resources.
+	defer tpm2.FlushContext(rw, srk.Handle)
 	return createLoadedKey(rw, srk.Handle, template)
 }
 
