@@ -434,6 +434,7 @@ var metadataRoutes = []struct {
 	{"/latest/meta-data/local-hostname", false, http.StatusOK, "example.com"},
 	{"/latest/meta-data/local-ipv4", false, http.StatusOK, "192.168.1.100"},
 	{"/latest/meta-data/placement/availability-zone", false, http.StatusOK, "proxmox"},
+	{"/latest/meta-data/placement/region", false, http.StatusOK, "local"},
 	{"/latest/meta-data/services/domain", false, http.StatusOK, "localdomain"},
 	{"/latest/meta-data/public-ipv4", false, http.StatusNotFound, ""},
 }
@@ -689,6 +690,7 @@ func newTestMux(requireVMIdentity bool) *http.ServeMux {
 	handle("GET /latest/meta-data/public-ipv4", HandlePublicIPv4)
 	handle("GET /latest/meta-data/local-ipv4", HandleLocalIPv4)
 	handle("GET /latest/meta-data/placement/availability-zone", HandleAvailabilityZone)
+	handle("GET /latest/meta-data/placement/region", HandleRegion)
 	handle("GET /latest/meta-data/services/domain", HandleDomain)
 	handle("GET /latest/meta-data/", HandleMetaDataIndex)
 	handle("GET /latest/dynamic/instance-identity/document", HandleInstanceIdentityDocument)

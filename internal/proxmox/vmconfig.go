@@ -2,10 +2,12 @@ package proxmox
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/dembaca/vtpm-mds/internal/inventory"
 )
@@ -77,9 +79,10 @@ func parseVMConfig(vmid, data string) *inventory.VMConfig {
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
 			value := strings.TrimSpace(parts[1])
-			// Proxmox cannot write this key, so a line carrying it was added
-			// by hand and is gone after the next edit of the VM.
-			if key != "public-ipv4" {
+			// Proxmox cannot write these keys, so a line carrying one was
+			// added by hand and is gone after the next edit of the VM. A zone
+			// and a region come from the VM's tags and from nowhere else.
+			if key != "public-ipv4" && key != "zone" && key != "region" {
 				vmConfig.RawConfig[key] = value
 			}
 		}
@@ -94,5 +97,85 @@ func parseVMConfig(vmid, data string) *inventory.VMConfig {
 		vmConfig.Name = name
 	}
 
+	zone, region := placementFromTags(vmid, vmConfig.RawConfig["tags"])
+	if zone != "" {
+		vmConfig.RawConfig["zone"] = zone
+	}
+	if region != "" {
+		vmConfig.RawConfig["region"] = region
+	}
+
 	return vmConfig
+}
+
+const (
+	zoneTagPrefix   = "mds.zone."
+	regionTagPrefix = "mds.region."
+)
+
+// placementFromTags reads the zone and region a VM declares in its tags. A kind
+// is declared by exactly one tag with a valid name. Two or more tags of one
+// kind, valid or not, declare nothing, so a typo next to a good tag is never
+// resolved silently in the good tag's favour; a single tag with an invalid
+// name is ignored. Each fault is logged and touches only this VM.
+func placementFromTags(vmid, tags string) (zone, region string) {
+	fields := strings.FieldsFunc(tags, func(r rune) bool {
+		return r == ';' || r == ',' || unicode.IsSpace(r)
+	})
+	return placementOfKind(vmid, "zone", zoneTagPrefix, fields),
+		placementOfKind(vmid, "region", regionTagPrefix, fields)
+}
+
+func placementOfKind(vmid, kind, prefix string, tags []string) string {
+	var found []string
+	for _, tag := range tags {
+		if strings.HasPrefix(tag, prefix) {
+			found = append(found, strings.TrimPrefix(tag, prefix))
+		}
+	}
+	switch {
+	case len(found) == 0:
+		return ""
+	case len(found) > 1:
+		log.Printf("VM %s: %d %s tags, none used", vmid, len(found), kind)
+		return ""
+	case !inventory.ValidPlacementName(found[0]):
+		log.Printf("VM %s: %s tag %q is not a valid placement name, ignored", vmid, kind, prefix+found[0])
+		return ""
+	}
+	return found[0]
+}
+
+var clusterNamePattern = regexp.MustCompile(`(?m)^\s*cluster_name:\s*(\S+)`)
+
+// HostPlacement returns the placement of the node this service runs on. The zone
+// is the node name, the target of <pveRoot>/local, and the region is the
+// cluster_name of <pveRoot>/corosync.conf, or "local" without one. Both are
+// lowercased, since cluster and node names may carry capitals the placement
+// names do not, and one that is still not a valid name is logged and replaced
+// by the default. pveRoot "" means DefaultRoot.
+func HostPlacement(pveRoot string) inventory.Placement {
+	if pveRoot == "" {
+		pveRoot = DefaultRoot
+	}
+	placement := inventory.DefaultPlacement
+
+	if target, err := os.Readlink(filepath.Join(pveRoot, "local")); err != nil {
+		log.Printf("host placement: cannot read the %s link: %v", filepath.Join(pveRoot, "local"), err)
+	} else if node := strings.ToLower(filepath.Base(filepath.Clean(target))); inventory.ValidPlacementName(node) {
+		placement.Zone = node
+	} else {
+		log.Printf("host placement: node name %q is not a valid placement name, zone stays %q", node, placement.Zone)
+	}
+
+	if data, err := os.ReadFile(filepath.Join(pveRoot, "corosync.conf")); err == nil {
+		if m := clusterNamePattern.FindSubmatch(data); m != nil {
+			if cluster := strings.ToLower(string(m[1])); inventory.ValidPlacementName(cluster) {
+				placement.Region = cluster
+			} else {
+				log.Printf("host placement: cluster name %q is not a valid placement name, region stays %q", cluster, placement.Region)
+			}
+		}
+	}
+	return placement
 }

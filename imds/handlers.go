@@ -215,6 +215,18 @@ func HandleAvailabilityZone(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, az)
 }
 
+// HandleRegion returns the region of the asking caller.
+func HandleRegion(w http.ResponseWriter, r *http.Request) {
+	if !validateToken(r) {
+		w.Header().Set("X-Aws-Ec2-Metadata-Token", "required")
+		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	fmt.Fprint(w, getRegion(r))
+}
+
 // HandleDomain returns the domain
 func HandleDomain(w http.ResponseWriter, r *http.Request) {
 	if !validateToken(r) {
@@ -394,14 +406,25 @@ func PublicIPv4(r *http.Request) string {
 	return ip.To4().String()
 }
 
+// getAvailabilityZone is the zone of the asking caller: the one declared for its
+// bound VM record, otherwise the host's. A caller with no bound record has
+// nothing declared and is served the host's.
 func getAvailabilityZone(r *http.Request) string {
-	// TODO: Extract from Proxmox cluster config
-	return "proxmox"
+	return placementOf(r, "zone", inventory.HostPlacement().Zone)
 }
 
+// getRegion is the region of the asking caller, resolved like the zone.
 func getRegion(r *http.Request) string {
-	// TODO: Extract from Proxmox cluster config
-	return "local"
+	return placementOf(r, "region", inventory.HostPlacement().Region)
+}
+
+func placementOf(r *http.Request, key, host string) string {
+	if vmConfig := inventory.GetVMConfigFromRequest(r); vmConfig != nil {
+		if declared := vmConfig.RawConfig[key]; inventory.ValidPlacementName(declared) {
+			return declared
+		}
+	}
+	return host
 }
 
 func getDomain(r *http.Request) string {

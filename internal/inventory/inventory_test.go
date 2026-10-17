@@ -131,3 +131,76 @@ func TestLoadYAMLAcceptsAnAbsentOrEmptyPublicIPv4(t *testing.T) {
 		}
 	}
 }
+
+// A declared zone and region reach the record (zone-and-region delta, YAML).
+func TestLoadYAMLZoneAndRegion(t *testing.T) {
+	m, err := LoadYAML(writeInventory(t, `vms:
+  - id: "100"
+    zone: " rack-b "
+    region: bgl-1
+  - id: "101"
+`))
+	if err != nil {
+		t.Fatalf("LoadYAML: %v", err)
+	}
+	if got := m["100"].RawConfig["zone"]; got != "rack-b" {
+		t.Errorf("zone: got %q, want rack-b", got)
+	}
+	if got := m["100"].RawConfig["region"]; got != "bgl-1" {
+		t.Errorf("region: got %q, want bgl-1", got)
+	}
+	for _, key := range []string{"zone", "region"} {
+		if _, ok := m["101"].RawConfig[key]; ok {
+			t.Errorf("VM 101 declares no %s, so the key must be absent", key)
+		}
+	}
+}
+
+// An invalid zone is logged and ignored, and does not stop the load, unlike a
+// malformed public_ipv4.
+func TestLoadYAMLIgnoresAnInvalidZone(t *testing.T) {
+	m, err := LoadYAML(writeInventory(t, `vms:
+  - id: "100"
+    zone: "Rack B!"
+    region: bgl-1
+  - id: "101"
+    zone: rack-c
+`))
+	if err != nil {
+		t.Fatalf("an invalid zone must not fail the load: %v", err)
+	}
+	if _, ok := m["100"].RawConfig["zone"]; ok {
+		t.Errorf("the invalid zone was stored: %q", m["100"].RawConfig["zone"])
+	}
+	if m["100"].RawConfig["region"] != "bgl-1" {
+		t.Errorf("the valid region was lost: %v", m["100"].RawConfig)
+	}
+	if m["101"].RawConfig["zone"] != "rack-c" {
+		t.Errorf("another entry was affected: %v", m["101"].RawConfig)
+	}
+}
+
+func TestValidPlacementName(t *testing.T) {
+	long := strings.Repeat("a", 63)
+	for name, want := range map[string]bool{
+		"hogan": true, "rack-b": true, "a": true, "0x": true, "a_b.c+d-e": true, long: true,
+		"": false, "-a": false, ".a": false, "Rack": false, "a b": false, "a!": false,
+		long + "a": false, "a/b": false,
+	} {
+		if got := ValidPlacementName(name); got != want {
+			t.Errorf("ValidPlacementName(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestHostPlacementDefaultsUntilSet(t *testing.T) {
+	SetHostPlacement(DefaultPlacement)
+	if got := HostPlacement(); got != DefaultPlacement {
+		t.Fatalf("got %+v, want the default %+v", got, DefaultPlacement)
+	}
+	SetHostPlacement(Placement{Zone: "hogan", Region: "bgl"})
+	defer SetHostPlacement(DefaultPlacement)
+	if got := HostPlacement(); got != (Placement{Zone: "hogan", Region: "bgl"}) {
+		t.Fatalf("got %+v after SetHostPlacement", got)
+	}
+}

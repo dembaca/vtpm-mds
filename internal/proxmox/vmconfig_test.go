@@ -163,3 +163,162 @@ func TestAHandWrittenPublicAddressIsNotStored(t *testing.T) {
 		}
 	}
 }
+
+func raw(t *testing.T, tags string) map[string]string {
+	t.Helper()
+	m := parse(t, pveTree(t, "hogan", map[string]map[string]string{
+		"hogan": {"100.conf": "name: guest-a\n" + tags},
+	}))
+	return m["100"].RawConfig
+}
+
+// A zone tag becomes the VM's zone, and declares no region.
+func TestAZoneTagBecomesTheVMsZone(t *testing.T) {
+	r := raw(t, "tags: mds.zone.rack-b;web\n")
+	if r["zone"] != "rack-b" {
+		t.Errorf("zone: got %q, want rack-b", r["zone"])
+	}
+	if _, ok := r["region"]; ok {
+		t.Errorf("no region tag, yet region = %q", r["region"])
+	}
+	if r["tags"] != "mds.zone.rack-b;web" {
+		t.Errorf("the tags key itself must still be stored, got %q", r["tags"])
+	}
+}
+
+// Both kinds, with the lenient separators.
+func TestTagsAreSplitAtSemicolonCommaAndSpace(t *testing.T) {
+	r := raw(t, "tags: web, mds.zone.a mds.region.r;db\n")
+	if r["zone"] != "a" || r["region"] != "r" {
+		t.Errorf("got zone %q, region %q; want a and r", r["zone"], r["region"])
+	}
+}
+
+// Two zone tags declare nothing, and the other kind is unaffected.
+func TestTwoZoneTagsDeclareNothing(t *testing.T) {
+	r := raw(t, "tags: mds.zone.a;mds.zone.b;mds.region.r\n")
+	if _, ok := r["zone"]; ok {
+		t.Errorf("two zone tags must declare no zone, got %q", r["zone"])
+	}
+	if r["region"] != "r" {
+		t.Errorf("region: got %q, want r", r["region"])
+	}
+}
+
+// An invalid tag next to a valid one still counts as two, so a typo is never
+// resolved silently in the good tag's favour.
+func TestAnInvalidTagNextToAValidOneDeclaresNothing(t *testing.T) {
+	r := raw(t, "tags: mds.zone.rack-b;mds.zone.Rack_B!\n")
+	if _, ok := r["zone"]; ok {
+		t.Errorf("got zone %q, want none", r["zone"])
+	}
+}
+
+// A single invalid tag is ignored, and another VM's valid tag is unaffected.
+func TestAnInvalidPlacementTagIsIgnored(t *testing.T) {
+	m := parse(t, pveTree(t, "hogan", map[string]map[string]string{
+		"hogan": {
+			"100.conf": "tags: mds.zone.\n",
+			"101.conf": "tags: mds.zone.rack-b\n",
+			"102.conf": "tags: mds.zone.UPPER\n",
+		},
+	}))
+	if _, ok := m["100"].RawConfig["zone"]; ok {
+		t.Errorf("VM 100 has an empty zone name, got %q", m["100"].RawConfig["zone"])
+	}
+	if _, ok := m["102"].RawConfig["zone"]; ok {
+		t.Errorf("VM 102 has an invalid zone name, got %q", m["102"].RawConfig["zone"])
+	}
+	if m["101"].RawConfig["zone"] != "rack-b" {
+		t.Errorf("VM 101 was affected: %v", m["101"].RawConfig)
+	}
+}
+
+// A placement tag in a snapshot section does not count.
+func TestAPlacementTagInASnapshotDoesNotCount(t *testing.T) {
+	m := parse(t, pveTree(t, "hogan", map[string]map[string]string{
+		"hogan": {"100.conf": "name: guest-a\n\n[before-change]\ntags: mds.zone.old\n"},
+	}))
+	if z, ok := m["100"].RawConfig["zone"]; ok {
+		t.Errorf("the snapshot's tag was read: zone %q", z)
+	}
+}
+
+// A hand-written zone or region line is not stored, in either form.
+func TestAHandWrittenZoneAndRegionAreNotStored(t *testing.T) {
+	for _, lines := range []string{"zone: rack-x\nregion: bgl-x\n", "zone=rack-x\nregion=bgl-x\n"} {
+		r := raw(t, lines)
+		for _, key := range []string{"zone", "region"} {
+			if v, ok := r[key]; ok {
+				t.Errorf("%q: %s was stored as %q", lines, key, v)
+			}
+		}
+	}
+}
+
+func hostTree(t *testing.T, node, corosync string) string {
+	t.Helper()
+	root := pveTree(t, node, map[string]map[string]string{node: {}})
+	if corosync != "" {
+		if err := os.WriteFile(filepath.Join(root, "corosync.conf"), []byte(corosync), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+const corosyncConf = `logging {
+  to_syslog: yes
+}
+
+totem {
+  cluster_name: %s
+  config_version: 3
+  version: 2
+}
+`
+
+// The host's placement is this node and this cluster.
+func TestTheHostPlacementIsThisNodeAndThisCluster(t *testing.T) {
+	got := HostPlacement(hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1)))
+	if want := (inventory.Placement{Zone: "hogan", Region: "bgl-cluster"}); got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+// Without a cluster file the region is local, and nothing fails.
+func TestAHostWithoutAClusterFileHasRegionLocal(t *testing.T) {
+	got := HostPlacement(hostTree(t, "hogan", ""))
+	if want := (inventory.Placement{Zone: "hogan", Region: "local"}); got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+// A cluster file that names no cluster also leaves region local.
+func TestAClusterFileWithoutAClusterNameHasRegionLocal(t *testing.T) {
+	got := HostPlacement(hostTree(t, "hogan", "totem {\n  version: 2\n}\n"))
+	if got.Region != "local" {
+		t.Fatalf("got region %q, want local", got.Region)
+	}
+}
+
+// Capitals in a cluster or node name are lowercased before validation.
+func TestHostNamesAreLowercased(t *testing.T) {
+	got := HostPlacement(hostTree(t, "Hogan", strings.Replace(corosyncConf, "%s", "BGL-Cluster", 1)))
+	if want := (inventory.Placement{Zone: "hogan", Region: "bgl-cluster"}); got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+// A name that is still not valid after lowercasing is replaced by the default.
+func TestAnInvalidHostNameFallsBackToTheDefault(t *testing.T) {
+	got := HostPlacement(hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bad!name", 1)))
+	if got.Region != "local" {
+		t.Fatalf("got region %q, want local", got.Region)
+	}
+	// A root without a local link keeps the default zone.
+	noLink := t.TempDir()
+	if got := HostPlacement(noLink); got != inventory.DefaultPlacement {
+		t.Fatalf("got %+v, want %+v", got, inventory.DefaultPlacement)
+	}
+}
