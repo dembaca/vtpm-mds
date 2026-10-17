@@ -155,15 +155,40 @@ documentation, not from memory. Sources are `spiffe/spire`:
   TPM proofs do not independently establish the accuracy or uniqueness of
   those claims." Here the issuer is this service's DevID CA, so any field it
   puts into a certificate is a claim this service vouches for.
-- **One inconsistency in the documentation, not resolved here:** the server
-  plugin page lists the CA-chain selector as `tpm_devid:fingerprint:<sha1>`,
-  while the walkthrough calls it `ca:fingerprint:`. The code is not read.
+- **Measured on the running server** (`spire-server agent show` for VM 399's
+  agent, run by the maintainer as root on hogan, 2026-10-17):
+  ```
+  SPIFFE ID        : spiffe://bgl.dembach.org/spire/agent/tpm_devid/3a165dc4…f285
+  Attestation type : tpm_devid
+  Selectors        : tpm_devid:ca:fingerprint:d59ccc98b3d6025fa86e0ba1d5cd707479c0ed74
+  Selectors        : tpm_devid:issuer:cn:BGL Proxmox DevID CA
+  Selectors        : tpm_devid:subject:cn:vtpm-pilot
+  ```
+  Three things follow.
+  1. The CA-chain selector is `tpm_devid:ca:fingerprint:<sha1>`, as the
+     walkthrough says. The server plugin page's table, which writes
+     `tpm_devid:fingerprint:`, is the one that disagrees with this server.
+  2. **`subject:cn` is `vtpm-pilot`, which is VM 399's name, not `399`.** The
+     living `devid-enrollment` spec says the subject is the bare VM ID, and the
+     coordinator measured `CN=399` on a fresh enrollment on 2026-10-16 (Item 6,
+     task 4.2). The two observations differ. The most likely explanation is that
+     the certificate the SPIRE agent presents is an older one, issued before the
+     subject was enforced; that is **not verified**. Whatever the reason, any
+     SPIRE registration that selects on `subject:cn:vtpm-pilot` stops matching
+     once the VM is re-enrolled with `CN=399`, and a new certificate also gives
+     the agent a new SPIFFE ID, because the ID is the certificate's fingerprint.
+  3. This means D8 is not only about the future: a change to what the
+     certificate says can orphan existing registration entries.
+- **Not checked:** which SPIRE version is deployed, whether any registration
+  entries or node aliases exist today, and the attestor's source code.
 
 ### D8. Where the readable name comes from
 
 1. **A SPIRE node alias keyed on `CN=<vmid>`.** It needs nothing from us and
    works on the released version. The mapping from VM ID to name lives in
-   SPIRE, maintained by whoever runs it.
+   SPIRE, maintained by whoever runs it. Today's selector is `subject:cn:
+   vtpm-pilot`, so an alias would first have to be reconciled with the CN
+   change above.
 2. **A descriptive name in the certificate**, for example as `CN`. That changes
    `devid-enrollment`, whose archived change `enforce-authenticated-ldevid-
    subject` pins `CN=<vmid>`, and it breaks the existing registrations that

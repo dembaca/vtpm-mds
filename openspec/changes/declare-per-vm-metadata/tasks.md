@@ -43,8 +43,10 @@ hand-written key, into a Proxmox guest config, including VM 399's.
       at the commits named in `design.md`. The agent ID is fixed
       (`…/spire/agent/tpm_devid/<sha1 of the certificate>`); a readable identity
       is a node alias; `subject:oid` selectors exist only on `main`, not in
-      `v1.15.4`. Not checked: the SPIRE version actually deployed, and the
-      attestor's source code.
+      `v1.15.4`. Cross-checked on 2026-10-17 against `spire-server agent show`
+      on hogan, which showed `subject:cn:vtpm-pilot` rather than `399`; see
+      `design.md`. Not checked: the SPIRE version actually deployed, existing
+      registration entries, and the attestor's source code.
 
 ## 2. Under every decision
 
