@@ -430,7 +430,6 @@ var metadataRoutes = []struct {
 }{
 	{"/latest/meta-data/instance-id", true, 0, ""},
 	{"/latest/dynamic/instance-identity/document", true, 0, ""},
-	{"/latest/dynamic/instance-identity/signature", true, 0, ""},
 	{"/latest/meta-data/", false, http.StatusOK, "instance-id"},
 	{"/latest/meta-data/local-hostname", false, http.StatusOK, "example.com"},
 	{"/latest/meta-data/local-ipv4", false, http.StatusOK, "192.168.1.100"},
@@ -502,7 +501,6 @@ func TestIdentityBearingPathsIsExactlyTheSpecifiedSet(t *testing.T) {
 	want := []string{
 		"/latest/meta-data/instance-id",
 		"/latest/dynamic/instance-identity/document",
-		"/latest/dynamic/instance-identity/signature",
 	}
 	if len(IdentityBearingPaths) != len(want) {
 		t.Fatalf("expected exactly %d identity-bearing paths, got %d: %v",
@@ -513,7 +511,8 @@ func TestIdentityBearingPathsIsExactlyTheSpecifiedSet(t *testing.T) {
 			t.Errorf("IdentityBearingPaths[%d] = %q, want %q", i, IdentityBearingPaths[i], p)
 		}
 	}
-	for _, p := range []string{"/latest/meta-data/", "/latest/meta-data/local-ipv4", "/health", "/latest/api/token"} {
+	for _, p := range []string{"/latest/meta-data/", "/latest/meta-data/local-ipv4", "/health", "/latest/api/token",
+		"/latest/dynamic/instance-identity/signature"} {
 		if RequiresVMIdentity(p) {
 			t.Errorf("%q must not be on the refusing side of the line", p)
 		}
@@ -693,7 +692,6 @@ func newTestMux(requireVMIdentity bool) *http.ServeMux {
 	handle("GET /latest/meta-data/services/domain", HandleDomain)
 	handle("GET /latest/meta-data/", HandleMetaDataIndex)
 	handle("GET /latest/dynamic/instance-identity/document", HandleInstanceIdentityDocument)
-	handle("GET /latest/dynamic/instance-identity/signature", HandleInstanceIdentitySignature)
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -831,24 +829,6 @@ func TestIPv4MappedPeerKeepsFallbackID(t *testing.T) {
 
 	if rec.Code != http.StatusOK || rec.Body.String() != "i-10-0-0-5" {
 		t.Errorf("expected 200 'i-10-0-0-5', got %d %q", rec.Code, rec.Body.String())
-	}
-}
-
-// TestSignatureServedToPeerWithoutIPv4 verifies the signature endpoint, which
-// derives nothing from the caller, is untouched (task 3.3).
-func TestSignatureServedToPeerWithoutIPv4(t *testing.T) {
-	setupTestStore()
-	mux := newTestMux(false)
-
-	req := httptest.NewRequest("GET", "/latest/dynamic/instance-identity/signature", nil)
-	req.RemoteAddr = "[fe80::1]:5000"
-	req.Header.Set("X-Aws-Ec2-Metadata-Token", newToken(t))
-
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK || rec.Body.String() != "dGVzdC1zaWduYXR1cmU=" {
-		t.Errorf("expected 200 'dGVzdC1zaWduYXR1cmU=', got %d %q", rec.Code, rec.Body.String())
 	}
 }
 

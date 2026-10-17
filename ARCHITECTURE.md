@@ -65,8 +65,7 @@ private cloud without depending on external cloud IMDS.
 |-----------|---------|--------------|---------------|
 | `/latest/api/token` | PUT | Issue short-lived IMDSv2 token | EC2-compatible |
 | `/latest/meta-data/*` | GET | Instance metadata tree | EC2-compatible |
-| `/latest/dynamic/instance-identity/document` | GET | EC2-style IID | partial |
-| `/latest/dynamic/instance-identity/signature` | GET | PKCS#7 signature | AWS-incompatible |
+| `/latest/dynamic/instance-identity/document` | GET | EC2-style IID, unsigned | partial |
 | `/latest/devid/enroll/start` | POST | DevID CSR → credential challenge | SPIRE DevID |
 | `/latest/devid/enroll/finish` | POST | Challenge response → LDevID PEM | SPIRE DevID |
 
