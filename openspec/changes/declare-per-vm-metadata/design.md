@@ -171,12 +171,22 @@ documentation, not from memory. Sources are `spiffe/spire`:
   2. **`subject:cn` is `vtpm-pilot`, which is VM 399's name, not `399`.** The
      living `devid-enrollment` spec says the subject is the bare VM ID, and the
      coordinator measured `CN=399` on a fresh enrollment on 2026-10-16 (Item 6,
-     task 4.2). The two observations differ. The most likely explanation is that
-     the certificate the SPIRE agent presents is an older one, issued before the
-     subject was enforced; that is **not verified**. Whatever the reason, any
-     SPIRE registration that selects on `subject:cn:vtpm-pilot` stops matching
-     once the VM is re-enrolled with `CN=399`, and a new certificate also gives
-     the agent a new SPIFFE ID, because the ID is the certificate's fingerprint.
+     task 4.2). **Explained, by the coordinator on hogan on 2026-10-17:** the
+     SPIRE agent on VM 399 uses `/var/lib/spire/agent/devid.crt.pem`, issued on
+     2026-09-14 with `CN=vtpm-pilot` and SHA-1 `3A:16:5D:C4…F2:85`, which matches
+     the agent ID. That is **before** `enforce-authenticated-ldevid-subject`
+     (2026-10-03): the guest chose the CN in its CSR then, and since the fix the
+     daemon sets it to the authenticated VM ID. VM 399 has `tpmstate0` only and
+     no `unusedN`, so `fresh-tpm` never ran and the original vTPM and its blobs
+     from 2026-09-14 are still in use. The verification runs never replaced the
+     SPIRE files. The readable name seen today is therefore exactly the one that
+     was closed as a security gap, because the guest could choose it. "Readable"
+     and "authenticated by the host" can go together if the name comes from the
+     host side (Proxmox's `name:` or tags) instead of the CSR. That is the core
+     of D8. Any SPIRE registration that selects on `subject:cn:vtpm-pilot` stops
+     matching once the VM is re-enrolled with `CN=399`, and a new certificate
+     also gives the agent a new SPIFFE ID, because the ID is the certificate's
+     fingerprint.
   3. This means D8 is not only about the future: a change to what the
      certificate says can orphan existing registration entries.
 - **Not checked:** which SPIRE version is deployed, whether any registration
@@ -188,7 +198,7 @@ documentation, not from memory. Sources are `spiffe/spire`:
    works on the released version. The mapping from VM ID to name lives in
    SPIRE, maintained by whoever runs it. Today's selector is `subject:cn:
    vtpm-pilot`, so an alias would first have to be reconciled with the CN
-   change above.
+   change above, and with the fact that this name was guest-chosen.
 2. **A descriptive name in the certificate**, for example as `CN`. That changes
    `devid-enrollment`, whose archived change `enforce-authenticated-ldevid-
    subject` pins `CN=<vmid>`, and it breaks the existing registrations that
