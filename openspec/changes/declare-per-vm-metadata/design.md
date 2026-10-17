@@ -160,8 +160,8 @@ options, unless `user-allow` is narrowed for everyone.
 |---|---|---|---|---|
 | Notes | yes | yes (Notes) | log and ignore, since Notes are free text | decode `#` lines, a marker syntax, rules for duplicates and prose |
 | Tags | yes | yes | log and ignore | a prefix convention, and cannot be reserved (see above) |
-| Own file, keyed by VM ID | no, by design | no | fail to start, as with YAML | loader, merge, config key, packaging; drift when a VM ID is reused |
-| YAML inventory field | n/a | n/a | fail to start (exists in `main`) | none; Proxmox hosts would also need a YAML overlay |
+| Own file, keyed by VM ID | no, by design | no | rejected at load (the daemon still starts, see D5) | loader, merge, config key, packaging; drift when a VM ID is reused |
+| YAML inventory field | n/a | n/a | rejected at load (exists in `main`; the daemon still starts, see D5) | none; Proxmox hosts would also need a YAML overlay |
 | None on Proxmox | — | — | — | the feature is unavailable on Proxmox hosts |
 
 ### D3. Carrier for labels (zone, region)
@@ -186,7 +186,21 @@ where SDN IPAM exists, it could be added later.
 
 ### D5. Validation and failure
 
-- **Files we own** (YAML, our own file) fail loudly at load, as #29 does.
+- **Files we own** (YAML, our own file) are rejected as a whole at load: the
+  load returns an error and produces no inventory.
+  **What the daemon then does is not "refuse to start".** Measured on the lab
+  daemon built from `main@2dd0335` (cloud lab agent, 2026-10-17): a malformed
+  `public_ipv4` logs `Failed to load VM configs … is not an IPv4 address` and
+  `Warning: Failed to load VM config cache on startup`, then the service starts
+  its listener and answers `/health` with 200, running with an empty cache.
+  That is what `vm-inventory`, "Load The Cache At Startup And Refresh It On
+  SIGHUP", specifies: a startup load failure "SHALL NOT prevent the service
+  from starting; the service then runs with an empty cache, so every caller is
+  unbound". Unbound callers are refused under the default
+  `require_vm_identity: true`, so the effect is closed but not loud. An earlier
+  version of this record, and #29's tasks, assumed the service would stop.
+  Whether a bad inventory should stop the service is its own decision, with
+  its own change, and not part of this record.
 - **Data in Proxmox's files** (tags, Notes) is logged and treated as absent.
   Failing the whole inventory over one VM's tag would deny metadata to every
   VM on the host. #29 already wrote this asymmetry down.
