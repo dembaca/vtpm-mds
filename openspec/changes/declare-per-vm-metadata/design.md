@@ -473,6 +473,28 @@ point, with one correction and several things not read.
   metadata path in `getRegionFromMetadata`. If a consumer needs anything beyond
   the two paths, the scope changes before any delta is written.
 
+## Decided, 2026-10-17 (M1 to M5)
+
+**By the maintainer**, on the agent bus, as "M1–M5 alle wie empfohlen", answering
+the coordinator's decision sheet. The sheet's labels map to the decisions above:
+
+| Sheet | Decision | Outcome |
+|---|---|---|
+| M1 | D1, one mechanism or two | **Two.** Labels (zone, region, later others) are Proxmox tags; values such as addresses go to their own file when D2 is taken up. |
+| M2 | D3, carrier for labels | **Tags** `mds.zone.<name>` and `mds.region.<name>` (Proxmox tags allow `.`, not `=` or `:`). Two zone tags on one VM: log and ignore both, so the default applies. Operators are advised to allow these tags only to admins through `registered-tags` (`Sys.Modify`). |
+| M3 | D4, derived defaults | **Zone is the node name, region the cluster name.** Precedence: VM tag over default. |
+| M4 | D7, who may declare | **Operator (tag or file) or host (derivation), never the guest.** |
+| M5 | D5, a broken or unknown tag | **Log it and treat it as not set;** every other VM is untouched. The YAML inventory gets `zone` and `region` with the same meaning. |
+
+**Still open:** D2 (carrier for values, `public-ipv4`), deferred by the maintainer;
+D9 (trust of values that reach the certificate). D6 is researched above, not a
+decision; D8 is decided above.
+
+**Where it goes next:** the change `serve-zone-and-region-per-vm` (#44) carries
+M1 to M5 into deltas and tasks. This exploration stays as the evidence. The
+question why a typo in the YAML inventory empties the whole inventory is not part
+of it and becomes its own change.
+
 ## Interim step, under every decision
 
 **Done in `main` on 2026-10-17** by `read-guest-configs-from-this-node` (#40, archived

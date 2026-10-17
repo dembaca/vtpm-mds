@@ -17,6 +17,9 @@ hand-written key, into a Proxmox guest config, including VM 399's.
 ## 1. Decide
 
 - [ ] 1.1 **Maintainer** — answer D1 to D5, D7, D8 and D9 in `design.md` (D8 answered 2026-10-17: option 1 now, option 3 noted), and verify the answers are recorded there under a dated "Decided" heading
+      **Partly done, 2026-10-17:** D1, D3, D4, D5 and D7 decided as M1 to M5 ("alle
+      wie empfohlen"), recorded under "Decided, 2026-10-17 (M1 to M5)" in
+      `design.md`. **Open:** D2 (values carrier, deferred) and D9.
 - [x] 1.2 Check D6 against current Kubernetes documentation — how a node obtains `topology.kubernetes.io/region` and `.../zone` without an in-tree cloud provider — and verify the finding is recorded in `design.md` with the URLs read
       Read current documentation, not memory, as `AGENTS.md` requires for
       Teleport. If a consumer needs anything beyond `placement/region` and
