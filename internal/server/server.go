@@ -79,7 +79,10 @@ func New(cfg *config.Config) (*Server, error) {
 		handle("GET /latest/meta-data/services/domain", imds.HandleDomain)
 		handle("GET /latest/meta-data/", imds.HandleMetaDataIndex)
 		handle("GET /latest/dynamic/instance-identity/document", imds.HandleInstanceIdentityDocument)
-		handle("GET /latest/dynamic/instance-identity/signature", imds.HandleInstanceIdentitySignature)
+		// No signature path is registered: .../signature, .../pkcs7 and
+		// .../rsa2048 all fall through to the catch-all. The document is
+		// unsigned, and a signature no consumer can verify against a key
+		// this service holds would only look like evidence.
 	}
 
 	// DevID enrollment. The setting is still named enable_tpm_attestation

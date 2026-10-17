@@ -27,13 +27,14 @@ func SetStore(s *TokenStore) {
 // string, so none of them asserts an identity the service vouches for.
 //
 // The set lives in one place because instance-metadata's "Refuse An Instance
-// Identity To Callers With No VM Record" enumerates it. It held a fourth entry,
-// GET /latest/identity, until that endpoint and the identity package were
-// removed for answering with a signature no verifier could check.
+// Identity To Callers With No VM Record" enumerates it. It held two more
+// entries: GET /latest/identity, until that endpoint and the identity package
+// were removed for answering with a signature no verifier could check, and
+// GET /latest/dynamic/instance-identity/signature, removed for serving a
+// constant in the shape of a signature. Neither route is registered any more.
 var IdentityBearingPaths = []string{
 	"/latest/meta-data/instance-id",
 	"/latest/dynamic/instance-identity/document",
-	"/latest/dynamic/instance-identity/signature",
 }
 
 // RequiresVMIdentity reports whether path is one of IdentityBearingPaths, and
@@ -257,21 +258,6 @@ func HandleInstanceIdentityDocument(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(doc)
-}
-
-// HandleInstanceIdentitySignature returns a PKCS#7 signature
-func HandleInstanceIdentitySignature(w http.ResponseWriter, r *http.Request) {
-	if !validateToken(r) {
-		w.Header().Set("X-Aws-Ec2-Metadata-Token", "required")
-		http.Error(w, "IMDSv2 token required", http.StatusUnauthorized)
-		return
-	}
-
-	// TODO: Implement actual PKCS#7 signing with CA
-	signature := "dGVzdC1zaWduYXR1cmU=" // base64 placeholder
-
-	w.Header().Set("Content-Type", "text/plain")
-	fmt.Fprint(w, signature)
 }
 
 // validateToken validates the IMDSv2 token against the package-level store.
