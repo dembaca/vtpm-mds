@@ -10,89 +10,89 @@ import (
 	"github.com/dembaca/vtpm-mds/internal/inventory"
 )
 
-// ParseVMConfigs parses Proxmox qemu-server config files into an inventory map.
-// If nodeName is empty, it scans /etc/pve/nodes/ for a node with qemu-server.
-func ParseVMConfigs(nodeName string) (inventory.VMConfigMap, error) {
-	vmConfigMap := make(inventory.VMConfigMap)
+// DefaultRoot is the Proxmox cluster filesystem mount.
+const DefaultRoot = "/etc/pve"
 
-	if nodeName == "" {
-		nodesDir := "/etc/pve/nodes"
-		entries, err := os.ReadDir(nodesDir)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read nodes directory: %w", err)
-		}
+// ParseVMConfigs parses this node's Proxmox qemu-server config files into an
+// inventory map. pveRoot is the directory that plays /etc/pve; "" means
+// DefaultRoot. The node is the one <pveRoot>/local links to, which Proxmox
+// maintains; no other node is ever read, because the IMDS bridge does not
+// leave this node.
+func ParseVMConfigs(pveRoot string) (inventory.VMConfigMap, error) {
+	if pveRoot == "" {
+		pveRoot = DefaultRoot
+	}
+	configDir := filepath.Join(pveRoot, "local", "qemu-server")
 
-		for _, entry := range entries {
-			if entry.IsDir() {
-				qemuServerPath := filepath.Join(nodesDir, entry.Name(), "qemu-server")
-				if _, err := os.Stat(qemuServerPath); err == nil {
-					nodeName = entry.Name()
-					break
-				}
-			}
-		}
-
-		if nodeName == "" {
-			return nil, fmt.Errorf("no node directory with qemu-server found in /etc/pve/nodes/")
-		}
+	// Glob reports no error for a missing directory, so check it first:
+	// otherwise a missing local link would load zero VMs without a word.
+	if _, err := os.ReadDir(configDir); err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", configDir, err)
 	}
 
-	configDir := fmt.Sprintf("/etc/pve/nodes/%s/qemu-server", nodeName)
 	configFiles, err := filepath.Glob(filepath.Join(configDir, "*.conf"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list VM config files: %w", err)
 	}
 
-	netPattern := regexp.MustCompile(`^net(\d+)[:=]\s*virtio=([0-9A-Fa-f:]{17})`)
-
+	vmConfigMap := make(inventory.VMConfigMap)
 	for _, configFile := range configFiles {
-		vmid := strings.TrimSuffix(filepath.Base(configFile), ".conf")
-
 		data, err := os.ReadFile(configFile)
 		if err != nil {
 			continue
 		}
-
-		vmConfig := &inventory.VMConfig{
-			VMID:      vmid,
-			RawConfig: make(map[string]string),
-			MACs:      []string{},
-		}
-
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
-				vmConfig.RawConfig[key] = value
-			} else {
-				parts = strings.SplitN(line, "=", 2)
-				if len(parts) == 2 {
-					key := strings.TrimSpace(parts[0])
-					value := strings.TrimSpace(parts[1])
-					vmConfig.RawConfig[key] = value
-				}
-			}
-
-			matches := netPattern.FindStringSubmatch(line)
-			if len(matches) == 3 {
-				mac := strings.ToLower(matches[2])
-				vmConfig.MACs = append(vmConfig.MACs, mac)
-			}
-		}
-
-		if name, ok := vmConfig.RawConfig["name"]; ok {
-			vmConfig.Name = name
-		}
-
-		vmConfigMap[vmid] = vmConfig
+		vmid := strings.TrimSuffix(filepath.Base(configFile), ".conf")
+		vmConfigMap[vmid] = parseVMConfig(vmid, string(data))
 	}
 
 	return vmConfigMap, nil
+}
+
+var netPattern = regexp.MustCompile(`^net(\d+)[:=]\s*virtio=([0-9A-Fa-f:]{17})`)
+
+// parseVMConfig reads the live section of one config file: the lines before
+// the first section header. Proxmox writes the live configuration first and
+// [PENDING], [special:...] and snapshot sections after it, so none of those
+// describe the running guest.
+func parseVMConfig(vmid, data string) *inventory.VMConfig {
+	vmConfig := &inventory.VMConfig{
+		VMID:      vmid,
+		RawConfig: make(map[string]string),
+		MACs:      []string{},
+	}
+
+	for _, line := range strings.Split(data, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			break
+		}
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			parts = strings.SplitN(line, "=", 2)
+		}
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			// Proxmox cannot write this key, so a line carrying it was added
+			// by hand and is gone after the next edit of the VM.
+			if key != "public-ipv4" {
+				vmConfig.RawConfig[key] = value
+			}
+		}
+
+		matches := netPattern.FindStringSubmatch(line)
+		if len(matches) == 3 {
+			vmConfig.MACs = append(vmConfig.MACs, strings.ToLower(matches[2]))
+		}
+	}
+
+	if name, ok := vmConfig.RawConfig["name"]; ok {
+		vmConfig.Name = name
+	}
+
+	return vmConfig
 }
