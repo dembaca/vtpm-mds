@@ -154,9 +154,35 @@ SPIRE agent attests with material that works.
       files `/var/lib/spire/agent/devid.*` hashed the same before and after.
       **Not checked here:** a real SPIRE attestation with the new material; that
       needs the re-enrollment of 3.4.
-- [ ] 3.4 **Maintainer/hogan** — only after 3.3, decide whether VM 399 is re-enrolled, and verify the decision is recorded here, with a note that its SPIFFE ID changes if it is
+- [x] 3.4 **Maintainer/hogan** — only after 3.3, decide whether VM 399 is re-enrolled, and verify the decision is recorded here, with a note that its SPIFFE ID changes if it is
       Re-enrolling replaces the certificate and so its fingerprint, which is
       the agent ID. Nothing else about VM 399 changes in this task.
+      **Decided and done, 2026-10-17:** the maintainer allowed the
+      re-enrollment on the agent bus ("mach ruhig ein re-enrollment, dafür ist
+      das lab da"); the coordinator ran it on hogan with `devid-enroll
+      0.2.0+git20261017.43ddd0d6165a`, extracted from the branch package and not
+      installed. Certificate `subject=CN=399`. **VM 399's SPIFFE ID changed:**
+      the old agent was `.../tpm_devid/3a165dc4...` (certificate
+      `CN=vtpm-pilot`), the current one is `.../tpm_devid/7a5c4121...` (SHA-1
+      of the new certificate `7A:5C:41:21...D9:1E`). The guest journal shows
+      `Node attestation was successful` at 13:28:10, the server journal on hogan
+      `AttestAgent ... completed` with the same ID, `spire-agent` is active and
+      the lockout counter reads `0x0`. This is the real SPIRE attestation that
+      3.3 could not show.
+      **Mishap, recorded as it happened:** the enrollment ran **twice**. A call
+      at 13:26 that the coordinator took for aborted was in fact executed (agent
+      `424fde58...`, also `CN=399`), and the second run at 13:28 replaced its
+      files. Consequences: `/root/spire-agent-old-20261017/` holds the material
+      of the **first run, not the 14 September original**. The original
+      (`CN=vtpm-pilot` certificate, `keys.json`, `agent-data.json`) is complete
+      in `/root/spire-agent-backup-20261017.tgz`, whose listing was checked.
+      The server now lists **three** agents for VM 399: `3a165dc4...` (old),
+      `424fde58...` (first run) and `7a5c4121...` (current).
+      **Left to the maintainer, as root:** `spire-server agent evict` for the
+      first-run and the old agent, not the current one; and `spire-server entry
+      show` for entries that select `subject:cn:vtpm-pilot`, which are orphaned
+      now. A node alias on `tpm_devid:subject:cn:399` replaces them (D8a in
+      `declare-per-vm-metadata`).
 
 ## 4. Archive
 
