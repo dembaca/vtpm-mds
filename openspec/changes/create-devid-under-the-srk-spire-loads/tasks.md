@@ -41,10 +41,13 @@ SPIRE agent attests with material that works.
 - [ ] 2.2 Remove the use of `cachedPrimary` and `EvictControl` for the SRK, and verify with `git grep` that nothing evicts or persists the SRK handle, and with a swtpm test that a persistent object at `0x81000001` survives an enrollment with the same public area
       The EK keeps `cachedPrimary`; this task must not change it.
 - [ ] 2.3 Add a test that loads the enrolled blobs the way SPIRE does, with `CreatePrimaryEx` in the owner hierarchy from the H-1 template followed by `tpm2.Load`, and verify it passes
-      Where the TPM tells the two templates apart, also check that the same load
-      under the 256-zero-byte template fails with the integrity error, which is
-      what shows the test tests something. On hogan's vTPM both give one key, so
-      the failing half cannot be shown there; say on which TPM it was run.
+      For the negative control, load the same blobs under a primary made from a
+      template whose `unique` is **certainly** different, 256 bytes of `0x01`,
+      and verify that load fails with the integrity error. That is what shows the
+      test tests something, and it holds on every TPM. Do **not** use the
+      256-zero-byte template as the control: on hogan's `libtpms` it gives the
+      same key as the empty one, so there it would pass for the wrong reason.
+      Name the `swtpm` and `libtpms` versions of the harness in the output.
 - [ ] 2.4 Run `go vet ./...` and `go test ./...` and verify both pass, quoting the output
 - [ ] 2.5 Run `openspec validate --all --strict` and `scripts/openspec-validate.py --strict` and verify both pass
 
