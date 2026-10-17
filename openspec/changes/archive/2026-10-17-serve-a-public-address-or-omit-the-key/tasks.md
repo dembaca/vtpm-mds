@@ -325,4 +325,17 @@ recorded as half done on each host until both halves existed. Raised by
       The positive half was verified on the YAML source instead, under 5.2.
       `RawConfig["public-ipv4"]` on the Proxmox path is therefore **known
       fragile** and recorded as such, not as verified.
-- [ ] 5.4 Archive: move the delta into `openspec/specs/`, move this directory under `openspec/changes/archive/`, update the `README.md` status table, and verify `openspec validate --all --strict` is still clean afterwards
+- [x] 5.4 Archive: move the delta into `openspec/specs/`, move this directory under `openspec/changes/archive/`, update the `README.md` status table, and verify `openspec validate --all --strict` is still clean afterwards
+      **Done 2026-10-17 on `hogan`**, from `main` at the merge of #35, which
+      put 15 of 16 tasks in `main`. `openspec archive
+      serve-a-public-address-or-omit-the-key -y` applied `instance-metadata`
+      `+1 ~1 -1` and `vm-inventory` `~1`;
+      `openspec validate --all --strict` afterwards: `6 passed, 0 failed`.
+      **The `README.md` status table needed no change**: it has no row for
+      individual metadata keys, and "Cloud-compatible metadata API —
+      implemented" stays true. `AGENTS.md` was updated instead, where the queue
+      still called this change unimplemented.
+      The open signature change also modifies `Refuse An Instance Identity To
+      Callers With No VM Record`, so its block was rebuilt on the archived
+      text in the same commit. A trial archive of it on a scratch copy of
+      `openspec/` kept this change's paragraph.
