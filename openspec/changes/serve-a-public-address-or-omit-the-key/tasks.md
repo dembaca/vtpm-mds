@@ -293,13 +293,36 @@ recorded as half done on each host until both halves existed. Raised by
       Not verified here: the Proxmox source, which is 5.3, and the site-CA
       layout, which exists only on `hogan` — this run used the cloud lab's
       default `swtpm-localca`.
-- [ ] 5.3 **hogan** — build and install a git-stamped package, verify `vtpm-mds -version` and `dpkg -l vtpm-mds` identify this tree, then re-run tasks 1.1, 1.2, 2.2 and 3.1 against the installed daemon with the Proxmox source
-      The Proxmox half needs a `public-ipv4:` line in
-      `/etc/pve/qemu-server/399.conf`, which this user cannot write — that part
-      is the maintainer's, as is installing the package, which Claude Code's
-      auto-mode classifier refuses regardless of any go.
+- [x] 5.3 **hogan** — build and install a git-stamped package, verify `vtpm-mds -version` and `dpkg -l vtpm-mds` identify this tree, then re-run tasks 1.1, 1.2, 2.2 and 3.1 against the installed daemon with the Proxmox source
       The note here used to say the agent user **cannot** build a `.deb`. That
-      was wrong in cause and conclusion; see `AGENTS.md`. The package for this
-      branch is already built:
-      `dist/vtpm-mds_0.2.0+git20261017.1fab0f8b2504_amd64.deb`.
+      was wrong in cause and conclusion; see `AGENTS.md`.
+      **Done 2026-10-17, negative half only, on purpose.** Built from `main` at
+      `2dd0335` with `make deb-local`, installed through `hogan-lab dpkg-install`
+      with the maintainer's explicit permission, restarted.
+      Identification: `dpkg -l vtpm-mds` →
+      `ii vtpm-mds 0.2.0+git20261017.2dd03353f629 amd64`;
+      `vtpm-mds -version` → `vtpm-mds 0.2.0+git20261017.2dd03353f629`;
+      `systemctl is-active vtpm-mds` → `active`, running since 11:22:15 CEST.
+      From inside VM 399 with a session token, VM 399 declaring nothing:
+      1.1 and 2.2 — `public-ipv4` → `404`, `Content-Type: text/plain`, length
+      **0**; the catch-all `/latest/no-such-thing` answers `404` with
+      `text/plain; charset=utf-8` and `404 page not found\n`, so the two stay
+      distinct in body and in Content-Type, as the delta requires.
+      1.2 and 3.1 — the index is `200`, **59 bytes, five lines**: `instance-id`,
+      `local-hostname`, `local-ipv4`, `placement/`, `services/`. Before this
+      change, measured under 1.2 on `0.2.0+git20261005.5a60c877cd9c`, it was
+      **71 bytes and six lines**. The difference is 12 bytes, exactly
+      `public-ipv4\n` — the defect this change exists to fix, gone on the real
+      stack.
+      **The positive half was not run, and must not be read as passed.** It
+      needed a `public-ipv4:` line in `/etc/pve/qemu-server/399.conf`. While
+      preparing it, that turned out to be a mechanism Proxmox discards:
+      `check_type` in `PVE/QemuServer.pm` rejects an unknown key, the warn path
+      does not store it, and `write_vm_config` drops it on the next write. The
+      maintainer then deferred the question of where a public address comes
+      from to `declare-per-vm-metadata` (PR #33). Measuring a source being
+      discarded would have proved nothing about the source that replaces it.
+      The positive half was verified on the YAML source instead, under 5.2.
+      `RawConfig["public-ipv4"]` on the Proxmox path is therefore **known
+      fragile** and recorded as such, not as verified.
 - [ ] 5.4 Archive: move the delta into `openspec/specs/`, move this directory under `openspec/changes/archive/`, update the `README.md` status table, and verify `openspec validate --all --strict` is still clean afterwards
