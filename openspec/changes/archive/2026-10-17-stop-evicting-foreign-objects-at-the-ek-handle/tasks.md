@@ -98,4 +98,9 @@ record and the maintainer's decision in `design.md`.**
 
 ## 4. Archive
 
-- [ ] 4.1 Archive with `openspec archive` and verify `openspec validate --all --strict` is still clean and `devid-enrollment` states how the EK is derived
+- [x] 4.1 Archive with `openspec archive` and verify `openspec validate --all --strict` is still clean and `devid-enrollment` states how the EK is derived
+      **Done 2026-10-17 by the coordinator** from `main` at `983eb61` (the #42
+      merge). `openspec archive` applied `devid-enrollment` `~1`; the living
+      spec now derives the EK as a transient primary and leaves `0x81010001`
+      alone. `openspec validate --all --strict` → `5 passed, 0 failed`;
+      `scripts/openspec-validate.py --strict` → `all checks passed`.

@@ -378,7 +378,7 @@ SHALL NOT survive a daemon restart.
 ### Requirement: Write DevID Materials On The Guest
 
 The guest client SHALL build its signing request from the TPM: read the EK
-certificate from NV index `0x01c00002`, create or reuse the cached EK, create
+certificate from NV index `0x01c00002`, derive the endorsement key, create
 an attestation key and a DevID key under the storage root key that SPIRE's
 `tpm_devid` attestor derives, certify the DevID key with the attestation key,
 and sign the marshalled request with the DevID key. When
@@ -406,6 +406,16 @@ It SHALL flush that parent when it is done, SHALL NOT make it persistent, and
 SHALL NOT read, reuse, replace or evict any persistent object at `0x81000001`
 or any other persistent handle on behalf of the storage root key. The DevID
 key and the attestation key SHALL both be created under that parent.
+
+The endorsement key SHALL be derived afresh, as a transient primary key in the
+endorsement hierarchy from the go-tpm-tools default RSA EK template, because
+the EK certificate in NV certifies the key that template yields on that TPM. The
+client SHALL read the EK's public area for the signing request and flush the EK
+at once, and SHALL derive it again for credential activation and flush it after
+use, so that the endorsement key is never loaded together with the attestation
+key, the DevID key and the storage root key. It SHALL NOT make the EK
+persistent and SHALL NOT read, reuse, replace or evict any persistent object at
+`0x81010001` or any other persistent handle on behalf of the endorsement key.
 
 Defaults SHALL be TPM `/dev/tpm0`, service base URL `http://169.254.169.254`,
 output directory `/var/lib/vtpm-mds/devid` and an empty platform common name.
@@ -436,6 +446,23 @@ matches its DevID key.
 - **THEN** the object is still there afterwards with the same public area, and
   the enrolled DevID key loads under the H-1 primary as in the previous
   scenario
+
+#### Scenario: A persistent object at the reserved EK handle is left alone
+
+- **GIVEN** a TPM that holds a persistent object at `0x81010001`, whether a
+  key from another template or a key from the EK template with another
+  `unique`
+- **WHEN** `devid-enroll` runs
+- **THEN** the object is still there afterwards with the same public area, and
+  the EK in the signing request is the key derived from the default EK template
+
+#### Scenario: Four keys are never loaded at once
+
+- **GIVEN** a TPM with three transient object slots
+- **WHEN** `devid-enroll` creates its keys, builds the signing request and
+  solves the credential challenge
+- **THEN** no command fails for lack of object memory, and no transient handle
+  is left loaded afterwards
 
 #### Scenario: Guest TPM has no EK certificate
 
