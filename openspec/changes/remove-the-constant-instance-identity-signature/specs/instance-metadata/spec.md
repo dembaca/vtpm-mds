@@ -92,9 +92,14 @@ these paths SHALL be refused:
 The remaining metadata paths SHALL NOT be refused, because none of them asserts
 an identity the service vouches for. `local-hostname` echoes the caller's own
 `Host` header, `local-ipv4` reports the caller's own peer address,
-`placement/availability-zone` and `services/domain` are fixed strings,
-`public-ipv4` is always unavailable, and the index is a static listing. An
-unbound caller SHALL continue to be served all of them, and the index SHALL
+`placement/availability-zone` and `services/domain` are fixed strings, and
+`public-ipv4` is unavailable to an unbound caller for the same reason it is
+unavailable to any caller with no declared address — a public address is read
+from the bound VM record, and an unbound caller has none. The index asserts no
+identity either: it is derived per request, and for an unbound caller it lists
+the five keys that are always listed and omits `public-ipv4`.
+
+An unbound caller SHALL continue to be served all of them, and the index SHALL
 continue to list `instance-id` even though reading it will be refused.
 
 The refusal SHALL be checked after the session token is validated and before

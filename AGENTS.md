@@ -107,14 +107,13 @@ committed everything and the proposals and designs were untouched on both.
   has a site CA named in `/etc/swtpm_setup.conf` and `pve-edk2-firmware`. A run
   that only covers one of those should say which.
 
-## Known gaps, and the queue as of 2026-10-16
+## Known gaps, and the queue as of 2026-10-17
 
 All six numbered entries below are **implemented, verified and archived** —
 item 6 as a removal rather than an implementation, which is what the analysis
-under it concluded. What is left of the queue is the two unnumbered defects
-further down: `public-ipv4`, whose change record is written and waiting to be
-implemented, and the vTPM dictionary-attack lockout, whose record is written
-and waiting for a maintainer go.
+under it concluded. So are the three unnumbered defects further down —
+`public-ipv4`, the `127.0.0.1` fallback and the vTPM dictionary-attack
+lockout. What is left of the queue is the one open change listed next.
 
 Verification used the real Proxmox stack rather than the QEMU lab wherever it
 could: VM **399** (`vtpm-pilot`) on `vmbr_imds` with MAC `bc:24:11:06:1d:b2`
@@ -133,26 +132,21 @@ re-derived.
 
 ### Open changes as of 2026-10-17
 
-Two, and they are **not** independent — both touch `imds/handlers.go`, so they
-must be implemented one after the other, not in parallel:
+One: `openspec/changes/remove-the-constant-instance-identity-signature/`, the
+`dGVzdC1zaWduYXR1cmU=` placeholder. Its code is in PR #32, waiting for a rebase
+onto the archive below; what remains after the merge needs the installed
+package on this host. Do not archive it before those tasks are done, or
+`openspec/specs/` would describe behaviour the code has never shown.
 
-- `openspec/changes/serve-a-public-address-or-omit-the-key/`, the `public-ipv4`
-  defect. **Being implemented** on `implement-serve-a-public-address`, 13 of 15
-  tasks; what remains needs the installed package. It replaces
-  `Serve The EC2 Metadata Tree` via `REMOVED` + `ADDED` because two of its
-  scenarios invert, modifies `Refuse An Instance Identity To Callers With No VM
-  Record` whose reasoning it makes stale, and modifies
-  `Load VM Records From The YAML Inventory` so that inventory can declare an
-  address.
-- `openspec/changes/remove-the-constant-instance-identity-signature/`, the
-  `dGVzdC1zaWduYXR1cmU=` placeholder. **Record only, 0 of 18 tasks**: the merge
-  approved the plan, it did not implement it — do not archive it in that state,
-  or `openspec/specs/` would describe behaviour the code has never shown.
-
-Both carry a `MODIFIED` block on `Refuse An Instance Identity To Callers With
-No VM Record`. **Whichever is archived second must have its block rebuilt
-against the text the first leaves**, or the second one's verbatim copy silently
-reverts the first one's correction — a loss no test and no validator catches.
+`public-ipv4` was archived first, on 2026-10-17:
+`openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`.
+Both changes carry a `MODIFIED` block on `Refuse An Instance Identity To
+Callers With No VM Record`, so the signature change's block **was rebuilt
+against the text the archive left** in the same commit — its two edits applied
+to the new paragraph, not a verbatim copy of the old one, which would silently
+have reverted the `public-ipv4` correction. No test and no validator catches
+that loss; a trial `openspec archive` on a scratch copy of `openspec/` showed
+both survive.
 
 Everything else specified has shipped and been verified.
 
@@ -193,15 +187,23 @@ pass a `DEB_STAGE` outside the checkout and `chown` the result back to
 has to identify the tree exactly; the version string is fixed when the script
 starts, so putting it back mid-build is safe.
 
-Three defects were found and reproduced here. Two now have records and one is
-implemented; they live in `imds/handlers.go` and in `scripts/qemu-lab/`, so they
+Three defects were found and reproduced here. All three are now implemented
+and archived; they live in `imds/handlers.go` and in `scripts/qemu-lab/`, so they
 stay a disjoint set from product work elsewhere:
 
 - `GET /latest/meta-data/public-ipv4` always answers `404` because
   `getPublicIP` is an unimplemented `TODO`. Where the address should come from
   is an open question, not just an implementation.
-  → **record written, not implemented**:
-  `openspec/changes/serve-a-public-address-or-omit-the-key/`.
+  → **implemented and archived** 2026-10-17:
+  `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`.
+  The key is listed and served only when the bound VM record declares an
+  address — `public_ipv4` in the YAML inventory. The Proxmox backend has no
+  supported source: Proxmox itself never writes such a key, and a hand-written
+  `public-ipv4:` line, which `internal/proxmox` would still read, is dropped by
+  the next `qm set`. Ignoring it is part of the pending `vmconfig.go` change. The YAML half was verified on
+  the cloud lab, the Proxmox half on VM 399 against the installed package.
+  Where a declared address should come from on Proxmox is deferred, with the
+  wider per-VM metadata question, to PR #33.
 - `imds.getClientIP` falls back to the literal `"127.0.0.1"` when `PeerIP`
   cannot parse `RemoteAddr`, so with `mds.require_vm_identity: false` an
   unparseable peer is served the invented id `i-127-0-0-1`.
@@ -371,17 +373,17 @@ archived** (2026-10-03):
   IMDS, `cloud-install.sh` can disturb `pve-qemu-kvm`, and `MDS_LAB_ACCEL`
   defaults to `tcg` even where KVM works.
 
-Two further defects are pre-existing and unspecified, and still need a change
-each before anyone touches them:
+Two further defects were pre-existing and unspecified when this list was
+written; both now have changes, both archived (see the three defects above):
 
-- `GET /latest/meta-data/public-ipv4` always answers `404` because
-  `getPublicIP` in `imds/handlers.go` is an unimplemented `TODO`. The
-  `instance-metadata` spec records that as current behaviour, so this is a
-  missing feature rather than a contradiction — but it means the key is listed
-  in the index and never has a value.
-- `imds.getClientIP` falls back to the literal `"127.0.0.1"` when `PeerIP`
-  cannot parse `RemoteAddr`. With `mds.require_vm_identity: false`, an
-  unparseable peer address is therefore served the instance id `i-127-0-0-1`
+- `GET /latest/meta-data/public-ipv4` always answered `404` because
+  `getPublicIP` in `imds/handlers.go` was an unimplemented `TODO`. The
+  `instance-metadata` spec recorded that as current behaviour, so this was a
+  missing feature rather than a contradiction — but it meant the key was listed
+  in the index and never had a value.
+- `imds.getClientIP` fell back to the literal `"127.0.0.1"` when `PeerIP`
+  could not parse `RemoteAddr`. With `mds.require_vm_identity: false`, an
+  unparseable peer address was therefore served the instance id `i-127-0-0-1`
   — a made-up identity, in the one mode where unbound callers are served at
   all.
 
