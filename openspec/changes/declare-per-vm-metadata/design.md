@@ -253,6 +253,21 @@ needed a lab-only binary.
    `subject:oid`. This needs a SPIRE release that contains #7312, and a
    subject carrying values from Proxmox tags.
 
+**Decided by the maintainer on 2026-10-17: option 1 (a node alias keyed on
+`CN=<vmid>`) now, and option 3 (the VM ID stays in the CN, a name or tags go in
+a second subject attribute) noted for later.** The CN stays the VM ID: unique in
+the cluster, settable only by whoever creates the VM, and no code. The readable
+name lives in SPIRE as one node alias per VM, which the lab showed end to end,
+re-enrollment included. Option 3 waits for a SPIRE release that contains
+`subject:oid` (#7312, on `main` only; the deployed SPIRE is 1.14.0). Option 2, a
+descriptive name as the CN, is not chosen. Proxmox VM names are not unique and
+can be changed by anyone with `VM.Config.Options`.
+
+One consequence stays: VM 399's SPIRE agent still presents a certificate with
+`CN=vtpm-pilot`, so an alias keyed on `CN=399` only matches after VM 399 is
+re-enrolled, which changes its agent ID. That is decided in
+`create-devid-under-the-srk-spire-loads`, task 3.4, not here.
+
 ### D9. Trust of values that reach the certificate
 
 A tag or a VM name is only as trustworthy as the Proxmox privilege needed to
