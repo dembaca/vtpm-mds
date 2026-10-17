@@ -67,9 +67,12 @@ These fill gaps the sheet left; none changes M1–M5.
 - **D-g. Host placement refreshes with the cache.** Node name and cluster name are
   read on every load, so SIGHUP picks up a renamed cluster. A tag edit is also
   visible only after a SIGHUP or restart, like any inventory change.
-- **D-h. Invalid host names.** A node or cluster name that is not a valid
-  placement name is logged and replaced by `proxmox` or `local`, so the served
-  value is never empty or unsafe.
+- **D-h. Host names are lowercased, then checked.** Proxmox allows capitals in a
+  cluster name, and a placement name has none, so checking first would turn a
+  cluster named `BGL-Cluster` into region `local`. A name that is still not valid
+  is logged and replaced by `proxmox` or `local`, so the served value is never
+  empty or unsafe. (Added while implementing; the first draft of the delta checked
+  before lowercasing.)
 - **D-i. YAML backend host placement stays `proxmox` and `local`.** The lab and
   any existing deployment keep what they get now unless an entry declares
   otherwise.

@@ -163,9 +163,11 @@ tags SHALL NOT affect another VM's record or the load.
 zone is the name of the node, the target name of the `/etc/pve/local` link, and
 the region is the `cluster_name` of `/etc/pve/corosync.conf`, or `local` when
 that file is absent, unreadable or names no cluster. It SHALL be determined
-whenever the inventory is loaded, so a SIGHUP reload refreshes it. A node name
-or cluster name that is not a valid placement name SHALL be logged and replaced
-by `proxmox` and `local` respectively. Only the guests of this node reach this
+whenever the inventory is loaded, so a SIGHUP reload refreshes it. The node name
+and the cluster name SHALL be lowercased before they are checked, because Proxmox
+allows capitals in both and a placement name has none. One that is still not a
+valid placement name SHALL be logged and replaced by `proxmox` and `local`
+respectively. Only the guests of this node reach this
 service, so this node's name is the zone of every caller it can bind.
 
 A MAC address SHALL be taken only from a line matching
@@ -271,6 +273,13 @@ the YAML inventory.
 
 - **GIVEN** `/etc/pve/local` links to `nodes/hogan` and
   `/etc/pve/corosync.conf` names the cluster `bgl-cluster`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `hogan` and its region is `bgl-cluster`
+
+#### Scenario: Capitals in a node or cluster name are lowercased
+
+- **GIVEN** `/etc/pve/local` links to `nodes/Hogan` and `/etc/pve/corosync.conf`
+  names the cluster `BGL-Cluster`
 - **WHEN** the inventory cache is loaded
 - **THEN** the host's zone is `hogan` and its region is `bgl-cluster`
 
