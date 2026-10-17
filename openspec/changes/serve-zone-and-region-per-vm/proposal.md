@@ -23,10 +23,12 @@ consumers that do.
 - **A VM declares its zone and region with Proxmox tags**, `mds.zone.<name>` and
   `mds.region.<name>`, read from the live section of its config. The YAML
   inventory gets `zone` and `region` fields with the same meaning.
-- **Without a declaration the host's placement is served**: the zone is the name
-  of the node the service runs on, the region is the cluster name from
-  `/etc/pve/corosync.conf`, or `local` without one. The YAML backend's host
-  placement stays `proxmox` and `local`.
+- **Without a declaration the host's placement is served**, from the first
+  source that gives a name: the `topology.kubernetes.io/zone` and `.../region`
+  lines of the node's description, the node name as the zone and the cluster name
+  from `/etc/pve/corosync.conf` as the region, then `proxmox` and `local`. A name
+  keeps the case its source gives it. The YAML backend's host placement stays
+  `proxmox` and `local`.
 - **`placement/region` becomes a real key**, and the identity document's `region`
   and `availabilityZone` follow the same values.
 - **Faults are local.** Two zone tags on one VM, an invalid name, or a bad YAML

@@ -39,13 +39,30 @@ keeps and drops, and for what Kubernetes reads (D6).
 - **M5, faults.** A broken or unknown tag is logged and treated as not set; every
   other VM is untouched. YAML gets `zone` and `region` with the same meaning.
 
+## Decided later the same day, by the maintainer
+
+On the agent bus, after the coordinator proposed it from what the DG-i data centre
+does (a `k8s-proxmox-node-label` controller copies `topology.kubernetes.io/zone`
+and `region` lines from the **description of the Proxmox node** onto Kubernetes
+nodes):
+
+- **Node description, yes.** The order is **VM tag, then node description, then
+  node name and cluster name.** The same source and the same keys as the
+  controller, so the metadata service reads what the labels carry, with nothing to
+  keep twice. It amends M3: the defaults gain a middle step.
+- **Case as in the source.** "übernimm groß/klein wie es in der Quelle steht,
+  kein lc() uc()". No source's case is changed, neither tag, description, node
+  name nor cluster name. `DUS4` stays `DUS4`.
+
 ## Decided by this record's author, for the maintainer to overrule
 
 These fill gaps the sheet left; none changes M1–M5.
 
-- **D-a. Name syntax.** `<name>` is 1 to 63 characters from `a-z`, `0-9`, `_`,
-  `-`, `+`, `.`, starting with a letter or digit: Proxmox's tag characters, so
-  every valid tag can carry it, and valid in a URL path and a JSON string.
+- **D-a. Name syntax.** `<name>` is 1 to 63 characters from `a-z`, `A-Z`, `0-9`,
+  `_`, `-`, `+`, `.`, starting with a letter or digit: Proxmox's tag characters
+  (its tag format ignores case), so every valid tag can carry it, and valid in a
+  URL path and a JSON string. Capitals were added on the maintainer's decision
+  below; the first draft allowed lowercase only.
 - **D-b. Splitting `tags`.** At `;`, `,` and whitespace. Proxmox writes `;`; the
   lenient split costs nothing and avoids a silent miss on a hand edit.
 - **D-c. "Two tags" includes an invalid one.** Two tags of one kind, valid or not,
@@ -67,12 +84,10 @@ These fill gaps the sheet left; none changes M1–M5.
 - **D-g. Host placement refreshes with the cache.** Node name and cluster name are
   read on every load, so SIGHUP picks up a renamed cluster. A tag edit is also
   visible only after a SIGHUP or restart, like any inventory change.
-- **D-h. Host names are lowercased, then checked.** Proxmox allows capitals in a
-  cluster name, and a placement name has none, so checking first would turn a
-  cluster named `BGL-Cluster` into region `local`. A name that is still not valid
-  is logged and replaced by `proxmox` or `local`, so the served value is never
-  empty or unsafe. (Added while implementing; the first draft of the delta checked
-  before lowercasing.)
+- **D-h. Invalid host names.** A node name, a cluster name or a description value
+  that is not a valid placement name is logged and the next source is used, so the
+  served value is never empty or unsafe. (The first draft lowercased the names
+  before checking; the maintainer decided against any case change, below.)
 - **D-i. YAML backend host placement stays `proxmox` and `local`.** The lab and
   any existing deployment keep what they get now unless an entry declares
   otherwise.
@@ -107,6 +122,11 @@ These fill gaps the sheet left; none changes M1–M5.
 - **A zone that changes under a running guest.** Kubernetes assumes topology
   labels do not change for a node. A tag edit changes what the guest reads on its
   next request after a reload; a consumer that read once keeps its old value.
+- **The node description is writable by anyone with `Sys.Modify` on the node**,
+  a higher bar than a VM's tags, and read from `/etc/pve/local/config`, which
+  most nodes lack. Format taken from Proxmox's `PVE/NodeConfig.pm` as the
+  coordinator read it on hogan (a `#` line per description line, URL-encoded);
+  hogan has no node config, so the step has not run on a real file here.
 - **`/etc/pve/corosync.conf` may not be readable by the service's user or may
   name no cluster,** in which case the region is `local`. Not yet checked on
   hogan (task 3.1).
