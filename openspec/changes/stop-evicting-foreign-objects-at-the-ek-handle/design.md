@@ -39,9 +39,16 @@ the logic, not those.
 | Transient EK from the default template vs a persistent one made from it | **Same key.** |
 | Transient objects held at once | **3**; the fourth `CreatePrimary` fails with `out of memory for object contexts`. |
 
-**Not measured here:** the same on swtpm/libtpms (cloud lab, hogan), and whether
-the persistent object at `0x81010001` on VM 399 equals the key in its EK
-certificate. Both belong to the verification tasks.
+**On hogan** (VM 399, `swtpm 0.8.0+pve3`, `libtpms 0.9.7`, task 1.2, coordinator,
+read-only): the EK derived from the default template, the persistent object at
+`0x81010001` and the public key in the EK certificate at NV `0x01c00002` are the
+same key (`952f9c28...f23a23fb`). Unlike the SRK, the EK has a fixed reference,
+the TCG EK template and the certificate, so a derived EK is right by construction
+and a foreign persistent object cannot change it; only an option that *uses* the
+persistent object could break the binding. That is a further argument for option 1.
+
+**Not measured:** the same on the cloud lab's `swtpm-localca` with another
+`libtpms` (task 3.1), and the three-slot flow on a real TPM.
 
 ## Goals
 

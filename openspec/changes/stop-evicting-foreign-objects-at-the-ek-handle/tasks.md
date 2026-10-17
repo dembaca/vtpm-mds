@@ -7,8 +7,20 @@ record and the maintainer's decision in `design.md`.**
 ## 1. Decide
 
 - [ ] 1.1 **Maintainer** — decide what the client does with a persistent object at `0x81010001` (`design.md`, option 1 recommended), and verify the decision is written under a dated "Decided" heading in `design.md`
-- [ ] 1.2 Verify on hogan that the persistent object at `0x81010001` on VM 399 is, or is not, the key in its EK certificate at NV `0x01c00002`, and that a transient default-template EK equals it, with persistent handles unchanged and no transient handle left
+- [x] 1.2 Verify on hogan that the persistent object at `0x81010001` on VM 399 is, or is not, the key in its EK certificate at NV `0x01c00002`, and that a transient default-template EK equals it, with persistent handles unchanged and no transient handle left
       Readonly, as the measuring binary of the SRK change was. Say which.
+      **Done, 2026-10-17, coordinator on hogan** (VM 399, `swtpm 0.8.0+pve3`,
+      `libtpms 0.9.7`, site-CA layout), read-only and transient: the EK derived
+      from `client.DefaultEKTemplateRSA()` through go-tpm in the endorsement
+      hierarchy, the persistent object at `0x81010001` and the public key in the
+      EK certificate at NV `0x01c00002` (`CN=399`) are **the same key**
+      (`952f9c28...f23a23fb`), and `MatchesTemplate` is true. Afterwards no
+      transient handle was left, the persistent objects at `0x81000001`,
+      `0x81010001` and `0x81010016` were unchanged and the measuring program was
+      deleted. On hogan a derived EK therefore holds the binding. A foreign
+      object at `0x81010001` does not affect a derived EK, which depends only on
+      the seed and the template; the binding would fail only for an option that
+      uses the persistent object.
 
 ## 2. Implement
 
