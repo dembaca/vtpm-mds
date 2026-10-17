@@ -18,12 +18,14 @@ different ones.
   whose `ModulusRaw` is 256 zero bytes, and makes it persistent at `0x81000001`.
 
 A child blob only loads under the parent it was created under, and a TPM
-derives a primary key from its seed and the template. **Whether the `unique`
-field takes part in that derivation depends on the TPM implementation.** In the
-cloud lab the two templates give different keys, so on a TPM with no persistent
-SRK `devid-enroll` enrolls a DevID that SPIRE then fails to load with
-`tpm2.Load … integrity check failed (0x1f)`. On hogan's vTPM they give the
-**same** key, and nothing fails (measured, below).
+derives a primary key from its seed and the template. Through **go-tpm**, the
+library `devid-enroll` and SPIRE both use, the two templates give two different
+primaries on the cloud lab's TPM, so there `devid-enroll` enrolls a DevID that
+SPIRE then fails to load with `tpm2.Load … integrity check failed (0x1f)`
+(measured, below). Measured through **tpm2-tools**, an empty `unique` and 256
+zero bytes give the **same** key, on the lab's TPM and on hogan's alike. The
+difference lies in how go-tpm sends a 256-byte zero `unique`, not in which TPM
+it is sent to; whether hogan's TPM shows it through go-tpm has not been tried.
 
 This was found by `agent-cursor-vtpm-22e0` on 2026-10-17, while showing the
 node-alias route end to end in the cloud lab (`declare-per-vm-metadata`, #33).
@@ -49,14 +51,43 @@ compared the moduli:
 | `unique` = 256 × `0x01` (control) | `cda672bb…665e6827` |
 | empty `unique`, without `noda` (control) | `ca4dbae6…37991007` |
 
-On hogan's vTPM (`swtpm 0.8.0+pve3`, `libtpms0 0.9.7+pve2`) an empty `unique`
-and 256 zero bytes give the **same** SRK, while a different `unique` or
-different attributes give a different one. VM 399 therefore attests because
-both templates yield the same key there. The persistent object's own history
-no longer matters. What this means is that the defect **depends on the TPM
-implementation**: the lab's TPM, whose `swtpm` and `libtpms` versions the lab
-agent has been asked to report, tells the two templates apart, and hogan's does
-not. The fix, an empty `unique` as SPIRE uses, is correct on both.
+On hogan's vTPM (`swtpm 0.8.0+pve3`, `libtpms0 0.9.7+pve2`), **through
+tpm2-tools**, an empty `unique` and 256 zero bytes give the same SRK, while a
+different `unique` or different attributes give a different one. VM 399's agent
+attests with material from 2026-09-14; **how that material was created is not
+established**, and a persistent object's own history no longer explains it.
+
+**The lab's two measurements, `agent-cursor-vtpm-22e0`, 2026-10-17** (cloud lab
+host: `swtpm 0.7.3-0ubuntu5.24.04.1`, `libtpms0 0.9.3-0ubuntu4.24.04.1`):
+
+A. **Through tpm2-tools**, the coordinator's command on a fresh lab vTPM
+   (`tpm2_createprimary -C o -g sha256 -G rsa2048:null:aes128cfb` with the same
+   attributes):
+
+   | `unique` | Modulus |
+   |---|---|
+   | empty | `ccc8d731…d9d30863` |
+   | 256 × `0x00` | `ccc8d731…d9d30863` (equal) |
+   | 256 × `0x01` | `92a1ea91…bcfbebf5` (different) |
+
+   The lab's `libtpms` does not tell empty and 256 zero bytes apart either.
+
+B. **Through go-tpm**, as the client and SPIRE call it, in the same guest:
+
+   | Template | `ModulusRaw` | Modulus (sha256 / head) |
+   |---|---|---|
+   | `SRKTemplateRSA` (this client) | 256 bytes | `5c4982f8…` / `b5cbc4c8…` |
+   | `SRKTemplateHighRSA` (SPIRE) | empty | `00b194e1…` / `ae5ec096…` |
+
+   The high template's modulus equals the tpm2-tools result for an empty or
+   zero `unique` (`ae5ec096…`). **The client's template, through go-tpm,
+   produces a different primary**, which is why SPIRE's load fails.
+
+So the defect is reproduced at the library level on one TPM, between the very
+two templates the two programs use. What is not known is why go-tpm's
+256-byte zero `unique` differs from tpm2-tools' 256 zero bytes, and whether
+hogan's TPM behaves like the lab's when driven through go-tpm. The fix, an
+empty `unique` as SPIRE uses, is correct on both counts.
 
 ## What Changes
 

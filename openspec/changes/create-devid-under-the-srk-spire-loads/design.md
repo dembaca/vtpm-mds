@@ -70,15 +70,16 @@ template do the reverse. From hogan, `agent-vtpm-hogan-ead994124`: `keys.go`
 is unchanged since `0c2623c` (2026-09-09), and VM 399 has persistent objects
 at `0x81000001`, `0x81010001` and `0x81010016`.
 
-**Measured on hogan by the coordinator, 2026-10-17** (table in `proposal.md`):
-on `swtpm 0.8.0+pve3` with `libtpms0 0.9.7+pve2` an empty `unique` and 256 zero
-bytes give the **same** SRK as the persistent object at `0x81000001`, while
-256 bytes of `0x01`, or an empty `unique` without `noda`, give different ones.
-So a template's `unique` does not always take part in the derivation, and the
-lab's failure cannot be explained by "a TPM derives a primary from the whole
-template" in general. It depends on the implementation. The TPM specification
-was **not re-read**, and the lab's `swtpm` and `libtpms` versions are not yet
-known (task 1.4).
+**Measured on 2026-10-17, tables in `proposal.md`.** Through tpm2-tools, an
+empty `unique` and 256 zero bytes give the same SRK on hogan's TPM (coordinator;
+`swtpm 0.8.0+pve3`, `libtpms0 0.9.7+pve2`) and on the lab's (`swtpm 0.7.3`,
+`libtpms0 0.9.3`); 256 bytes of `0x01`, or missing `noda`, give different ones.
+Through go-tpm on the lab's TPM, `SRKTemplateRSA` and `SRKTemplateHighRSA` give
+**different** primaries. So the failure is not explained by "a TPM derives a
+primary from the whole template" in general, nor by hogan's and the lab's TPMs
+differing: the two TPMs agree when driven by tpm2-tools. It lies in how go-tpm
+encodes a 256-byte zero `unique`. That is **not understood**, and nobody has
+read go-tpm's or the TPM's code for it. The TPM specification was not re-read.
 
 ## Goals
 
@@ -134,18 +135,18 @@ reserved handle holds something, and what.
   fingerprint then changes, so the agent's SPIFFE ID changes with it and any
   registration that selects on the old one stops matching (see the SPIRE
   section of `declare-per-vm-metadata`).
-- **On a TPM like VM 399's,** where the two templates give the same key,
-  nothing changes for the material already there, and a re-enrollment under
-  option 1 gives a key under the same primary.
+- **On VM 399,** material that SPIRE already loads is not touched, and a
+  re-enrollment under option 1 gives a key under SPIRE's primary, as SPIRE
+  derives it, whatever the SRK there is.
 - **One more `CreatePrimary` per enrollment.** Enrollment is rare.
 
 ## Risks
 
-- **The defect depends on the TPM implementation.** Hogan's vTPM cannot
-  reproduce it, so its verification can show only that nothing breaks. The
-  reproduction exists only where the lab's TPM is. Until its versions are known,
-  it is not clear which hardware or software TPMs are affected; a physical TPM
-  has not been tried at all.
+- **The cause of the library-level difference is not understood.** The
+  reproduction is a comparison of two go-tpm templates on one TPM. Whether
+  hogan's TPM shows the same through go-tpm is untested (task 1.5), and a
+  physical TPM has not been tried at all. The fix does not depend on the answer,
+  because it moves the client to the template SPIRE uses.
 - **Another SPIRE version may use another template.** This record is written
   against `1.14.0`, the deployed version. `SRKTemplateHighRSA`,
   `SRKTemplateHighECC` and their use in `loadKey` and `createAttestationKey`
