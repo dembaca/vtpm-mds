@@ -61,8 +61,9 @@ versions, so each source names the copy it came from.
   entry under `/etc/pve/nodes` that has a `qemu-server` directory. On hogan's
   three-node cluster (`hogan`, `holger`, `horst`) that is `hogan` only because
   it sorts first. Found by the coordinator, and part of its separate change.
-  Proxmox's own pointer to the local node is the `/etc/pve/local` symlink;
-  that is not yet verified on hogan.
+  Proxmox's own pointer to the local node is the `/etc/pve/local` symlink.
+  It was verified on hogan on 2026-10-17: it points to `nodes/hogan`, and
+  `/etc/pve/local/qemu-server` exists (task 1.3).
 
 ### Evidence: what has already been rejected
 

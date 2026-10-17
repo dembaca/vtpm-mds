@@ -21,9 +21,14 @@ hand-written key, into a Proxmox guest config, including VM 399's.
       Teleport. If a consumer needs anything beyond `placement/region` and
       `placement/availability-zone`, the scope changes before any delta is
       written.
-- [ ] 1.3 Check on hogan that `/etc/pve/local` points at the node the service runs on, and verify the result is recorded in `design.md`
+- [x] 1.3 Check on hogan that `/etc/pve/local` points at the node the service runs on, and verify the result is recorded in `design.md`
       D4 depends on it, and the coordinator's node-selection change may use
       it.
+      **Done**, checked by `agent-vtpm-hogan-ead994b0b` on hogan on 2026-10-17:
+      `/etc/pve/local -> nodes/hogan` (symlink, `root:www-data`),
+      `readlink -f` → `/etc/pve/nodes/hogan`, `hostname -s` → `hogan`, and
+      `/etc/pve/local/qemu-server` exists. Proxmox maintains the link itself.
+      The node name D4 needs is therefore the link target, not a guess.
 - [ ] 1.4 Write the spec deltas for the decision and remove `skip_specs: true` from `.openspec.yaml`, then verify `openspec validate declare-per-vm-metadata --strict` passes
       Changing the pinned constants `proxmox` and `local` modifies
       `instance-metadata` requirements that have scenarios. A scenario whose
