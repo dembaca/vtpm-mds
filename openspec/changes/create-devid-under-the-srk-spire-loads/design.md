@@ -70,18 +70,17 @@ template do the reverse. From hogan, `agent-vtpm-hogan-ead994124`: `keys.go`
 is unchanged since `0c2623c` (2026-09-09), and VM 399 has persistent objects
 at `0x81000001`, `0x81010001` and `0x81010016`.
 
-**Measured on 2026-10-17, tables in `proposal.md`.** On hogan's TPM the
-persistent object at `0x81000001` has the same modulus as a primary made with an
-empty `unique` (coordinator, through tpm2-tools; `swtpm 0.8.0+pve3`,
-`libtpms0 0.9.7+pve2`). Through tpm2-tools an empty `unique` and 256 zero bytes
-give one key on hogan's TPM and on the lab's (`swtpm 0.7.3`, `libtpms0 0.9.3`)
-alike, which makes tpm2-tools unsuited to compare these two templates. Through
-go-tpm on the lab's TPM, `SRKTemplateRSA` and `SRKTemplateHighRSA` give
-**different** primaries. The defect is therefore general: it does not depend on
-which TPM it is, and it does not bite on VM 399 because an H-1 SRK was already
-persistent there and `cachedPrimary` reused it. **Not understood:** why go-tpm's
-256-byte zero `unique` differs from tpm2-tools'. Nobody has read go-tpm's or the
-TPM's code for it, and the TPM specification was not re-read.
+**Measured on 2026-10-17, tables in `proposal.md`.** Through **go-tpm**, on both
+the lab's TPM (`swtpm 0.7.3`, `libtpms0 0.9.3`) and hogan's (`swtpm 0.8.0+pve3`,
+`libtpms0 0.9.7+pve2`), the client's `SRKTemplateRSA` gives a different primary
+from SPIRE's H-1, so the defect is general. Through tpm2-tools an empty and a
+256-zero `unique` give one key on both TPMs, which makes tpm2-tools unsuited to
+compare these two templates. On hogan the persistent object at `0x81000001` has
+the same modulus as the H-1 primary. VM 399's pilot material most likely came
+from a tpm2-tools script of 2026-09-14, not from this client, so VM 399 neither
+shows nor refutes the defect. **Not understood:** why go-tpm's 256-byte zero
+`unique` differs from tpm2-tools'. Nobody has read go-tpm's or the TPM's code for
+it, and the TPM specification was not re-read.
 
 ## Goals
 
@@ -137,20 +136,19 @@ reserved handle holds something, and what.
   fingerprint then changes, so the agent's SPIFFE ID changes with it and any
   registration that selects on the old one stops matching (see the SPIRE
   section of `declare-per-vm-metadata`).
-- **On VM 399,** material that SPIRE already loads is not touched, and a
-  re-enrollment under option 1 gives a key under SPIRE's primary, which is the
-  persistent SRK there, so nothing changes about the parent.
+- **On VM 399,** material that SPIRE already loads is not touched. A
+  re-enrollment with the fixed client gives a key under SPIRE's primary, which
+  is the persistent SRK there.
 - **One more `CreatePrimary` per enrollment.** Enrollment is rare.
 
 ## Risks
 
 - **The cause of the library-level difference is not understood.** The
-  reproduction is a comparison of two go-tpm templates on one TPM. Go-tpm on
-  hogan's TPM, and a physical TPM, are untested. The fix does not depend on the
-  answer, because it moves the client to the template SPIRE uses.
-- **The explanation for VM 399 is inferred, not observed.** Nobody has seen
-  `cachedPrimary` reuse that object, or established what created it or what
-  created the 2026-09-14 DevID.
+  defect is shown on two TPM implementations. A physical TPM has not been
+  tried. The fix does not depend on the answer, because it moves the client to
+  the template SPIRE uses.
+- **How VM 399's pilot material was made is not established.** The indications
+  point at a tpm2-tools script, not at `devid-enroll`.
 - **Another SPIRE version may use another template.** This record is written
   against `1.14.0`, the deployed version. `SRKTemplateHighRSA`,
   `SRKTemplateHighECC` and their use in `loadKey` and `createAttestationKey`

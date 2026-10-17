@@ -23,8 +23,9 @@ library `devid-enroll` and SPIRE both use, the two templates give two different
 primaries (measured on the cloud lab's TPM, below), so on a TPM with no
 persistent H-1 SRK `devid-enroll` enrolls a DevID that SPIRE then fails to load
 with `tpm2.Load … integrity check failed (0x1f)`. The defect is **not** specific
-to one TPM. On VM 399 it does not bite, because a persistent SRK equal to the
-H-1 primary is already there (measured, below).
+to one TPM: it shows on the lab's and on hogan's (measured, below). VM 399's
+SPIRE agent attests nonetheless, but its material probably was not made by
+`devid-enroll` at all, so it says nothing for or against the client.
 
 This was found by `agent-cursor-vtpm-22e0` on 2026-10-17, while showing the
 node-alias route end to end in the cloud lab (`declare-per-vm-metadata`, #33).
@@ -34,14 +35,12 @@ the reverse. The lab needed a lab-only binary with an empty `ModulusRaw` to
 finish. **VM 399 on hogan works**: its agent attests with material from
 2026-09-14.
 
-**Why VM 399 works: measured, and the first explanation was right after all.**
-This record first guessed that VM 399's persistent SRK is the H-1 primary and
-is reused by `cachedPrimary`; it then withdrew that on a measurement, and the
-coordinator has since withdrawn the withdrawal (below). The measurement
-(coordinator, 2026-10-17): `tpm2_readpublic` shows only the generated modulus,
-not the template's `unique`, so it created transient owner primaries in the
-guest's TPM with the attributes of `SRKTemplateRSA` including `noda`, flushed
-them, and compared moduli:
+**Why VM 399 works: measured, and probably not through this client.** This
+record first guessed that VM 399's persistent SRK is the H-1 primary and is
+reused by `cachedPrimary`. The coordinator's measurements, 2026-10-17, settle
+the first half and weaken the second. `tpm2_readpublic` shows only the
+generated modulus, not the template's `unique`, so it created transient owner
+primaries, flushed them, and compared moduli:
 
 | Template (through tpm2-tools) | Modulus |
 |---|---|
@@ -53,14 +52,39 @@ them, and compared moduli:
 
 On hogan's vTPM (`swtpm 0.8.0+pve3`, `libtpms0 0.9.7+pve2`) **the persistent SRK
 at `0x81000001` is the H-1 primary**, the one SPIRE derives. Who created it is
-not known. The mechanism then fits the code: `cachedPrimary` finds an object
-there, `MatchesTemplate` ignores `ModulusRaw` and says it fits, the client
-reuses it, and the DevID is created under SPIRE's own parent. That is
-consistent with VM 399 attesting; it was not observed directly. The *rows* for
-an empty and a 256-zero `unique` carry no weight for the client, because the
-client does not send its template through tpm2-tools. They are equal, and so
-are the lab's (below), which is why tpm2-tools is the wrong tool to compare
-these two templates.
+not known. The equal rows for an empty and a 256-zero `unique` say nothing
+about the client, because the client does not send its template through
+tpm2-tools; they are equal on the lab's TPM too, which is why tpm2-tools is the
+wrong tool to compare these two templates.
+
+**Then the same comparison through go-tpm on VM 399's TPM (task 1.5,
+coordinator, 2026-10-17)**, with a static measuring binary built from
+`client.SRKTemplateRSA()` of this repository's `go.mod`, transient owner
+primaries, each flushed, no transient handle left and the persistent objects at
+`0x81000001`, `0x81010001` and `0x81010016` unchanged, binary and temporary
+files removed afterwards:
+
+| Template (through go-tpm) | Modulus |
+|---|---|
+| client `SRKTemplateRSA` (256 × `0x00`) | `b71a7c39…d0c2b677` |
+| SPIRE H-1 (empty `ModulusRaw`) | `e36d99c0…a603e857` |
+| control, 256 × `0x01` | `b1a7de22…529261ad` |
+| persistent object at `0x81000001` | `e36d99c0…a603e857` |
+
+So **on hogan too the client's template gives a different parent from SPIRE's
+H-1**, and the persistent SRK there is the H-1 primary. The defect is general,
+on both `libtpms` versions measured.
+
+**Where VM 399's material came from.** Circumstantial, not proved: the guest
+holds `/usr/local/bin/generate-devid-csr.sh` from 2026-09-14 12:39 and the
+certificate is from 12:45 the same day. That script uses tpm2-tools and the
+persistent handle `0x81000001` and creates the blobs with `tpm2_create` "for
+SPIRE". The certificate is RSA-2048 while the visible `tpm2_create` lines in the
+script are ECC, so which path ran is open. `devid-enroll` 0.1.0 is there only as
+a backup from 2026-09-20. **Most likely `devid-enroll` never produced VM 399's
+pilot material**, so it proves nothing about the client either way. The
+explanation "`cachedPrimary` reused the H-1 SRK" is therefore not needed and not
+supported; it stays a possibility only if the client was in fact used.
 
 **The lab's measurements, `agent-cursor-vtpm-22e0`, 2026-10-17** (cloud lab
 host: `swtpm 0.7.3-0ubuntu5.24.04.1`, `libtpms0 0.9.3-0ubuntu4.24.04.1`):
@@ -90,11 +114,10 @@ B. **Through go-tpm**, as the client and SPIRE call it, in the same guest:
 
 So the defect is **general, not specific to one TPM**: without a persistent
 H-1 SRK already in place, the client builds a different parent from the one
-SPIRE derives. It is reproduced at the library level, between the very two
-templates the two programs use. What is not understood is why go-tpm's 256-byte
-zero `unique` differs from tpm2-tools' 256 zero bytes. What is untested is
-go-tpm on hogan's TPM, which would only confirm it. The fix, an empty `unique`
-as SPIRE uses, is correct either way.
+SPIRE derives. It is reproduced through go-tpm on the lab's TPM and on hogan's,
+between the very two templates the two programs use. What is not understood is
+why go-tpm's 256-byte zero `unique` differs from tpm2-tools' 256 zero bytes.
+The fix, an empty `unique` as SPIRE uses, is correct either way.
 
 ## What Changes
 
