@@ -111,14 +111,20 @@ func HandleMetaDataIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The index is built per request and never cached, because public-ipv4 is
+	// listed only for a caller that has one. It is the one metadata value that
+	// depends on which VM is asking; everything else it lists is listed for
+	// everyone. An index that advertises a key the caller cannot read is
+	// indistinguishable, to that caller, from a service that is broken.
 	paths := []string{
 		"instance-id",
 		"local-hostname",
 		"local-ipv4",
-		"public-ipv4",
-		"placement/",
-		"services/",
 	}
+	if PublicIPv4(r) != "" {
+		paths = append(paths, "public-ipv4")
+	}
+	paths = append(paths, "placement/", "services/")
 
 	w.Header().Set("Content-Type", "text/plain")
 	for _, path := range paths {
@@ -184,7 +190,7 @@ func HandlePublicIPv4(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := getPublicIP(r)
+	ip := PublicIPv4(r)
 
 	w.Header().Set("Content-Type", "text/plain")
 	if ip != "" {
@@ -372,9 +378,34 @@ func LocalIPv4(r *http.Request) string {
 	return v4.String()
 }
 
-func getPublicIP(r *http.Request) string {
-	// TODO: Extract from Proxmox VM config
-	return ""
+// PublicIPv4 returns the public IPv4 address declared for the caller's bound VM
+// record, or the empty string when none is declared or no record is bound.
+//
+// The value is read from the record's raw configuration under the key
+// public-ipv4 and from nowhere else. It is deliberately never derived from the
+// connection, from a request header, or from any address the service observes:
+// a public address is not something this service can see. The peer address is
+// by construction the guest's address on the metadata bridge, so serving it
+// here would look right in a lab where the two happen to match and be wrong
+// everywhere else.
+//
+// A declared value that is not a valid IPv4 address is treated as absent. The
+// inventory is meant to reject one at load time; this is the second line of
+// defence, so a malformed value can never reach a caller as an address.
+func PublicIPv4(r *http.Request) string {
+	vmConfig := inventory.GetVMConfigFromRequest(r)
+	if vmConfig == nil || vmConfig.RawConfig == nil {
+		return ""
+	}
+	declared := strings.TrimSpace(vmConfig.RawConfig["public-ipv4"])
+	if declared == "" {
+		return ""
+	}
+	ip := net.ParseIP(declared)
+	if ip == nil || ip.To4() == nil {
+		return ""
+	}
+	return ip.To4().String()
 }
 
 func getAvailabilityZone(r *http.Request) string {

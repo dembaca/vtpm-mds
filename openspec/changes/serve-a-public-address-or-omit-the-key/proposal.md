@@ -70,7 +70,37 @@ itself the signal.
 
 ### Modified Capabilities
 
-- `instance-metadata`: `Serve The EC2 Metadata Tree` is modified. Its index
+- `vm-inventory`: `Load VM Records From The YAML Inventory` is **modified**.
+  The entry gains an optional `public_ipv4`, validated as IPv4 at load time and
+  failing the load loudly on a malformed value, and the record's raw
+  configuration map gains `public-ipv4` when one is declared — spelled as the
+  Proxmox backend spells it, so a reader need not know which backend produced
+  the record. The requirement previously said the map holds "exactly one key,
+  `name`", which is why this delta exists at all: without it, option A is
+  forbidden for the YAML backend. **This delta was missing from the record
+  until 2026-10-17**, found while implementing it; the maintainer then decided
+  the YAML inventory should be on par with the Proxmox one.
+
+  The Proxmox backend is deliberately left validating nothing. It stores every
+  `key: value` line verbatim, so a malformed address there is rejected where it
+  is read instead. Failing a whole host's inventory over one typo in a file
+  this service does not own is the worse outcome.
+
+- `instance-metadata`: two requirements change.
+
+  `Refuse An Instance Identity To Callers With No VM Record` is **modified**.
+  It lists, as the reason the remaining metadata paths need no refusal, that
+  "`public-ipv4` is always unavailable, and the index is a static listing".
+  This change makes the first conditional and the second plainly false. The
+  reasoning survives — neither path asserts an identity the service vouches for
+  — but two of its premises do not, so the sentence is rewritten. Behaviour for
+  an unbound caller is unchanged: no record means no declared address, so
+  `public-ipv4` stays unavailable and absent from that caller's index. Found by
+  `agent-mac-vtpm-mds-52ae2f` while writing
+  `remove-the-constant-instance-identity-signature`, which modifies the same
+  requirement for a different clause.
+
+  `Serve The EC2 Metadata Tree` is modified. Its index
   clause gains the condition under which `public-ipv4` is listed, and its
   `public-ipv4` clause gains the source and the condition under which an
   address is served. The scenario `Public address is never available` inverts,
