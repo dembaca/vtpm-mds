@@ -6,7 +6,8 @@ record and the maintainer's decision in `design.md`.**
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer** — decide what the client does with a persistent object at `0x81010001` (`design.md`, option 1 recommended), and verify the decision is written under a dated "Decided" heading in `design.md`
+- [x] 1.1 **Maintainer** — decide what the client does with a persistent object at `0x81010001` (`design.md`, option 1 recommended), and verify the decision is written under a dated "Decided" heading in `design.md`
+      **Done, 2026-10-17:** option 1, "1.1: 1" on the agent bus; recorded under "Decided" in `design.md`.
 - [x] 1.2 Verify on hogan that the persistent object at `0x81010001` on VM 399 is, or is not, the key in its EK certificate at NV `0x01c00002`, and that a transient default-template EK equals it, with persistent handles unchanged and no transient handle left
       Readonly, as the measuring binary of the SRK change was. Say which.
       **Done, 2026-10-17, coordinator on hogan** (VM 399, `swtpm 0.8.0+pve3`,
@@ -24,14 +25,40 @@ record and the maintainer's decision in `design.md`.**
 
 ## 2. Implement
 
-- [ ] 2.1 Make `CreateEK` a transient primary in the endorsement hierarchy from `client.DefaultEKTemplateRSA()`, never persistent, and verify with a simulator test that a persistent object at `0x81010001` (a storage key, and an EK-template key with another `unique`) is byte-identical afterwards and that the EK in the signing request equals the transient EK
-- [ ] 2.2 Flush the EK after reading its public area, derive it again in `Activate` and flush it after use, and verify with a simulator test that the whole flow (create, signing request, activation) never fails for object memory and leaves no transient handle
-- [ ] 2.3 Remove `cachedPrimary` and the stale comment in `RequestResources.Flush`, and verify `go build ./...`, `go vet ./...` and `go test ./...` pass, quoting the result
-- [ ] 2.4 Verify the new tests fail on `main`'s `keys.go` (the foreign object is replaced; the foreign key is used), by running them against the old file, so they are shown to catch the defect
-- [ ] 2.5 Run `openspec validate --all --strict` and `scripts/openspec-validate.py --strict` and verify both pass
+- [x] 2.1 Make `CreateEK` a transient primary in the endorsement hierarchy from `client.DefaultEKTemplateRSA()`, never persistent, and verify with a simulator test that a persistent object at `0x81010001` (a storage key, and an EK-template key with another `unique`) is byte-identical afterwards and that the EK in the signing request equals the transient EK
+      **Done:** `CreateEK` is `createPrimaryKey(rw, tpm2.HandleEndorsement, f.EKTemplate)`.
+      `TestForeignObjectAtEKHandleIsLeftAlone` (two cases: a storage key, and an
+      EK-template key with another `unique`) and `TestDerivedEKEqualsPersistentEK`
+      pass on the simulator (`-tags tpmsim`).
+- [x] 2.2 Flush the EK after reading its public area, derive it again in `Activate` and flush it after use, and verify with a simulator test that the whole flow (create, signing request, activation) never fails for object memory and leaves no transient handle
+      **Done:** `CreateSigningRequest` flushes the EK after reading its public
+      area; `RequestResources.Activate` derives it again and flushes it.
+      `TestEnrollmentFlowFitsThreeObjectSlots` (EK, AK, DevID under a transient
+      parent, a real `CreateChallenge`, `Activate`, `Flush`) passes: two
+      transient objects before and after activation, none after `Flush`. This
+      test guards the flush logic of the new design; it also passes on the old
+      `CreateEK`, whose persistent EK took no slot, so only the probe in
+      `design.md` (the fourth `CreatePrimary` fails) shows why the EK is not held.
+- [x] 2.3 Remove `cachedPrimary` and the stale comment in `RequestResources.Flush`, and verify `go build ./...`, `go vet ./...` and `go test ./...` pass, quoting the result
+      **Done:** `cachedPrimary` is removed (no caller left), the comment in
+      `Flush` is replaced. `go vet` clean and `go test -count=1` `ok` for
+      `cmd/devid-enroll`, `imds`, `internal/...` and the root, with the untracked
+      `cmd/prox-mds` leftover left out; `go test -tags tpmsim ./internal/devid/`
+      `ok`.
+- [x] 2.4 Verify the new tests fail on `main`'s `keys.go` (the foreign object is replaced; the foreign key is used), by running them against the old file, so they are shown to catch the defect
+      **Done:** with `keys.go` put back to `HEAD` (the old `CreateEK` and
+      `cachedPrimary`) both cases of `TestForeignObjectAtEKHandleIsLeftAlone`
+      fail: `the object at 0x81010001 changed` for the storage key, `CreateEK
+      returned the persistent handle, not a transient EK` for the EK-template key
+      with another `unique`. With the new `keys.go` they pass. The other two new
+      tests do not fail on the old code, as said under 2.2.
+- [x] 2.5 Run `openspec validate --all --strict` and `scripts/openspec-validate.py --strict` and verify both pass
 
 ## 3. Verify on real artifacts
 
+      **Done:** `openspec validate --all --strict` → 6 passed, 0 failed. The
+      fallback validator's only problem is `all tasks ticked (--strict)`: 3.1,
+      3.2 and 4.1 are open until the lab and hogan have run.
 - [ ] 3.1 **Cloud lab** — a stock client from this branch, fresh vTPM, with a foreign persistent object pre-created at `0x81010001`: verify enrollment succeeds, SPIRE `1.14.0` attests, and the object's public area is byte-identical before and after
       Say which layout was used (`swtpm-localca`, `/usr/share/OVMF/`).
 - [ ] 3.2 **hogan** — with a git-stamped package, verify on VM 399's TPM, into a scratch directory, that the persistent objects at `0x81000001`, `0x81010001` and `0x81010016` are unchanged and the enrollment succeeds

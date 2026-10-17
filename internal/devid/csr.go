@@ -177,6 +177,7 @@ type RequestResources struct {
 	Endorsement *KeyInfo
 	DevID       *KeyInfo
 	rw          io.ReadWriter
+	factory     *KeyFactory
 }
 
 // Flush releases transient key contexts.
@@ -192,15 +193,27 @@ func (r *RequestResources) Flush() {
 		FlushTransient(r.rw, r.DevID.Handle)
 		r.DevID.Handle = 0
 	}
-	// EK is typically persistent; leave it loaded.
+	// The EK is not held: CreateSigningRequest flushes it after reading its
+	// public area and Activate derives it again.
 }
 
-// Activate solves a credential challenge with the CSR keys.
+// Activate solves a credential challenge with the CSR keys. It derives the EK
+// for the duration of the call and flushes it, so the EK is never loaded
+// together with the attestation key, the DevID key and the storage root key.
 func (r *RequestResources) Activate(credentialBlob, secret []byte) ([]byte, error) {
 	if r.Attestation == nil || r.Endorsement == nil {
 		return nil, errors.New("missing AK or EK")
 	}
-	return ActivateCredential(r.rw, r.Attestation.Handle, r.Endorsement.Handle, credentialBlob, secret)
+	factory := r.factory
+	if factory == nil {
+		factory = DefaultKeyFactory()
+	}
+	ek, err := factory.CreateEK(r.rw)
+	if err != nil {
+		return nil, fmt.Errorf("create EK: %w", err)
+	}
+	defer tpm2.FlushContext(r.rw, ek.Handle)
+	return ActivateCredential(r.rw, r.Attestation.Handle, ek.Handle, credentialBlob, secret)
 }
 
 // CreateSigningRequest builds a DevID signing request using the TPM.
@@ -208,7 +221,7 @@ func CreateSigningRequest(rw io.ReadWriter, factory *KeyFactory, platformCN stri
 	if factory == nil {
 		factory = DefaultKeyFactory()
 	}
-	res := &RequestResources{rw: rw}
+	res := &RequestResources{rw: rw, factory: factory}
 	var err error
 	defer func() {
 		if err != nil {
@@ -229,6 +242,11 @@ func CreateSigningRequest(rw io.ReadWriter, factory *KeyFactory, platformCN stri
 	if err != nil {
 		return nil, nil, fmt.Errorf("create EK: %w", err)
 	}
+	// Only the public area is needed here. Holding the EK through the creation
+	// of the AK and the DevID key would need four object slots, and a TPM has
+	// three; Activate derives it again.
+	tpm2.FlushContext(rw, ek.Handle)
+	ek.Handle = 0
 	res.Endorsement = ek
 
 	ak, err := factory.CreateAK(rw)

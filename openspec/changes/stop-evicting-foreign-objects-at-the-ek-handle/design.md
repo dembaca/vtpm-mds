@@ -83,7 +83,11 @@ persistent object could break the binding. That is a further argument for option
 
 ## Decided
 
-*Pending the maintainer's decision. The delta is written for option 1.*
+**2026-10-17, by the maintainer: option 1.** The client derives a transient EK
+each time and never reads, reuses, replaces or evicts a persistent object at
+`0x81010001`. Options 2 and 3 are not taken. The decision was given on the agent
+bus as "1.1: 1", after the coordinator's ACK of this record and its read-only
+measurement on hogan (task 1.2).
 
 ## Implementation notes
 
@@ -97,6 +101,10 @@ persistent object could break the binding. That is a further argument for option
   loaded handle between the two uses; `Activate` derives it, activates, flushes.
 - `RequestResources.Flush`'s comment "EK is typically persistent; leave it
   loaded" becomes untrue and goes.
+
+- **The simulator is not swtpm.** The new tests run on go-tpm-tools' in-process
+  simulator behind the `tpmsim` build tag, as the SRK tests do. They show the
+  logic; the lab (3.1) and hogan (3.2) show swtpm/libtpms.
 
 ## What it costs
 
