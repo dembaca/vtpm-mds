@@ -25,6 +25,9 @@ versions, so each source names the copy it came from.
 - **Our parser keeps it.** `internal/proxmox/vmconfig.go` stores every
   `key: value` or `key=value` line in `RawConfig` and skips lines starting with
   `#`. That matches `Derive VM Records From Proxmox Guest Configuration`.
+  **Since fixed in `main`** (2026-10-17, `read-guest-configs-from-this-node`, #40,
+  archived in #41): the Proxmox backend no longer stores a `public-ipv4` key, in
+  either the `:` or the `=` form, and reads only the live section of a config.
 
 ### Evidence: the carriers Proxmox does keep
 
@@ -57,7 +60,10 @@ versions, so each source names the copy it came from.
   the same `TODO: Extract from Proxmox cluster config` that `getPublicIP` did.
   `instance-metadata` pins the constants.
 - `placement/region` is not served at all.
-- **The service does not know its own node.** `ParseVMConfigs` takes the first
+- **(Fixed in `main` on 2026-10-17 by `read-guest-configs-from-this-node`,
+  #40/#41: the service reads `/etc/pve/local/qemu-server` and fails the load,
+  naming that path, when it is missing. What follows is the state before.)**
+  **The service did not know its own node.** `ParseVMConfigs` takes the first
   entry under `/etc/pve/nodes` that has a `qemu-server` directory. On hogan's
   three-node cluster (`hogan`, `holger`, `horst`) that is `hogan` only because
   it sorts first. Found by the coordinator, and part of its separate change.
@@ -402,16 +408,75 @@ never guest".
 
 ### D6. The consumer
 
-To be verified against current Kubernetes documentation before designing
-(task 1.2). The working assumption is that kubelet does not read metadata
-services itself, since the in-tree cloud providers were removed. The labels
-`topology.kubernetes.io/region` and `topology.kubernetes.io/zone` come either
-from a cloud-controller-manager or from `--node-labels` at bootstrap, for
-example a cloud-init script reading `placement/availability-zone` and
-`placement/region`. If that holds, serving those two paths with real values
-is all this service has to do.
+**Researched on 2026-10-17** by `agent-mac-vtpm-mds-687cc7` at the coordinator's
+assignment, from the pages named below. The working assumption held in its main
+point, with one correction and several things not read.
+
+**Findings.**
+- **Core Kubernetes reads no metadata service for zone or region.** The
+  Kubernetes page on well-known labels says of `topology.kubernetes.io/zone`:
+  "On Node: The `kubelet` or the external `cloud-controller-manager` populates
+  this with the information from the cloud provider. This will be set only if you
+  are using a cloud provider. However, you can consider setting this on nodes if
+  it makes sense in your topology."
+  (<https://kubernetes.io/docs/reference/labels-annotations-taints/>)
+- **The in-tree providers are gone.** From Kubernetes 1.31 the kubelet and
+  kube-controller-manager accept only an empty `--cloud-provider` or `external`;
+  a kubelet in `external` mode registers a Node with the taint
+  `node.cloudprovider.kubernetes.io/uninitialized`, and the provider's
+  cloud-controller-manager sets provider ID, topology labels and addresses and
+  removes it. The compiled-in AWS and OpenStack integrations went in 1.27 and
+  1.26. Source for this paragraph: a web search of 2026-10-17 returning a
+  DevClass report on 1.31 and Kubernetes' own blog post "cloud-provider
+  integration changes" (<https://v1-33.docs.kubernetes.io/blog/2023/12/14/cloud-provider-integration-changes>);
+  the pages were not opened in full.
+- **The cloud-controller-manager's node controller** annotates and labels the
+  Node "with cloud-specific information, such as the region the node is deployed
+  into" (<https://kubernetes.io/docs/concepts/architecture/cloud-controller/>).
+  That page does not say where a given provider gets the value.
+- **The AWS provider takes the zone from the EC2 API, not from the metadata
+  service** — the correction. In `cloud-provider-aws`
+  (`pkg/providers/v1/aws.go`, `master`, read 2026-10-17), `GetZone` returns the
+  availability zone cached from `DescribeInstances`; the metadata service
+  supplies the instance ID, and the region is resolved at start-up through
+  `getRegionFromMetadata`. **Which metadata path that function reads is not
+  established**: the file was fetched through a summarising tool, truncated at
+  100,000 characters, and the function body was not in the part read.
+- **The EBS CSI driver's node plugin does read the metadata service**, falling
+  back to the Kubernetes API when it cannot, and adds its own
+  `topology.ebs.csi.aws.com/zone` label. Seen only in search-result summaries
+  (a driver pull request and an AWS knowledge-center page), not in the driver's
+  source.
+- **A Proxmox cloud-controller-manager exists and does not use the metadata
+  service.** `sergelogvinov/proxmox-cloud-controller-manager` says: "kubernetes
+  label `topology.kubernetes.io/region` is a Proxmox cluster
+  `clusters[].region`" and "kubernetes label `topology.kubernetes.io/zone` is a
+  hypervisor host machine name", both obtained through the Proxmox API
+  (<https://github.com/sergelogvinov/proxmox-cloud-controller-manager>). Its
+  zone is the node name, its region a configured cluster name, which is what
+  D4's derived defaults propose.
+
+**What it means for this service.**
+- **Nothing in Kubernetes core reads `placement/availability-zone` or
+  `placement/region` from an IMDS.** Whatever fills those two paths is read by
+  software that speaks the EC2 metadata shape: AWS-derived components, cloud-init
+  datasource code, and scripts an operator writes, for instance a bootstrap that
+  passes `--node-labels`. Whether the kubelet accepts `topology.kubernetes.io/*`
+  in `--node-labels` was **not verified here**.
+- **So serving real values at those two paths is enough for any consumer of the
+  EC2 shape**, and the maintainer's steer, region and zone first, needs nothing
+  more from Kubernetes. A Kubernetes node on these guests gets its topology
+  labels either from a script reading the paths, or from the Proxmox CCM, which
+  would ignore this service altogether.
+- **Not checked:** which of the AWS-derived components a deployment will really
+  run, the kubelet's `--node-labels` allow-list, k3s and RKE2 behaviour, and the
+  metadata path in `getRegionFromMetadata`. If a consumer needs anything beyond
+  the two paths, the scope changes before any delta is written.
 
 ## Interim step, under every decision
+
+**Done in `main` on 2026-10-17** by `read-guest-configs-from-this-node` (#40, archived
+in #41); kept below for the reasoning.
 
 Stop honouring a hand-written `public-ipv4:` line in a Proxmox guest config
 (task 2.1). It costs little, needs no decision, and removes the one behaviour
