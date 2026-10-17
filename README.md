@@ -131,7 +131,6 @@ sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.yaml
 | `/latest/api/token` | PUT | Issue short-lived IMDSv2 token |
 | `/latest/meta-data/*` | GET | Instance metadata tree |
 | `/latest/dynamic/instance-identity/document` | GET | EC2-style instance identity document |
-| `/latest/dynamic/instance-identity/signature` | GET | Detached signature over the document |
 | `/latest/devid/enroll/start` | POST | Verify CSR, return EK credential challenge |
 | `/latest/devid/enroll/finish` | POST | Verify challenge, issue LDevID PEM |
 | `/health` | GET | Liveness probe (no token required) |

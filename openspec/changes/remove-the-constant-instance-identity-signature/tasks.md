@@ -158,7 +158,13 @@ the coordinator.
       intentional mentions in the `IdentityBearingPaths` comment and the new
       negative assertion.
 
-- [ ] 3.2 **Coordinator** — remove the signature row from the API endpoint table in `README.md`, and verify the table lists `document` and no other `dynamic/` path
+- [x] 3.2 **Coordinator** — remove the signature row from the API endpoint table in `README.md`, and verify the table lists `document` and no other `dynamic/` path
+      **Done 2026-10-17 on `hogan`.** Deleted the row
+      `/latest/dynamic/instance-identity/signature | GET | Detached signature
+      over the document`. `grep -n 'dynamic/' README.md` inside the endpoint
+      table now finds `/latest/dynamic/instance-identity/document` and nothing
+      else; the only other hit in the file is the guest Python snippet, which
+      reads `document`.
       `AGENTS.md` keeps `README.md` in one hand. The implementer hands this
       over on the bus rather than editing the file.
 
