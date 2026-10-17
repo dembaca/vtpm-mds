@@ -90,7 +90,7 @@ tree.
       `TestLoadYAMLAcceptsAnAbsentOrEmptyPublicIPv4` keeps the field optional,
       so every inventory written before this change still loads.
       **Both halves are verified here at handler and loader level only.** The
-      daemon-level checks are 5.2a for the YAML source and 5.2b for the Proxmox
+      daemon-level checks are 5.2 for the YAML source and 5.3 for the Proxmox
       one, and neither has run. This tick means the code does what the delta
       says when exercised directly — not that anyone has watched the service do
       it.
@@ -106,10 +106,29 @@ tree.
       required to fail and to name both the entry and the field:
       `not-an-address`, `2001:db8::1` (a valid address, but not IPv4),
       `203.0.113.7/32` (a prefix), `203.0.113.999` (out of range) and
-      `203.0.113.7:80` (host and port). That is the loud failure
-      `fail-fast-on-unusable-configuration` argued for: a typo stops the
-      service instead of degrading to "no public address", which would be
-      indistinguishable from not having declared one.
+      `203.0.113.7:80` (host and port). The load fails loudly and the value is
+      never served, which is what this task's checkbox line asks.
+      **Corrected 2026-10-17 — this note used to claim "a typo stops the
+      service". It does not, and the guidance above ("an unusable value stops
+      the service") is not met.** 5.2 showed it on a running daemon: the load
+      fails, but `Load The Cache At Startup And Refresh It On SIGHUP` says a
+      startup load failure "SHALL NOT prevent the service from starting; the
+      service then runs with an empty cache, so every caller is unbound". That
+      requirement predates this change and the daemon follows it. The claim was
+      mine and rested on a unit test, which cannot show what a daemon does at
+      startup.
+      **What the composition actually does is worse than either part:** one
+      malformed `public_ipv4` in one VM's entry empties the inventory, so
+      **every** VM loses its identity, while `/health` still answers `200`. And
+      it contradicts this very note's own argument below — the paragraph on
+      Proxmox rejects failing a whole host's inventory over one typo as "a worse
+      outcome than the typo", and the YAML half then does exactly that. The
+      better designs are to reject only the field, or to refuse to start on any
+      inventory error; choosing between them is the maintainer's, and it is
+      deferred with the rest of `public-ipv4` to
+      `declare-per-vm-metadata` (PR #33), which already lists failure behaviour
+      as an open question. The YAML inventory is the lab's backend; production
+      on `hogan` reads Proxmox, so the blast radius is the lab.
       **The Proxmox backend validates nothing, on purpose.** It stores every
       `key: value` line of a guest config verbatim, as its own requirement
       demands, so a malformed `public-ipv4:` line there is carried into the
@@ -210,7 +229,16 @@ tree.
       `scripts/openspec-validate.py --strict` reports `all tasks ticked` twice,
       once for each of those two changes, which is correct: both still have
       open tasks by design.
-**5.2 was one task and is now two.** It named only VM 399, which covers the
+**5.2 was one task and is now two, 5.2 and 5.3; the old 5.3 became 5.4.**
+
+They were briefly numbered `5.2a` and `5.2b`, which **the fallback validator
+cannot see at all**: `scripts/openspec-validate.py` matches
+`^- \[([ xX])\] (\d+[a-z]*\.\d+) (.+)$`, where the letter may only sit
+between the two numbers. A `5.2a` line is therefore not counted as a task, is
+never reported as unticked, and never checked for stating its own
+verification — it is invisible rather than wrong, which is worse. Caught by
+`agent-mac-vtpm-mds-52ae2f`, who noticed the validator reporting 13/14 against
+a record that says 13/16. It named only VM 399, which covers the
 Proxmox source and leaves the YAML source — the half the maintainer decided to
 add on 2026-10-17 — verified by unit tests alone. A test is not a daemon, and
 `AGENTS.md` already says where each half belongs: *"A cloud agent verifies what
@@ -220,13 +248,43 @@ installed package belongs here."* The split follows the precedent
 recorded as half done on each host until both halves existed. Raised by
 @dembaca, given this shape by `agent-mac-vtpm-mds-52ae2f`.
 
-- [ ] 5.2a **Cloud lab** — verify the YAML source on a running daemon, not in a unit test: a guest entry declaring `public_ipv4` is served that address with a six-line index, an entry declaring none answers `404` with an empty body and a five-line index, and an inventory carrying a malformed value stops the service from starting at all
+- [x] 5.2 **Cloud lab** — verify the YAML source on a running daemon, not in a unit test: a guest entry declaring `public_ipv4` is served that address with a six-line index, an entry declaring none answers `404` with an empty body and a five-line index, and an inventory carrying a malformed value fails the load and leaves the service running with an empty cache
       The last one is what no unit test can show: `LoadYAML` returning an error
-      is not the same observation as the daemon refusing to come up. Build from
-      this branch with `make deb-local` on the lab host — the QEMU lab **must
-      not** run on `hogan`, and the YAML inventory is the lab's backend, so
-      this half can only happen there.
-- [ ] 5.2b **hogan** — build and install a git-stamped package, verify `vtpm-mds -version` and `dpkg -l vtpm-mds` identify this tree, then re-run tasks 1.1, 1.2, 2.2 and 3.1 against the installed daemon with the Proxmox source
+      is not the same observation as the daemon's behaviour at startup. Build
+      from this branch with `make deb-local` on the lab host — the QEMU lab
+      **must not** run on `hogan`, and the YAML inventory is the lab's backend,
+      so this half can only happen there.
+      **Done 2026-10-17 by `agent-cursor-vtpm-22e0` on the cloud lab**, package
+      `0.2.0+git20261017.2dd03353f629` built with `make deb-local` and installed
+      with `dpkg -i --force-confold`, `-version` matching. Lab YAML inventory at
+      `/var/lib/mds-lab/inventory/lab.yaml`; caller from a netns as in
+      `e2e-netns.sh`, MAC `52:54:00:a1:b2:c3`, IP `169.254.169.10`, bound to
+      `i-100`.
+      Case 1, `public_ipv4: "203.0.113.7"`: `public-ipv4` → `200`,
+      `Content-Type: text/plain`, body `203.0.113.7`; the index has six lines
+      including `public-ipv4`.
+      Case 2, no `public_ipv4`: `public-ipv4` → `404`, `Content-Type:
+      text/plain` with **no** `charset`, `Content-Length: 0`; the index has five
+      lines and no `public-ipv4`.
+      Case 3, `public_ipv4: "nicht-eine-adresse"`: the load fails with
+      `inventory entry "100": public_ipv4 "nicht-eine-adresse" is not an IPv4
+      address`, the daemon logs `Warning: Failed to load VM config cache on
+      startup` and then `Starting server on 169.254.169.1:80`, and `/health`
+      answers `200`.
+      **This task's text was wrong and is corrected above.** It expected the
+      malformed value to stop the service "from starting at all". The living
+      spec says the opposite — a startup load failure "SHALL NOT prevent the
+      service from starting" — so the expectation contradicted the contract,
+      the same kind of error as `CN=i-399` in
+      `remove-the-unverifiable-identity-endpoints` task 4.2. The text now says
+      what the spec says, and the observation is recorded as made rather than
+      bent to fit. The agent reported it as a deviation instead of ticking it,
+      which is the only reason it surfaced; why the composed behaviour is still
+      a problem is written under 2.3.
+      Not verified here: the Proxmox source, which is 5.3, and the site-CA
+      layout, which exists only on `hogan` — this run used the cloud lab's
+      default `swtpm-localca`.
+- [ ] 5.3 **hogan** — build and install a git-stamped package, verify `vtpm-mds -version` and `dpkg -l vtpm-mds` identify this tree, then re-run tasks 1.1, 1.2, 2.2 and 3.1 against the installed daemon with the Proxmox source
       The Proxmox half needs a `public-ipv4:` line in
       `/etc/pve/qemu-server/399.conf`, which this user cannot write — that part
       is the maintainer's, as is installing the package, which Claude Code's
@@ -235,4 +293,4 @@ recorded as half done on each host until both halves existed. Raised by
       was wrong in cause and conclusion; see `AGENTS.md`. The package for this
       branch is already built:
       `dist/vtpm-mds_0.2.0+git20261017.1fab0f8b2504_amd64.deb`.
-- [ ] 5.3 Archive: move the delta into `openspec/specs/`, move this directory under `openspec/changes/archive/`, update the `README.md` status table, and verify `openspec validate --all --strict` is still clean afterwards
+- [ ] 5.4 Archive: move the delta into `openspec/specs/`, move this directory under `openspec/changes/archive/`, update the `README.md` status table, and verify `openspec validate --all --strict` is still clean afterwards
