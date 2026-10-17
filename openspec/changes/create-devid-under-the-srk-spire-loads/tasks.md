@@ -114,13 +114,31 @@ SPIRE agent attests with material that works.
       a lab-only binary. Say which layout was used (default `swtpm-localca`,
       `/usr/share/OVMF/`).
 - [ ] 3.2 **Cloud lab** — repeat with a persistent object pre-created at `0x81000001` and verify it is untouched and SPIRE still attests
-- [ ] 3.3 **hogan** — with a git-stamped package, verify on VM 399's TPM that the persistent objects at `0x81000001`, `0x81010001` and `0x81010016` are unchanged after an enrollment run into a **scratch directory**, not into `/var/lib/spire/agent/`
+- [x] 3.3 **hogan** — with a git-stamped package, verify on VM 399's TPM that the persistent objects at `0x81000001`, `0x81010001` and `0x81010016` are unchanged after an enrollment run into a **scratch directory**, not into `/var/lib/spire/agent/`
       The measuring binary of 1.5 can show the defect on hogan, and this run
       shows that nothing is broken. The persistent SRK there already is the H-1
       primary.
       The scratch directory keeps the working pilot material in place. Back up
       `/var/lib/spire/agent/` on the guest before any run that could replace
       it, and say so.
+      **Done, 2026-10-17, coordinator on hogan, against `43ddd0d`:** passed.
+      `make deb-local` gave `devid-enroll_0.2.0+git20261017.43ddd0d6165a_amd64.deb`,
+      lintian clean; `go vet` and `go test -count=1 ./...` green, with
+      `TestEnrollAgainstSwtpm` **skipped** (no swtpm socket on hogan). The binary
+      was extracted from the `.deb` and run in the guest, not installed; the
+      installed daemon stays `...4ba058c78e7b`. `/var/lib/spire/agent/` was backed
+      up in the guest to `/root/spire-agent-backup-20261017.tgz`. `devid-enroll
+      -tpm /dev/tpmrm0 -out /tmp/enroll38.d/out` exited 0, three files `0600`,
+      certificate `subject=CN=399`, `issuer=CN=BGL Proxmox DevID CA`.
+      `readpublic` hashes of `0x81000001`, `0x81010001` and `0x81010016` and the
+      lockout counter (`0x0`) were identical before and after, and no transient
+      handle was left. The "three objects loaded at once" risk **did not occur**.
+      Loading the new blobs the way SPIRE does (go-tpm `CreatePrimary` + `Load`):
+      OK under the H-1 template; `0x1f integrity check failed` under the client's
+      old 256 x `0x00` template and under the 256 x `0x01` control. The pilot
+      files `/var/lib/spire/agent/devid.*` hashed the same before and after.
+      **Not checked here:** a real SPIRE attestation with the new material; that
+      needs the re-enrollment of 3.4.
 - [ ] 3.4 **Maintainer/hogan** — only after 3.3, decide whether VM 399 is re-enrolled, and verify the decision is recorded here, with a note that its SPIFFE ID changes if it is
       Re-enrolling replaces the certificate and so its fingerprint, which is
       the agent ID. Nothing else about VM 399 changes in this task.
