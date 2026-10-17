@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-17
 
-None. The last two were archived on 2026-10-17, in this order:
+None. Three were archived on 2026-10-17; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -144,14 +144,36 @@ None. The last two were archived on 2026-10-17, in this order:
   byte-identical. Verified on VM 399 and from the host against the installed
   `0.2.0+git20261017.4ba058c78e7b`.
 
+A third was found, fixed and archived the same day:
+`openspec/changes/archive/2026-10-17-create-devid-under-the-srk-spire-loads/`.
+`devid-enroll` created the DevID under go-tpm-tools' `SRKTemplateRSA()`
+(256 zero bytes of `unique`), while SPIRE's `tpm_devid` attestor loads it
+under the H-1 template (empty `unique`); on a TPM without a matching
+persistent SRK the material was unloadable for SPIRE. The client now derives
+a transient H-1 parent and never touches `0x81000001`. Verified in the
+go-tpm-tools simulator, on the cloud lab (`libtpms 0.9.3`, SPIRE `1.14.0`) and
+on VM 399 (`libtpms 0.9.7`), which was re-enrolled with it: its agent ID is now
+`…/tpm_devid/7a5c4121…` with `CN=399`, and the material from 2026-09-14
+(`CN=vtpm-pilot`, made by a tpm2-tools script, not by `devid-enroll`) is kept
+in `/root/spire-agent-backup-20261017.tgz` in the guest. **Compare templates
+through go-tpm, never `tpm2_createprimary -u`:** the latter treats 256 zero
+bytes like an empty `unique` on both libtpms versions and once hid the defect.
+Left for a separate change, by that record's non-goals: `CreateEK` still evicts
+a non-matching persistent object at `0x81010001`. **Before any SPIRE upgrade,**
+re-check that the new release's `SRKTemplateHighRSA` is unchanged.
+
 Deferred by the maintainer until the above was closed, and needing a record
-and a go before any code: per-VM metadata (`declare-per-vm-metadata`, PR #33)
+and a go before any code: per-VM metadata (`declare-per-vm-metadata`, PR #33;
+its D8 is decided: the LDevID CN stays the VM ID and a readable SPIFFE ID comes
+from a SPIRE node alias on `tpm_devid:subject:cn:<vmid>`, shown end to end in
+the lab; host-side names as extra subject attributes wait for a SPIRE release
+with `subject:oid` selectors)
 and the `internal/proxmox/vmconfig.go` fixes — read this node via
 `/etc/pve/local` rather than the first node alphabetically, section awareness
 so snapshot sections do not contribute MACs, and ignoring a hand-written
 `public-ipv4:` line.
 
-Both archived changes carry a `MODIFIED` block on `Refuse An Instance Identity
+Those first two both carry a `MODIFIED` block on `Refuse An Instance Identity
 To Callers With No VM Record`, so the signature change's block **was rebuilt
 against the text the first archive left** — its two edits applied
 to the new paragraph, not a verbatim copy of the old one, which would silently
