@@ -3,8 +3,9 @@
 Written on 2026-10-16 against `main` at `7db05db`. The code half was
 implemented on 2026-10-17 by `agent-mac-vtpm-mds-52ae2f` against `main` at
 `2dd0335`, which contains `serve-a-public-address-or-omit-the-key` (#29).
-Tasks that need VM 399 or the installed package (sections 1.1–1.2 and 4) and
-the coordinator's tasks (3.2, 5.3, 5.4) are still open.
+Tasks 1.1 and 1.2 were measured on 2026-10-17 against the installed package
+of `main@2dd0335`. Section 4, which needs the package built from this branch,
+and the coordinator's tasks (3.2, 5.3, 5.4) are still open.
 
 **Do not merge the implementation before** `serve-a-public-address-or-omit-the-key`
 tasks 5.2a and 5.2b are reported. Those measure a package built from a `main`
@@ -30,15 +31,46 @@ the coordinator.
 
 ## 1. Record the baseline
 
-- [ ] 1.1 From VM 399 with a valid session token, read `GET /latest/dynamic/instance-identity/signature` against the installed daemon and verify it answers `200`, `Content-Type: text/plain`, body `dGVzdC1zaWduYXR1cmU=`
+- [x] 1.1 From VM 399 with a valid session token, read `GET /latest/dynamic/instance-identity/signature` against the installed daemon and verify it answers `200`, `Content-Type: text/plain`, body `dGVzdC1zaWduYXR1cmU=`
       Use `sudo hogan-lab qm guest exec 399 …`; VM 399 has `python3` and no
       `curl`. Record `vtpm-mds -version` alongside, so the baseline names the
       tree it came from, and save the raw bytes of `GET .../document` from the
       same guest: 4.3 compares against them.
-- [ ] 1.2 From the same guest, read `.../instance-identity/pkcs7`, `.../instance-identity/rsa2048`, the listing `.../instance-identity/` and `GET /latest/no-such-thing`, and verify all four answer identically in status, `Content-Type` and body bytes
+      **Done** on 2026-10-17, measured by the coordinator
+      (`agent-vtpm-hogan-ead990e30`) on hogan from VM 399 with a session token,
+      against the installed `vtpm-mds 0.2.0+git20261017.2dd03353f629` (`main`
+      at `2dd0335`, which contains Item 2 and nothing newer, so this change is
+      the only difference 4.3 can later see):
+      - `GET …/instance-identity/signature` → `200`, `Content-Type:
+        text/plain`, body `dGVzdC1zaWduYXR1cmU=` (20 bytes).
+      - `GET …/instance-identity/document` → `200`, `application/json`, **245
+        bytes**, SHA-256
+        `d6a57188099b8bda78da67dfc935feef0e18cef873e77b1cf0001850dbbcfb03`,
+        ending in a `\n`.
+      **Raw bytes of the document, kept here because `/tmp` on hogan is tmpfs
+      and does not survive a restart** (base64 of the body; I decoded it and
+      confirmed 245 bytes and the same SHA-256 before entering it). It holds the
+      placeholder `accountId`, `instanceId` `i-399` and the link-local
+      `privateIp` — nothing sensitive:
+      ```
+      eyJhY2NvdW50SWQiOiIwMTIzNDU2Nzg5MDEiLCJhdmFpbGFiaWxpdHlab25lIjoicHJveG1veCIsImJpbGxpbmdQcm9kdWN0cyI6bnVsbCwiZGV2cGF5UHJvZHVjdENvZGVzIjpudWxsLCJpbWFnZUlkIjoicHJveG1veC11bmtub3duIiwiaW5zdGFuY2VJZCI6ImktMzk5IiwiaW5zdGFuY2VUeXBlIjoidm0iLCJwcml2YXRlSXAiOiIxNjkuMjU0LjE2OS4xMCIsInJlZ2lvbiI6ImxvY2FsIiwidmVyc2lvbiI6IjIwMTctMDktMzAifQo=
+      ```
+      Decoded, for readers:
+      `{"accountId":"012345678901","availabilityZone":"proxmox","billingProducts":null,"devpayProductCodes":null,"imageId":"proxmox-unknown","instanceId":"i-399","instanceType":"vm","privateIp":"169.254.169.10","region":"local","version":"2017-09-30"}`
+
+- [x] 1.2 From the same guest, read `.../instance-identity/pkcs7`, `.../instance-identity/rsa2048`, the listing `.../instance-identity/` and `GET /latest/no-such-thing`, and verify all four answer identically in status, `Content-Type` and body bytes
       This is the state the removed path is meant to join. If any of the four
       differs, stop: the delta's claim that the sibling paths already fall
       through to the catch-all is wrong.
+      **Done**, same session and daemon. The reference `GET
+      /latest/no-such-thing` → `404`, `text/plain; charset=utf-8`, body
+      `404 page not found\n`. Compared to it in status, `Content-Type` and body
+      bytes, all three are identical: `…/instance-identity/pkcs7`,
+      `…/instance-identity/rsa2048` and the listing `…/instance-identity/`.
+      The delta's claim that the sibling paths already fall through to the
+      catch-all therefore holds on the real daemon, and the "stop" condition
+      did not trigger.
+
 - [x] 1.3 Re-read `get_instance_identity` in cloud-init's `cloudinit/sources/helpers/ec2.py` at implementation time and verify it still reaches leaves only through the `dynamic/instance-identity/` listing, never by requesting `signature` by name
       `design.md` relies on this reading from 2026-10-16. cloud-init changes;
       cite the commit you read. If it now requests `signature` directly, the
