@@ -65,6 +65,29 @@ versions, so each source names the copy it came from.
   It was verified on hogan on 2026-10-17: it points to `nodes/hogan`, and
   `/etc/pve/local/qemu-server` exists (task 1.3).
 
+### Evidence: the two sources the maintainer raised for an address
+
+Both were raised on 2026-10-17.
+
+- **A static address in cloud-init (`ipconfigN: ip=<addr>/<len>,gw=…`).**
+  This is a real Proxmox key: it is in the schema, kept on every write, and set
+  by the operator, not the guest. `internal/proxmox` already stores it as
+  `RawConfig["ipconfig0"]`. But it is what the guest is *told* to configure
+  on NIC N, which is meaning (b), not (c). It equals a public address only
+  when that NIC is on the public network without NAT. It is also intent, not
+  observation, and it is absent with `ip=dhcp` or without cloud-init — VM 399
+  uses none. **Conclusion:** a sound Proxmox-native source for a (b) key where
+  it exists. #29 rejected it for `public-ipv4` because (b) is not (c), not
+  because the source is unsound.
+- **The address the Proxmox UI shows.** The VM summary takes it from the
+  QEMU guest agent (`network-get-interfaces`). Served by the MDS to the same
+  guest, it would repeat what that guest reported about itself. The guest has
+  that already, and the guest controls it, so it is worthless as something the
+  service vouches for. Behind NAT the public address is not on the guest, so
+  the UI cannot show it either. This is #29's option C, still rejected. That
+  the summary's addresses come from the agent is not yet checked against VM
+  399.
+
 ### Evidence: what has already been rejected
 
 `serve-a-public-address-or-omit-the-key`, `design.md`, options B and C.
