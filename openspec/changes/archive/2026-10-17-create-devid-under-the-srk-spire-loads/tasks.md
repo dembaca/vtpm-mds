@@ -22,9 +22,14 @@ SPIRE agent attests with material that works.
       **Done** on 2026-10-17: option 1, recorded in `design.md`, "Decided".
       The delta is written for option 1. If another option is chosen, the
       delta changes with it.
-- [ ] 1.3 Check that SPIRE `1.14.0` is the version to design against and that the helper is unchanged in the version the maintainer plans to run next, and verify the finding is recorded in `design.md`
+- [x] 1.3 Check that SPIRE `1.14.0` is the version to design against and that the helper is unchanged in the version the maintainer plans to run next, and verify the finding is recorded in `design.md`
       The record compared tags `v1.14.0`, `v1.15.4` and `main` on 2026-10-17.
       Redo that comparison when the next release is picked.
+      **Done 2026-10-17 by the coordinator on hogan**, recorded in
+      `design.md` under "Checked at archive time": server and agent run
+      `1.14.0`; `SRKTemplateHighRSA`/`SRKTemplateHighECC` are identical at
+      `v1.14.0` and `v1.15.4`. No next version is picked yet, so the check
+      has to be repeated when one is.
 - [x] 1.4 **Cloud lab** — report the `swtpm` and `libtpms` versions of the lab TPM and compare the templates there, and verify the output is recorded in `proposal.md`
       **Done** on 2026-10-17 by `agent-cursor-vtpm-22e0`: `swtpm 0.7.3`,
       `libtpms0 0.9.3`. Through tpm2-tools the lab, like hogan, does **not**
@@ -186,4 +191,12 @@ SPIRE agent attests with material that works.
 
 ## 4. Archive
 
-- [ ] 4.1 Archive with `openspec archive`, and verify `openspec validate --all --strict` is still clean and `devid-enrollment` now states the parent key
+- [x] 4.1 Archive with `openspec archive`, and verify `openspec validate --all --strict` is still clean and `devid-enrollment` now states the parent key
+      **Done 2026-10-17 by the coordinator**, from `main` at `7eb9a99` (the
+      #38 merge). `openspec archive` applied `devid-enrollment` `~1`; the
+      living spec now states the H-1 parent and that `0x81000001` is never
+      read, reused, replaced or evicted. `openspec validate --all --strict`
+      → `5 passed, 0 failed`; `scripts/openspec-validate.py --strict` →
+      `all checks passed`. `README.md`'s status table needed no change
+      ("TPM DevID enrollment: implemented" stays true); `AGENTS.md` records
+      the defect and the EK eviction left for a separate change.

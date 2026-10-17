@@ -182,3 +182,20 @@ decision sheet, and the coordinator had already acknowledged this record.
   `SRKTemplateHighECC` and their use in `loadKey` and `createAttestationKey`
   are the same at tags `v1.14.0` and `v1.15.4` and on `main` (compared on
   2026-10-17), so the template has not moved, but a later release could.
+
+## Checked at archive time (task 1.3, 2026-10-17)
+
+Re-checked by the coordinator on hogan, independently of the comparison above:
+
+- **Deployed version:** `spire-server --version` on hogan and
+  `spire-agent --version` in VM 399 both answer `1.14.0`. That is the version
+  this change was designed and verified against.
+- **The helper has not moved:** `SRKTemplateHighRSA` and `SRKTemplateHighECC`
+  in `pkg/agent/plugin/nodeattestor/tpmdevid/tpmutil/signingkey.go` are
+  identical at tags `v1.14.0` and `v1.15.4` (fetched from
+  `raw.githubusercontent.com/spiffe/spire/<tag>/…`, compared function by
+  function); both build `client.SRKTemplateRSA()` with `ModulusRaw = []byte{}`.
+- **No next version is planned yet.** The maintainer has not picked an upgrade.
+  When one is picked, redo this comparison against that tag before upgrading,
+  because a different parent template would make every enrolled DevID
+  unloadable again.
