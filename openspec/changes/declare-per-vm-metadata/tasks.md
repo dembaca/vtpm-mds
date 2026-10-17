@@ -49,6 +49,12 @@ hand-written key, into a Proxmox guest config, including VM 399's.
       enforced (see `design.md`). The deployed SPIRE is 1.14.0 (coordinator, hogan). Not checked:
       existing registration entries, and the attestor's source code.
 
+- [x] 1.7 Show the node-alias route end to end on the deployed SPIRE version, and verify the outputs are recorded in `design.md`
+      **Done** on 2026-10-17 by `agent-cursor-vtpm-22e0` on the cloud lab,
+      SPIRE 1.14.0: selectors `subject:cn:100`, alias, workload ID, and the
+      re-enrollment counter-test all as `design.md` records. Not checked: a
+      `.deb`, a real Proxmox host.
+
 ## 2. Under every decision
 
 - [ ] 2.1 Make a `public-ipv4:` line in a Proxmox guest config no longer reach `RawConfig["public-ipv4"]`, and verify with a unit test that such a config yields a record without the key

@@ -199,6 +199,44 @@ documentation, not from memory. Sources are `spiffe/spire`:
   today (`spire-server entry show` needs the admin socket, which belongs to
   `spire`), and the attestor's source code.
 
+### Option a, shown end to end in the cloud lab (2026-10-17)
+
+The node-alias route (D8 option 1) was run by `agent-cursor-vtpm-22e0` on the
+cloud lab with SPIRE `1.14.0` (`spire-server --version` → `1.14.0`, trust
+domain `lab.local`, `tpm_devid` against the lab DevID and EK CAs), from
+`origin/main` at `b77b259`, built from source rather than from a `.deb`. No
+product code was changed.
+
+1. A freshly attested agent gets selectors
+   `tpm_devid:ca:fingerprint:ff923f7e…`, `tpm_devid:issuer:cn:… Lab DevID CA`
+   and `tpm_devid:subject:cn:100`. `CN=100` is the inventory VM ID, as the
+   enforced subject says it should be. The agent ID is
+   `spiffe://lab.local/spire/agent/tpm_devid/b23124b6…ecde`.
+2. A node alias was created with `entry create -node -spiffeID
+   spiffe://lab.local/node/lab-guest -selector tpm_devid:subject:cn:100`, and a
+   workload entry with `-parentID` on that alias and `-selector unix:uid:1000`.
+   `spire-agent api fetch x509` in the guest returned
+   `spiffe://lab.local/workload/lab-guest`.
+3. **Counter-test, re-enrolling:** the agent ID changed from `b23124b6…` to
+   `4e5306bf…`, the CN stayed `100`, the alias still matched, and the fetch
+   returned the same workload ID.
+
+So option 1 works on the deployed SPIRE version, needs no change to this
+service, and survives re-enrollment, because the alias hangs on the CN and not
+on the fingerprint. It does not by itself fix VM 399, whose certificate still
+has the guest-chosen `CN=vtpm-pilot`.
+
+Not checked: a `.deb` build, a real Proxmox host (the lab uses the YAML
+inventory), and the agent ran in the guest over SSH and a 9p share.
+
+**A side finding that is not part of this record.** In the same lab run, a
+guest enrolled by the stock `devid-enroll` could not be loaded by SPIRE
+`1.14.0`: it loads the DevID under `SRKTemplateHighRSA`, while `devid-enroll`
+creates under `SRKTemplateRSA`, and `tpm2.Load` fails with `integrity check
+failed (0x1f)`. That is its own defect, with its own change
+(`create-devid-under-the-srk-spire-loads`), and it is the reason the lab run
+needed a lab-only binary.
+
 ### D8. Where the readable name comes from
 
 1. **A SPIRE node alias keyed on `CN=<vmid>`.** It needs nothing from us and
