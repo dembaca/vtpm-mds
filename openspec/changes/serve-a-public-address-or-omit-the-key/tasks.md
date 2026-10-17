@@ -117,9 +117,18 @@ tree.
       requirement predates this change and the daemon follows it. The claim was
       mine and rested on a unit test, which cannot show what a daemon does at
       startup.
-      **What the composition actually does is worse than either part:** one
-      malformed `public_ipv4` in one VM's entry empties the inventory, so
-      **every** VM loses its identity, while `/health` still answers `200`. And
+      **What the composition actually does depends on the mode, and neither
+      outcome is loud:** one malformed `public_ipv4` in one VM's entry empties
+      the inventory, so every caller is unbound, while `/health` still answers
+      `200`. Under the default `mds.require_vm_identity: true` that is
+      **fail-closed** — every identity read is refused with `404`, so no guest
+      is handed a wrong identity, but every guest loses its metadata and nothing
+      says why. Under `require_vm_identity: false`, the migration aid, it is
+      **neither closed nor loud**: every guest falls back to the invented
+      `i-<peer-address>` id instead of its own VM id, served with `200`. The
+      distinction was made by `agent-mac-vtpm-mds-43fc22`; this note first said
+      only that every VM "loses its identity", which is right for the default
+      mode and wrong for the other. And
       it contradicts this very note's own argument below — the paragraph on
       Proxmox rejects failing a whole host's inventory over one typo as "a worse
       outcome than the typo", and the YAML half then does exactly that. The
