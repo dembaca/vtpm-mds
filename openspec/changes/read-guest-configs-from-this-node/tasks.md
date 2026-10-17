@@ -45,11 +45,22 @@ after the record has been read back on the bus, on this branch, in
 
 ## 2. Verify on hogan
 
-- [ ] 2.1 Build a git-stamped package with `make deb-local`, install it with the maintainer's go given in the session, and verify `dpkg -l vtpm-mds` and `vtpm-mds -version` name this tree
-- [ ] 2.2 Verify the daemon's startup log reports the same VM and MAC count as before the install (`3 VMs, 5 MAC addresses` on 2026-10-17), and that VM 399 still reads `i-399` from `instance-id`
+- [x] 2.1 Build a git-stamped package with `make deb-local`, install it with the maintainer's go given in the session, and verify `dpkg -l vtpm-mds` and `vtpm-mds -version` name this tree
+      **Done 2026-10-17 on hogan.** `make deb-local` from `5efb34b` (untracked
+      settings file moved aside, so no `.dirty`), lintian clean, installed through
+      `sudo hogan-lab dpkg-install` with the maintainer's go given in the session
+      for this version, unit started by hand (`--no-start`). `dpkg -l vtpm-mds` →
+      `ii vtpm-mds 0.2.0+git20261017.5efb34ba374a`; `vtpm-mds -version` and the
+      journal's version line name the same tree.
+- [x] 2.2 Verify the daemon's startup log reports the same VM and MAC count as before the install (`3 VMs, 5 MAC addresses` on 2026-10-17), and that VM 399 still reads `i-399` from `instance-id`
       `hogan` sorts first and has no snapshots or `public-ipv4:` lines today,
       so this shows nothing broke; the defects themselves are shown by the
       tests in section 1, not here.
+      **Done.** Startup log: `Cache refresh complete (proxmox:/etc/pve): 3 VMs,
+      5 MAC addresses cached`, identical to the previous package's line at 12:10.
+      From VM 399 with a token, `GET /latest/meta-data/instance-id` → `200 i-399`,
+      `instance-identity/document` → `200`. As expected, hogan shows no change:
+      it sorts first and has no snapshots or `public-ipv4:` lines.
 - [ ] 2.3 **Maintainer, optional** — take a snapshot of VM 399, change nothing else, restart `vtpm-mds`, and verify the startup log's MAC count is unchanged and `instance-id` still answers `i-399`; then delete the snapshot
       The agent user's `hogan-lab` wrapper allows no `qm snapshot`. Without
       this task the section handling is verified on constructed trees only;
