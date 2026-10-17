@@ -201,6 +201,23 @@ where SDN IPAM exists, it could be added later.
   version of this record, and #29's tasks, assumed the service would stop.
   Whether a bad inventory should stop the service is its own decision, with
   its own change, and not part of this record.
+
+  **The combination is the problem, not either part.** #29's delta makes a
+  malformed `public_ipv4` fail the *whole* load, and the startup rule lets the
+  service run on with an empty cache. Together, a typo in one optional field of
+  one VM leaves **every** VM unbound and every identity-bearing path refused,
+  while `/health` still answers 200. That is the "broken but reported healthy"
+  state `fail-fast-on-unusable-configuration` was written against. The
+  coordinator named it on 2026-10-17. The choice to fail the whole load was
+  made in #29, not required by the spec. Two ways out, neither decided here:
+  1. **Drop only the bad field**, log it loudly, and keep the rest of the
+     entry and every other VM. Availability over strictness.
+  2. **Refuse to start** on any inventory error. That also changes the
+     existing startup requirement.
+
+  The YAML inventory is the lab's backend; hogan reads Proxmox. The damage is
+  therefore confined to the lab today, which argues for settling it with the
+  rest of this category instead of squeezing it in now.
 - **Data in Proxmox's files** (tags, Notes) is logged and treated as absent.
   Failing the whole inventory over one VM's tag would deny metadata to every
   VM on the host. #29 already wrote this asymmetry down.
