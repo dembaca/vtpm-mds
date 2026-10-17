@@ -109,11 +109,26 @@ SPIRE agent attests with material that works.
 
 ## 3. Verify on the real artifacts
 
-- [ ] 3.1 **Cloud lab** — enroll a guest with a **fresh vTPM** using the stock client from this branch, with no lab-only patch, and verify SPIRE `1.14.0` attests it and `spire-server agent show` lists the selectors
+- [x] 3.1 **Cloud lab** — enroll a guest with a **fresh vTPM** using the stock client from this branch, with no lab-only patch, and verify SPIRE `1.14.0` attests it and `spire-server agent show` lists the selectors
       This is the observation the lab could not make on 2026-10-17: it needed
       a lab-only binary. Say which layout was used (default `swtpm-localca`,
       `/usr/share/OVMF/`).
-- [ ] 3.2 **Cloud lab** — repeat with a persistent object pre-created at `0x81000001` and verify it is untouched and SPIRE still attests
+      **Done, 2026-10-17, `agent-cursor-vtpm-22e0`, against `43ddd0d`:** stock
+      binary from this branch (sha256 `4990db43631c...085c54`), no lab patch,
+      default `swtpm-localca` layout, SPIRE `1.14.0`, lab `libtpms0 0.9.3`.
+      Enrollment exited 0 with CN=`100`, fingerprint
+      `b6d74afd07c3a9b1e60453b11dc1786abbad1c1c`; `spire-agent` reported `Node
+      attestation was successful`; selectors `subject:cn:100`, `ca:fingerprint`,
+      `issuer:cn` (Lab DevID CA). Persistent handles afterwards: only
+      `0x81010001` and `0x81010016`, no `0x81000001`. The "three objects loaded
+      at once" risk **did not occur**: no object-memory error on this swtpm.
+- [x] 3.2 **Cloud lab** — repeat with a persistent object pre-created at `0x81000001` and verify it is untouched and SPIRE still attests
+      **Done, same run:** a foreign primary with `unique` 256 x `0x01` was made
+      persistent at `0x81000001`. `tpm2_readpublic` public-area and name SHA-256
+      were identical before and after enrollment and after attestation (public
+      area `4d3171c7326fea10...a783fc`). Enrollment exited 0 and SPIRE attested
+      the agent as `.../tpm_devid/8e674578613f45d6fe4973a171044feeb01e800a`, with
+      `subject:cn:100` among the selectors.
 - [x] 3.3 **hogan** — with a git-stamped package, verify on VM 399's TPM that the persistent objects at `0x81000001`, `0x81010001` and `0x81010016` are unchanged after an enrollment run into a **scratch directory**, not into `/var/lib/spire/agent/`
       The measuring binary of 1.5 can show the defect on hogan, and this run
       shows that nothing is broken. The persistent SRK there already is the H-1
