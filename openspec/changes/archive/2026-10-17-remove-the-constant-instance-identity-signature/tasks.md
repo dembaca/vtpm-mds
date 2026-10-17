@@ -158,18 +158,53 @@ the coordinator.
       intentional mentions in the `IdentityBearingPaths` comment and the new
       negative assertion.
 
-- [ ] 3.2 **Coordinator** — remove the signature row from the API endpoint table in `README.md`, and verify the table lists `document` and no other `dynamic/` path
+- [x] 3.2 **Coordinator** — remove the signature row from the API endpoint table in `README.md`, and verify the table lists `document` and no other `dynamic/` path
+      **Done 2026-10-17 on `hogan`.** Deleted the row
+      `/latest/dynamic/instance-identity/signature | GET | Detached signature
+      over the document`. `grep -n 'dynamic/' README.md` inside the endpoint
+      table now finds `/latest/dynamic/instance-identity/document` and nothing
+      else; the only other hit in the file is the guest Python snippet, which
+      reads `document`.
       `AGENTS.md` keeps `README.md` in one hand. The implementer hands this
       over on the bus rather than editing the file.
 
 ## 4. Verify on the installed package
 
-- [ ] 4.1 **Needs the package** — build a git-stamped package with `make deb-local`, install it on `hogan`, and verify `vtpm-mds -version` and `dpkg -l vtpm-mds` both name this tree
+- [x] 4.1 **Needs the package** — build a git-stamped package with `make deb-local`, install it on `hogan`, and verify `vtpm-mds -version` and `dpkg -l vtpm-mds` both name this tree
       The agent on `hogan` can build; installing goes through the maintainer
       or `sudo hogan-lab dpkg-install` with one exact path.
-- [ ] 4.2 **Needs the package** — repeat 1.1 and 1.2 from VM 399 and verify `signature` now answers identically to `GET /latest/no-such-thing`, with and without a session token
-- [ ] 4.3 **Needs the package** — from VM 399, verify `GET /latest/dynamic/instance-identity/document` is byte-identical to the bytes saved in 1.1, and that `GET /latest/meta-data/instance-id` still answers `i-399`
-- [ ] 4.4 **Needs the package** — from the host, which is an unbound caller, verify `document` is still refused with `404 page not found` and `signature` answers the same bytes
+      **Done 2026-10-17 on `hogan`** by the coordinator. Built with
+      `make deb-local` from a clean `main@4ba058c` (the #32 merge; the one
+      untracked file moved aside so the version carries no `.dirty`),
+      `lintian --fail-on error,warning` clean, and installed through
+      `sudo hogan-lab dpkg-install` with the maintainer's go given for this
+      version. `dpkg -l vtpm-mds` → `ii  vtpm-mds  0.2.0+git20261017.4ba058c78e7b`,
+      `vtpm-mds -version` → `vtpm-mds 0.2.0+git20261017.4ba058c78e7b`, and the
+      journal of the started unit logs the same version. The package does not
+      start the unit (`--no-start` in `debian/rules`, by design), so it was
+      started with `sudo hogan-lab systemctl start vtpm-mds`.
+- [x] 4.2 **Needs the package** — repeat 1.1 and 1.2 from VM 399 and verify `signature` now answers identically to `GET /latest/no-such-thing`, with and without a session token
+      **Done**, from VM 399 via `qm guest exec` with `python3`, against
+      `0.2.0+git20261017.4ba058c78e7b`. With a session token and without one,
+      `GET …/instance-identity/signature` and `GET /latest/no-such-thing` both
+      answer `404`, `text/plain; charset=utf-8`, 19 bytes `404 page not
+      found\n`, SHA-256 `b16e1576…bf564793`, identical in status, type and
+      bytes. Before, with a token: `200`, `text/plain`,
+      `dGVzdC1zaWduYXR1cmU=` (1.1).
+- [x] 4.3 **Needs the package** — from VM 399, verify `GET /latest/dynamic/instance-identity/document` is byte-identical to the bytes saved in 1.1, and that `GET /latest/meta-data/instance-id` still answers `i-399`
+      **Done**, same session. `GET …/instance-identity/document` → `200`,
+      `application/json`, **245 bytes**, SHA-256
+      `d6a57188099b8bda78da67dfc935feef0e18cef873e77b1cf0001850dbbcfb03`,
+      byte-identical to the 1.1 baseline. `GET /latest/meta-data/instance-id`
+      → `200`, `i-399`.
+- [x] 4.4 **Needs the package** — from the host, which is an unbound caller, verify `document` is still refused with `404 page not found` and `signature` answers the same bytes
+      **Done**, from `hogan` itself against `169.254.169.1`, which has no VM
+      record. With a token, `document`, `signature`, `meta-data/instance-id`
+      and `no-such-thing` all answer `404 page not found\n`, the same 19 bytes
+      and SHA-256 as on the guest. Without a token, `signature` still answers
+      that `404` — the path no longer exists for anyone — while `document`
+      answers `401 IMDSv2 token required`, as every registered metadata route
+      does before the identity check.
 
 ## 5. Validate and archive
 
@@ -186,9 +221,24 @@ the coordinator.
       ticked", for this change and `serve-a-public-address-or-omit-the-key`,
       both still in progress.
 
-- [ ] 5.3 **Coordinator** — archive with `openspec archive`, and verify afterwards that `Refuse An Instance Identity To Callers With No VM Record` in `openspec/specs/instance-metadata/spec.md` does not re-assert "`public-ipv4` is always unavailable, and the index is a static listing" if `serve-a-public-address-or-omit-the-key` has shipped
+- [x] 5.3 **Coordinator** — archive with `openspec archive`, and verify afterwards that `Refuse An Instance Identity To Callers With No VM Record` in `openspec/specs/instance-metadata/spec.md` does not re-assert "`public-ipv4` is always unavailable, and the index is a static listing" if `serve-a-public-address-or-omit-the-key` has shipped
       This delta carries that sentence verbatim because correcting it is the
       other change's scope. If the other change archives first, this one's
       `MODIFIED` block restores the stale sentence on archive: amend this delta
       before archiving rather than editing the living spec by hand.
-- [ ] 5.4 **Coordinator** — update the `AGENTS.md` known-gaps entry for the constant signature to point at the archive, and verify no entry still describes the signature as open
+      **Done 2026-10-17 on `hogan`**, second of the two archives that day.
+      `openspec archive remove-the-constant-instance-identity-signature -y`
+      applied `instance-metadata` `+1 ~1 -1`. Afterwards
+      `openspec/specs/instance-metadata/spec.md` holds **0** occurrences of
+      "the index is a static listing" and **1** of the `public-ipv4`
+      paragraph Item 2 wrote, so the rebuilt block did not revert it. The spec
+      now ends in `Serve The Instance Identity Document Without A Signature`,
+      and `Serve An Unsigned Instance Identity Document` is gone.
+      `openspec validate --all --strict` → `5 passed, 0 failed`;
+      `scripts/openspec-validate.py --strict` → `all checks passed`.
+- [x] 5.4 **Coordinator** — update the `AGENTS.md` known-gaps entry for the constant signature to point at the archive, and verify no entry still describes the signature as open
+      **Done**, same commit. `AGENTS.md` now lists no open change, names this
+      archive under "Open changes", and answers item 6's open sub-question
+      ("does `…/{document,signature}` stay?") with this archive.
+      `grep -n -i 'signature' AGENTS.md` finds no entry that still describes
+      the signature as served or open.
