@@ -131,14 +131,28 @@ quote must cover — never had to be settled, because the conclusion was that
 nothing should consume them. The analysis is kept under item 6 so it is not
 re-derived.
 
-### Open changes as of 2026-10-16
+### Open changes as of 2026-10-17
 
-One: `openspec/changes/serve-a-public-address-or-omit-the-key/`, the
-`public-ipv4` defect. Written, validated, **0 of 15 tasks done** — a
-planning-only record, ready for whoever picks it up. It replaces
-`Serve The EC2 Metadata Tree` via `REMOVED` + `ADDED` because two of its
-scenarios invert; that requirement is byte-identical before and after the
-2026-10-16 archives, so the delta still applies.
+Two, and they are **not** independent — both touch `imds/handlers.go`, so they
+must be implemented one after the other, not in parallel:
+
+- `openspec/changes/serve-a-public-address-or-omit-the-key/`, the `public-ipv4`
+  defect. **Being implemented** on `implement-serve-a-public-address`, 13 of 15
+  tasks; what remains needs the installed package. It replaces
+  `Serve The EC2 Metadata Tree` via `REMOVED` + `ADDED` because two of its
+  scenarios invert, modifies `Refuse An Instance Identity To Callers With No VM
+  Record` whose reasoning it makes stale, and modifies
+  `Load VM Records From The YAML Inventory` so that inventory can declare an
+  address.
+- `openspec/changes/remove-the-constant-instance-identity-signature/`, the
+  `dGVzdC1zaWduYXR1cmU=` placeholder. **Record only, 0 of 18 tasks**: the merge
+  approved the plan, it did not implement it — do not archive it in that state,
+  or `openspec/specs/` would describe behaviour the code has never shown.
+
+Both carry a `MODIFIED` block on `Refuse An Instance Identity To Callers With
+No VM Record`. **Whichever is archived second must have its block rebuilt
+against the text the first leaves**, or the second one's verbatim copy silently
+reverts the first one's correction — a loss no test and no validator catches.
 
 Everything else specified has shipped and been verified.
 
@@ -197,20 +211,29 @@ stay a disjoint set from product work elsewhere:
   `127.0.0.1` opt-out path is covered by unit tests only — the daemon listens
   on `169.254.169.1:80` alone, so no connection here ever arrives with that
   peer.
-- Reusing one guest vTPM across `scripts/qemu-lab/e2e-devid-guest.sh` runs can
-  end in TPM dictionary-attack lockout: a run on a reused vTPM failed with
-  `Certify: ... DA lockout mode`, and after a single successful run on a fresh
-  vTPM the counter already reads 1 of 3. Found by the cloud lab agent on
-  2026-10-03 while verifying `fail-loudly-when-the-lab-is-unprepared`, and not
-  caused by it. The cause is not understood — whether enrollment really needs
-  three authorization failures, or something retries — so the fix is not
-  obvious and this needs investigating before it is written up. It lives in
-  `scripts/qemu-lab/` and possibly in `internal/devid`.
+- Reusing one guest vTPM across `scripts/qemu-lab/e2e-devid-guest.sh` runs used
+  to end in TPM dictionary-attack lockout: a run on a reused vTPM failed with
+  `Certify: ... DA lockout mode`, and after a single successful run the counter
+  already read 1 of 3. Found by the cloud lab agent on 2026-10-03 while
+  verifying `fail-loudly-when-the-lab-is-unprepared`, and not caused by it.
+  → **fixed and archived** 2026-10-17:
+  `openspec/changes/archive/2026-10-17-stop-lab-guest-without-burning-da-counter/`.
+  **The cause was the teardown, not the enrollment.** `stop-guest.sh` hard-killed
+  QEMU while the guest swtpm was still attached, and the TPM counted the
+  interrupted session as an authorization failure. It now issues QMP
+  `system_powerdown`, waits for QEMU to exit, and only then stops swtpm.
+  Established from both sides rather than argued: on the cloud lab a hard kill
+  moves the counter `0 → 1` while a graceful stop leaves it at `0`, and two
+  full e2e cycles on the **same** vTPM both pass with the counter still `0`;
+  on the Proxmox stack a successful enrollment against the installed package
+  burned no counter at all, `0x0` before and after. The enrollment path was
+  never implicated — which is why the fix lives in `scripts/qemu-lab/` and not
+  in `internal/devid`, where this entry used to point.
 
 Ordered by severity. The first four are recorded as current behaviour in
 `openspec/specs/`, so read the requirement before implementing the change that
-replaces it. Items 1 to 5 are closed; item 6 is deferred with its analysis
-written out, because the answer turned out to be "remove", not "implement".
+replaces it. All six numbered items are closed; item 6 closed as a removal
+rather than an implementation, because the answer turned out to be "remove".
 
 Apply order matters in two places, and each change says so in its own proposal:
 `refuse-unbound-metadata-callers` comes after both
