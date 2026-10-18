@@ -19,7 +19,8 @@ hand-written key, into a Proxmox guest config, including VM 399's.
 - [ ] 1.1 **Maintainer** — answer D1 to D5, D7, D8 and D9 in `design.md` (D8 answered 2026-10-17: option 1 now, option 3 noted), and verify the answers are recorded there under a dated "Decided" heading
       **Partly done, 2026-10-17:** D1, D3, D4, D5 and D7 decided as M1 to M5 ("alle
       wie empfohlen"), recorded under "Decided, 2026-10-17 (M1 to M5)" in
-      `design.md`. **Open:** D2 (values carrier, deferred) and D9.
+      `design.md`. **Open:** D2 (values carrier, deferred) and D9 (researched
+      2026-10-18, task 1.8; the decision is still the maintainer's).
 - [x] 1.2 Check D6 against current Kubernetes documentation — how a node obtains `topology.kubernetes.io/region` and `.../zone` without an in-tree cloud provider — and verify the finding is recorded in `design.md` with the URLs read
       Read current documentation, not memory, as `AGENTS.md` requires for
       Teleport. If a consumer needs anything beyond `placement/region` and
@@ -67,6 +68,17 @@ hand-written key, into a Proxmox guest config, including VM 399's.
       SPIRE 1.14.0: selectors `subject:cn:100`, alias, workload ID, and the
       re-enrollment counter-test all as `design.md` records. Not checked: a
       `.deb`, a real Proxmox host.
+
+- [x] 1.8 Read from the Proxmox sources which privilege changes a VM name, a tag, the registered tags, a node description and a VM ID, and who holds it in the standard roles, and verify `design.md` D9 carries the sources, a source-by-role-by-purpose matrix and a recommendation
+      **Done** on 2026-10-18 by `agent-mac-vtpm-mds-687cc7`, from the `HEAD` of
+      `pve-access-control`, `pve-guest-common`, `pve-cluster`, `pve-common`,
+      `qemu-server` and `pve-manager` on `git.proxmox.com`, read through a
+      summarising fetch tool (code as the tool returned it, no checkout).
+      Findings: only `Administrator` holds `Sys.Modify` among the standard roles;
+      `registered-tags` matches exact tags, so M2's advice cannot cover free-form
+      `mds.zone.<name>`; the node description needs `Sys.Modify` on `/`. **Not
+      established:** hogan's Proxmox version (its refusal of `-` in a tag does not
+      match the `HEAD` format), its `datacenter.cfg` and `user.cfg`, pool roles.
 
 ## 2. Under every decision
 

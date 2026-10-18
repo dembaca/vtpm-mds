@@ -277,12 +277,134 @@ re-enrolled, which changes its agent ID. That is decided in
 ### D9. Trust of values that reach the certificate
 
 A tag or a VM name is only as trustworthy as the Proxmox privilege needed to
-change it (`VM.Config.Options`, per the coordinator), whereas a VM ID is
-assigned only by whoever creates VMs. Anything from option 3 above is therefore
-a statement a lower-privileged operator can influence. D7 applies: it must come
-from the operator or the host, never from the guest, and the question is which
-Proxmox role is allowed to edit it. This is the open question the coordinator
-named for the record.
+change it, whereas a VM ID is assigned only by whoever creates VMs. Anything
+from option 3 above is therefore a statement a lower-privileged operator can
+influence. D7 applies: it must come from the operator or the host, never from
+the guest, and the question is which Proxmox role is allowed to edit it.
+
+**Researched 2026-10-18** from the Proxmox sources (assignment of the
+coordinator, #33). The pages were read through a web fetch tool that summarises
+a page, so the quoted code is what the tool returned for the named file at the
+`HEAD` of the repository on that day, not a diff against a checkout; the
+installed version on hogan was not compared (see "Not established").
+
+Sources, all `https://git.proxmox.com/?p=<repo>.git;a=blob_plain;f=<file>;hb=HEAD`:
+`pve-access-control` `src/PVE/AccessControl.pm` (roles and privilege groups),
+`pve-guest-common` `src/PVE/GuestHelpers.pm` (tag permissions),
+`pve-cluster` `src/PVE/DataCenterConfig.pm` (`registered-tags`,
+`user-tag-access`, `tag-style`), `pve-common` `src/PVE/JSONSchema.pm` (tag
+format), `qemu-server` `src/PVE/API2/Qemu.pm` (create and update permissions),
+`pve-manager` `PVE/API2/NodeConfig.pm` (node configuration).
+
+**What each source needs to change it**
+
+| Source | Privilege to set or change it | Where |
+|---|---|---|
+| VM ID | `VM.Allocate` on `/vms/{vmid}` or on the VM pool `/pool/{pool}`, at creation | `Qemu.pm`, `create_vm` permissions text |
+| VM name | `VM.Config.Options` (`name` is in that key list, with `description`, `onboot`, ...) | `Qemu.pm`, `$check_vm_modify_config_perm` |
+| VM tag | `VM.Config.Options` on the VM, **and** the tag's own rule (below) | `Qemu.pm` (`tags` branch), `GuestHelpers.pm` `assert_tag_permissions` |
+| Node description | `Sys.Modify` on `/` (`PUT` of the node config) | `NodeConfig.pm`, `check => ['perm', '/', ['Sys.Modify']]` |
+| Node name, cluster name | root on the host (join or create a cluster) | not read from a source file; the host's own configuration |
+
+**The tag rule.** `assert_tag_permissions` first requires `VM.Config.Options`,
+then lets a user with `Sys.Modify` on `/` through unconditionally. Everyone else
+is checked per tag that changes (added or removed): it raises
+`/, Sys.Modify for modifying tag '<tag>'` when
+`(!$allowed_tags->{$tag} && !$freeform) || $privileged_tags->{$tag}`.
+`$privileged_tags` is the exact list in `datacenter.cfg` `registered-tags`, a
+`;`-separated list of tags, matched **by hash lookup, not by prefix**.
+`user-tag-access` has `user-allow` with `none`, `list`, `existing` or `free`,
+and **the default is `free`**: without a setting, any user holding
+`VM.Config.Options` may set any tag that is not registered. With `none`, no
+user without `Sys.Modify` can change any tag at all.
+
+**Who has these privileges in the standard roles**, from `create_roles` in
+`AccessControl.pm` (admin, user and audit groups feed `PVE<cat>Admin` and
+`PVEAdmin`; the `root` group is only in `Administrator`):
+
+| Role | `VM.Allocate` | `VM.Config.Options` | `Sys.Modify` |
+|---|---|---|---|
+| `Administrator` | yes | yes | yes |
+| `PVEAdmin` | yes | yes | **no** (`Sys.Modify` is in the `root` group of `Sys`) |
+| `PVEVMAdmin` | yes | yes | no |
+| `PVEVMUser` | no | no | no |
+| `PVESysAdmin` | no | no | **no** (gets only `Sys.Console`, `Sys.Syslog`, `Sys.Audit`) |
+| `PVEAuditor` | no | no | no |
+
+So among the standard roles only `Administrator` holds `Sys.Modify`, and a
+holder of `PVEVMAdmin` or `PVEAdmin` can change the VM name and, with the default
+`free`, set any unregistered tag such as `mds.zone.<anything>`.
+
+**Matrix, source by purpose.** *Read* is serving the value through the metadata
+service to the guest itself; *certificate* is a value that ends up in the
+LDevID and is matched by a SPIRE selector.
+
+| Source | Who changes it (standard roles) | Read (IMDS) | Certificate |
+|---|---|---|---|
+| VM ID | `VM.Allocate`: `PVEVMAdmin`, `PVEAdmin`, `Administrator`; fixed after creation | yes | yes (D8 a, today's CN) |
+| VM name | `VM.Config.Options`: `PVEVMAdmin`, `PVEAdmin`, `Administrator`; no way to restrict it apart from the tags | yes | **no** |
+| VM tag `mds.*`, default settings | same, and anyone with `VM.Config.Options` may set it | yes, with the caveat below | **no** |
+| VM tag, `user-allow: none` | only `Sys.Modify` on `/`, so `Administrator` | yes | acceptable, at the price of all user tags |
+| VM tag listed in `registered-tags` | only `Sys.Modify` on `/`, **for exactly the listed tags** | yes | acceptable for a finite known set |
+| Node description | `Sys.Modify` on `/`, so `Administrator` (one path for all nodes) | yes | acceptable |
+| Node name, cluster name | root on the host | yes | acceptable |
+| YAML inventory | whoever writes the service's file as root | yes | acceptable |
+
+**Findings that change the earlier advice.**
+
+1. **M2's hint does not work for `mds.zone.<name>`.** M2 advised to allow these
+   tags only to admins "through `registered-tags`". That list is exact tags, so
+   every possible `mds.zone.<name>` and `mds.region.<name>` would have to be
+   listed one by one; there is no prefix rule. For a fixed set of zones this is
+   practicable, for free-form names it is not. The blanket alternative is
+   `user-allow: none`, which also stops users from setting their own harmless
+   tags.
+2. **The node description is the strongest of the label sources**, and the
+   privilege is the same as for a registered tag (`Sys.Modify` on `/`), not a
+   weaker one, but it is set once per node rather than per VM. It cannot tell two
+   VMs on one node apart, which is why it serves as a default and not as a carrier
+   for per-VM values.
+3. **`/` is cluster-wide.** The node configuration is protected by `Sys.Modify`
+   on `/`, not on `/nodes/<node>`; a holder can edit the description of every node.
+4. **A certificate is a snapshot.** Name and tags can change after enrollment;
+   the metadata service answers with the current value, the certificate does not
+   change until the VM enrolls again. Whatever lands in a certificate must be a
+   value that does not change for the life of the VM, or the mismatch is a defect
+   of its own. The VM ID is the only one that qualifies; D8 a already keeps the
+   certificate to it.
+
+**Recommendation.**
+
+- **Read through the metadata service:** keep the order decided in M3 and the
+  later decision (tag, node description, node and cluster name). The tag is the
+  weakest of the three but it is what the maintainer chose for per-VM values, and
+  the guest only reads it. Document that with the default `user-tag-access` a VM
+  administrator sets any zone, and that `user-allow: none` or `registered-tags`
+  closes it where that matters. No code change.
+- **Into the certificate:** no VM name, no tag, no zone or region, with the
+  default settings. Where a label has to reach a certificate, take it from the
+  node description or a registered tag (both `Sys.Modify` on `/`) or from a file
+  the operator owns (D2), and expect the staleness in finding 4. D8 option 3
+  (name or tags as an extra subject attribute) stays out until that is settled.
+- **Left open, needs the real stack:** whether the operator wants
+  `registered-tags` or `user-allow: none` on a data-centre stack. That needs the
+  real `datacenter.cfg` and roles of that stack.
+
+**Not established.**
+
+- The Proxmox version on hogan. The tag format in `JSONSchema.pm` at `HEAD` is
+  `[a-z0-9_][a-z0-9_\-\+\.]*` (so `-` is allowed), yet hogan refused a tag with
+  `-` on 2026-10-17 (`invalid characters in tag`). Either the installed version
+  has a narrower format or the refusal came from another path; not resolved here,
+  and it means the sources above may not match the installed code in other
+  details either.
+- The real settings on hogan: `datacenter.cfg` (`registered-tags`,
+  `user-tag-access`) and `user.cfg` need root; the coordinator asked the
+  maintainer for the lines.
+- Pool roles and ACL inheritance down `/pool/{pool}` and `/vms/{vmid}`
+  (`PVEPoolAdmin`, propagation), and the check that a chosen VM ID is free.
+- The VM name's format check, and what `qm` does as root (root is not subject to
+  these checks).
 
 ## Goals
 
@@ -487,7 +609,7 @@ the coordinator's decision sheet. The sheet's labels map to the decisions above:
 | M5 | D5, a broken or unknown tag | **Log it and treat it as not set;** every other VM is untouched. The YAML inventory gets `zone` and `region` with the same meaning. |
 
 **Still open:** D2 (carrier for values, `public-ipv4`), deferred by the maintainer;
-D9 (trust of values that reach the certificate). D6 is researched above, not a
+D9 (trust of values that reach the certificate; researched 2026-10-18, see D9, decision open). D6 is researched above, not a
 decision; D8 is decided above.
 
 **Where it goes next:** the change `serve-zone-and-region-per-vm` (#44) carries
