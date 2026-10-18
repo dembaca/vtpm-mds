@@ -109,7 +109,7 @@ func TestNoCredentialKeepsConfiguredKeyPath(t *testing.T) {
 		name  string
 		setup func(t *testing.T, dir string)
 	}{
-		{"no CREDENTIALS_DIRECTORY", func(t *testing.T, dir string) { t.Setenv("CREDENTIALS_DIRECTORY", "") }},
+		{"empty CREDENTIALS_DIRECTORY", func(t *testing.T, dir string) { t.Setenv("CREDENTIALS_DIRECTORY", "") }},
 		{"directory without the credential", func(t *testing.T, dir string) { t.Setenv("CREDENTIALS_DIRECTORY", dir) }},
 		{"empty credential", func(t *testing.T, dir string) {
 			if err := os.WriteFile(filepath.Join(dir, credentialCAKeyName), nil, 0o400); err != nil {

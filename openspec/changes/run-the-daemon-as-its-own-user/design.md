@@ -79,5 +79,17 @@ out, not serve `404` quietly.
 - **A key path in a site's config that differs from the unit's line** makes the
   start fail (D-d) until the drop-in is added; README.Debian and the journal
   (`243/CREDENTIALS`) say so.
-- **Upgrades.** `postinst` creates the user before the unit restarts; the
-  `--no-start` policy stays, so an operator restarts as today.
+- **Upgrades.** The `preinst` of `dh_installsystemd` stops the running root
+  process before unpacking; `postinst` then creates the user and reloads
+  systemd, and nothing starts the unit (`--no-start`), so the operator runs
+  `systemctl start vtpm-mds`. At that start `StateDirectory=` chowns the old
+  root-owned `/var/lib/vtpm-mds` to the user (seen on hogan, 3.1).
+
+## Follow-ups from the code pre-review (Fable, 2026-10-18)
+
+Left out so the package measured on hogan stays the one that ships:
+the `mkdir`/`chmod` of `/var/lib/vtpm-mds` in `debian/postinst` is now dead
+(`StateDirectory=` owns the directory); and when a site's `devid_ca_key` names
+another path, the credential wins with only the generic log line — a line
+naming the ignored path would help. Both belong to the next change that
+touches `debian/` or `loadDevIDEnroller`.
