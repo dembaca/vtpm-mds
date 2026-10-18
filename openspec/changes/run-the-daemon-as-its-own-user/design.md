@@ -22,29 +22,42 @@ A dedicated user, and no permission change on `/etc/pve` or the PKI.
 
 ## Decisions, for the maintainer to overrule
 
-- **D-a. A static system user, not `DynamicUser=`.** `adduser --system --group
-  --no-create-home --home /var/lib/vtpm-mds vtpm-mds` in `postinst`, if absent.
-  A fixed name shows in `ps` and the journal and owns the state directory
-  across upgrades; `DynamicUser=` would also work with `SupplementaryGroups=`,
-  but moves the state directory under `/var/lib/private` and allocates the UID
-  at start.
-- **D-b. The user stays on `remove`, goes on `purge`**, with the state
-  directory, as Debian policy suggests for system users of a package.
+- **D-a. A static system user from `systemd-sysusers`, not `DynamicUser=`.**
+  `debian/vtpm-mds.sysusers` with `u vtpm-mds - "vtpm-mds metadata service"
+  /var/lib/vtpm-mds`, installed by `dh $@ --with installsysusers` (compat 13
+  does not run it by default). That brings its own dependency, so lintian's
+  `maintainer-script-needs-depends-on-adduser` does not apply, and needs no
+  hand-written `postinst` code. A fixed name shows in `ps` and the journal;
+  `DynamicUser=` would move the state directory under `/var/lib/private` and
+  allocate the UID at start. `StateDirectory=vtpm-mds` replaces
+  `ReadWritePaths=/var/lib/vtpm-mds` and makes systemd own the directory by the
+  user at each start (pre-review, 2026-10-18).
+- **D-b. The user stays after `purge`.** adduser's own guidance advises against
+  deleting system users (files left behind, UID reuse); sysusers never removes
+  them. This is a choice, not a policy requirement.
 - **D-c. The key as a credential.** The unit carries
   `LoadCredential=devid_ca.key:/etc/ssl/private/proxmox_devid_ca.key`, the path
   the packaged `config.yaml` uses. When `$CREDENTIALS_DIRECTORY/devid_ca.key`
   exists, `loadDevIDEnroller` uses it instead of `devid_ca_key` and logs
   `DevID CA key from systemd credential`; without it (a manual start, tests) the
   configured path is used as today. A site whose key lives elsewhere overrides
-  the line with a drop-in; README.Debian shows one.
+  the line with a drop-in; README.Debian shows one, and it must begin with an
+  empty `LoadCredential=` line, because the setting accumulates and the packaged
+  path would otherwise still be required. The configured `devid_ca_key` is not
+  read or even stat-ed when the credential is present: as `vtpm-mds` the service
+  cannot traverse `/etc/ssl/private` (`root:ssl-cert 0710`), and a stat would
+  fail. SIGHUP never rereads the key, so credentials fixed at start are enough;
+  a rotated key needs a restart, not a reload.
 - **D-d. A missing key file now fails the start.** systemd refuses to start a
   unit whose `LoadCredential=` source does not exist (status 243/CREDENTIALS).
   Today a missing key only disables enrollment. **Recommended:** accept it — on
   a host that is meant to enroll, a silent `404` on enrollment is worse than a
   unit that does not start, and it settles part of the "an unreadable key should
   be fatal" backlog item. **Question for the maintainer:** accept, or keep
-  enrollment optional (then the credential line has to move into a drop-in that
-  `postinst` writes only when the key exists).
+  enrollment optional. The optional variant needs no generated drop-in:
+  `SetCredential=devid_ca.key:` (an empty default) next to `LoadCredential=`
+  makes a missing file non-fatal, and the daemon treats an empty credential as
+  absent (man `systemd.exec`, confirmed in the pre-review).
 - **D-e. Everything else of the confinement stays** (bounding set, read-only
   system, filters, `PartOf`). `RemoveIPC=` now takes effect, because the user is
   not root.

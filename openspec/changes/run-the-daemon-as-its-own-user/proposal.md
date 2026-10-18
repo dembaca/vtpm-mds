@@ -29,16 +29,16 @@ keeps the Proxmox default and the site PKI keeps its layout.
 
 - `operability`: "Confine The Daemon To What It Uses" — the daemon runs as
   `vtpm-mds`, not root, and cannot read `/etc/pve/priv/`.
-- `devid-enrollment`: one requirement added — the CA key is taken from a systemd
-  credential when one is present.
+- `devid-enrollment`: "Gate Enroll Routes On Attestation And DevID CA Material"
+  — a systemd credential satisfies the key, and the configured path is then not
+  touched.
 
 ## Impact
 
 - **Code:** `internal/server/server.go` (`loadDevIDEnroller` picks the
   credential), a unit test.
-- **Packaging:** `debian/vtpm-mds.service`, `debian/postinst` (system user,
-  ownership of `/var/lib/vtpm-mds`), `debian/postrm` if purge removes the user
-  (D-b), `debian/README.Debian`.
+- **Packaging:** `debian/vtpm-mds.service`, `debian/vtpm-mds.sysusers` (new),
+  `debian/rules` (`--with installsysusers`), `debian/README.Debian`.
 - **Behaviour visible to operators:** see D-d — a configured CA key that cannot be
   loaded as a credential fails the start instead of disabling enrollment quietly.
 - **Not in scope:** a TPM-backed CA key, rotation, the MAC binding on the bridge.
