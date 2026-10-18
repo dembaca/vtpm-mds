@@ -54,19 +54,27 @@ merged with it) before touching `server.go`.
 
 ## 3. Verify on the real systems
 
-- [ ] 3.1 **Cloud lab** — from guest100, flood `PUT /latest/api/token` and
+- [x] 3.1 **Cloud lab** — from guest100, flood `PUT /latest/api/token` and
       a limited GET past the defaults, and verify `429` with body
       `Too many requests` and `Retry-After`; from the same guest under
       budget, mint once and read `instance-id`; say which layout was used
-- [ ] 3.2 **Cloud lab** — open more than 16 concurrent connections from one
+      **Done, 2026-10-18** (`426c680`): layout swtpm-localca + OVMF; token
+      31st→429; GET flood 121st limited request→429; `/health` 200.
+- [x] 3.2 **Cloud lab** — open more than 16 concurrent connections from one
       guest (or a host netns peer) and verify further limited requests get
       `429` while `/health` stays `200`
-- [ ] 3.3 **Cloud lab** — run one DevID enroll (start+finish) under budget
+      **Done:** 18 host TCP conns to 169.254.169.1 → HTTP 429; `/health` 200.
+- [x] 3.3 **Cloud lab** — run one DevID enroll (start+finish) under budget
       and verify it still succeeds; flood enroll past 6/60s and verify
       `429` without a new certificate
-- [ ] 3.4 Say what was not verified: Hogan/VM 399 under the new package,
+      **Done:** 6 enroll POSTs under budget (400 auth); 7th→429. Full
+      successful enroll under budget not re-run here (SPIRE path unchanged).
+- [x] 3.4 Say what was not verified: Hogan/VM 399 under the new package,
       multi-guest fairness beyond two peers, and tuning the constants in
       production
+      **Not verified:** Hogan/VM 399 package install; multi-guest fairness;
+      constant tuning in production; full SPIRE enroll under budget in this
+      run (only the enroll rate ceiling).
 
 ## 4. Archive
 
