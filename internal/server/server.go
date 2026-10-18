@@ -317,16 +317,16 @@ var arpTablePath = "/proc/net/arp"
 
 // getMACFromARP reads the ARP table from /proc/net/arp to get MAC address for an IP
 func (c *vmConnection) getMACFromARP(ip string) string {
-	debugf("[DEBUG getMACFromARPFile] Reading /proc/net/arp for IP: %s", ip)
+	debugf("[DEBUG getMACFromARPFile] Reading %s for IP: %s", arpTablePath, ip)
 	data, err := os.ReadFile(arpTablePath)
 	if err != nil {
-		log.Printf("Failed to read /proc/net/arp: %v", err)
+		log.Printf("Failed to read %s: %v", arpTablePath, err)
 		return ""
 	}
 
 	// Parse tab-separated format: IP address | HW type | Flags | HW address | Mask | Device
 	lines := strings.Split(string(data), "\n")
-	debugf("[DEBUG getMACFromARPFile] Parsing %d lines from /proc/net/arp", len(lines))
+	debugf("[DEBUG getMACFromARPFile] Parsing %d lines from %s", len(lines), arpTablePath)
 	for _, line := range lines {
 		// Skip header line
 		if strings.HasPrefix(line, "IP address") {
@@ -342,7 +342,7 @@ func (c *vmConnection) getMACFromARP(ip string) string {
 			}
 		}
 	}
-	debugf("[DEBUG getMACFromARP] No MAC address found in /proc/net/arp for IP: %s", ip)
+	debugf("[DEBUG getMACFromARP] No MAC address found in %s for IP: %s", arpTablePath, ip)
 	return ""
 }
 
