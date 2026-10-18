@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-18
 
-None. Five were archived on 2026-10-17 and six on 2026-10-18; the first two in this order:
+None. Five were archived on 2026-10-17 and seven on 2026-10-18; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -273,6 +273,17 @@ wait for the next change to `debian/` or `loadDevIDEnroller` (see that design).
 **Every node holds the CA key**, so a compromised node can issue for any VM ID;
 an intermediate per node or per cluster is part of the open CA decision.
 
+The connection-map leak followed as the seventh archive of 2026-10-18:
+`openspec/changes/archive/2026-10-18-drop-the-connection-map/` (PR #52). The
+server kept an entry per accepted connection that nothing read and nothing
+removed; the map is gone, and no per-connection state outlives its connection.
+A test opens and closes connections and checks nothing is retained, against a
+seam for the ARP table (`arpTablePath`). Verified on hogan against
+`0.2.0+git20261018.38bd29d4400c`: 70000 bound connections from VM 399, `VmRSS`
+10 MB at start, then flat at 22–26 MB with collector drops over the last
+45000. The old build was not run under the same load, and only `VmRSS` was
+measured, no heap profile.
+
 **Pre-review rule (maintainer, 2026-10-18):** before the coordinator calls a PR
 ready to merge, an agent on a **stronger** model than the author reviews it
 read-only (Sonnet → Opus, Opus → Fable, Cursor/Composer → Fable); findings are
@@ -293,7 +304,7 @@ certificate). Found on the way: one typo in the YAML inventory empties the
 whole inventory while the service reports healthy; it is on the
 production-readiness list of 2026-10-18, which the maintainer wants worked off
 before production (debug logging, unit hardening, reload on new VMs, issuance
-log, health detail, the connection-map leak, CA operation, throttling, and MAC
+log, health detail, the connection-map leak (done), CA operation, throttling, and MAC
 binding on `vmbr_imds` with an EK pin per VM on Proxmox).
 
 Those first two both carry a `MODIFIED` block on `Refuse An Instance Identity

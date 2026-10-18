@@ -52,4 +52,6 @@ record.**
 
 ## 4. Archive
 
-- [ ] 4.1 Archive with `openspec archive`, update `AGENTS.md` where it lists operability, and verify `openspec validate --all --strict` is still clean
+- [x] 4.1 Archive with `openspec archive`, update `AGENTS.md` where it lists operability, and verify `openspec validate --all --strict` is still clean
+      Done 2026-10-18 from `main` at `c2b0617`: `openspec archive` applied the
+      operability delta (+1); `AGENTS.md` records the archive.
