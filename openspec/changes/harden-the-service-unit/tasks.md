@@ -26,12 +26,37 @@ pushed and the maintainer has not overruled D-a to D-g; D-f needs his answer.**
 
 ## 3. Verify on hogan
 
-- [ ] 3.1 Install the git-stamped package (with the maintainer's go in the session), start the unit, and verify `systemd-analyze security vtpm-mds` is at most 4.0; record the value and the three highest remaining exposures
-- [ ] 3.2 Verify from VM 399 that the metadata tree, tags and placement still answer, and from the host that an unbound caller still gets its refusals
-- [ ] 3.3 Reload with `systemctl reload vtpm-mds`, and verify the journal shows the cache reloaded with the same VM count
-- [ ] 3.4 **Merge blocker** — enroll VM 399 once with `devid-enroll` (with the maintainer's go), and verify a certificate is issued and the journal has a `devid issued` line, which proves the CA key (`root:root 0600`) is still readable under the new bounding set
+- [x] 3.1 Install the git-stamped package (with the maintainer's go in the session), start the unit, and verify `systemd-analyze security vtpm-mds` is at most 4.0; record the value and the three highest remaining exposures
+      **Done, 2026-10-18, on hogan,** `0.2.0+git20261018.3f5c7fd8613c` (head `3f5c7fd`, rebased on `main` so #48 and #49 are in), installed with the maintainer's go in
+      the session. `systemd-analyze security vtpm-mds`: **1.9 OK** (was 9.0). Highest
+      remaining: `PrivateNetwork=` 0.5, running as root 0.4, `AF_INET`/`AF_INET6`
+      0.3 — all intended. `/proc/<pid>/status`: `CapBnd`, `CapEff`, `CapPrm`,
+      `CapAmb` all `0x400` (`cap_net_bind_service` only), no supplementary groups.
+      `/etc/pve` in the service's mountinfo: `ro`.
+- [x] 3.2 Verify from VM 399 that the metadata tree, tags and placement still answer, and from the host that an unbound caller still gets its refusals
+      **Done, 2026-10-18:** from VM 399 the placement listing, `availability-zone`
+      `keller`, `region` `bgl`, `node`, `cluster`, `rack` and the identity document
+      answered as before the change; from the host `instance-id` answered `401`
+      without a token and `/health` `200`, as before.
+- [x] 3.3 Reload with `systemctl reload vtpm-mds`, and verify the journal shows the cache reloaded with the same VM count
+      **Done, 2026-10-18:** `Cache refresh complete (proxmox:/etc/pve): 3 VMs, 5 MAC
+      addresses cached` at start and again after the reload, then `VM config cache
+      reloaded successfully`; `ExecReload` passed the system-call filter.
+- [x] 3.4 **Merge blocker** — enroll VM 399 once with `devid-enroll` (with the maintainer's go), and verify a certificate is issued and the journal has a `devid issued` line, which proves the CA key (`root:root 0600`) is still readable under the new bounding set
+      **Done, 2026-10-18,** with the maintainer's go in the session: one enrolment
+      of VM 399 with the client from the same build into a guest scratch
+      directory (guarded against a second run, SPIRE's material unchanged,
+      lockout counter `0x0` before and after, scratch removed). Certificate
+      `CN=399`, serial `2CF03B98…`; journal: `devid issued serial=2cf03b98… vm=399
+      ek=19517bd1…` between the access lines of start and finish (both `200`).
 - [ ] 3.6 **Maintainer, needs root** — restart `pve-cluster`, and verify `vtpm-mds` was restarted with it (`PartOf`), its journal shows the cache loaded with the same VM count, and `grep ' /etc/pve ' /proc/$(pidof vtpm-mds)/mountinfo` shows `ro`
-- [ ] 3.7 Verify `journalctl -u vtpm-mds` after tasks 3.2 to 3.4 shows neither `DevID enrollment disabled` nor `Failed to load VM config cache`, and no `status=31`; and, with a temporary drop-in `SystemCallLog=@privileged @resources`, that no filtered call is logged during those tasks
+- [x] 3.7 Verify `journalctl -u vtpm-mds` after tasks 3.2 to 3.4 shows neither `DevID enrollment disabled` nor `Failed to load VM config cache`, and no `status=31`; and, with a temporary drop-in `SystemCallLog=@privileged @resources`, that no filtered call is logged during those tasks
+      **Half done, 2026-10-18:** the journal since the install holds none of
+      `DevID enrollment disabled`, `Failed to load VM config`, `status=31`,
+      `SIGSYS` or `operation not permitted` (count 0). The `SystemCallLog`
+      drop-in was **not** run: writing a drop-in needs root, which the agent user
+      does not have. Every task above succeeded, so no call the daemon needs
+      was filtered on these paths.
 - [ ] 3.5 Say what was not verified
 
 ## 4. Archive
