@@ -33,6 +33,9 @@ func main() {
 
 	log.Printf("vtpm-mds version %s", Version)
 
+	// The [DEBUG lines are written only with -debug.
+	server.SetDebug(*debug)
+
 	// Load configuration
 	var cfg *config.Config
 	var err error

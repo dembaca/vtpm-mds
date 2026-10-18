@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dembaca/vtpm-mds/imds"
@@ -114,7 +115,7 @@ func New(cfg *config.Config) (*Server, error) {
 
 	// Catch-all handler for debugging unmatched routes
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Unmatched route: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+		log.Printf("Unmatched route: %s %q from %s", r.Method, r.URL.Path, r.RemoteAddr)
 		http.NotFound(w, r)
 	})
 
@@ -150,7 +151,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-// loggingMiddleware logs HTTP requests
+// loggingMiddleware writes one access line per request: method, path, status,
+// duration, the connection's peer address and the VM it is bound to, or "-". The
+// peer is the connection's address and never a header; the path is quoted, so a
+// path that holds a line break cannot write a second journal line.
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -159,13 +163,32 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(lw, r)
 
 		log.Printf(
-			"%s %s %d %v",
+			"%s %q %d %v %s %s",
 			r.Method,
 			r.URL.Path,
 			lw.statusCode,
 			time.Since(start),
+			peerForLog(r),
+			vmForLog(r),
 		)
 	})
+}
+
+// peerForLog is the IP address of the connection's peer, without the port, or
+// "-" when it cannot be parsed.
+func peerForLog(r *http.Request) string {
+	if ip := imds.PeerIP(r.RemoteAddr); ip != nil {
+		return ip.String()
+	}
+	return "-"
+}
+
+// vmForLog is the ID of the VM record the connection is bound to, or "-".
+func vmForLog(r *http.Request) string {
+	if vm := inventory.GetVMConfigFromRequest(r); vm != nil && vm.VMID != "" {
+		return vm.VMID
+	}
+	return "-"
 }
 
 type responseWriter struct {
@@ -178,6 +201,23 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// debugOn says whether the lines marked [DEBUG are written. It is set once, at
+// start, from the -debug flag.
+var debugOn atomic.Bool
+
+// SetDebug switches the [DEBUG lines on or off. main calls it once, before the
+// server is created.
+func SetDebug(on bool) { debugOn.Store(on) }
+
+// debugf writes a line that is marked [DEBUG by its caller, but only when -debug
+// was given. Everything that reports a start, a reload, a refusal or a failure is
+// written with log.Printf instead and so is not gated.
+func debugf(format string, args ...any) {
+	if debugOn.Load() {
+		log.Printf(format, args...)
+	}
+}
+
 // connectionMap stores VMIDs per connection
 var connectionMap sync.Map
 
@@ -186,17 +226,17 @@ func connContext(ctx context.Context, c net.Conn) context.Context {
 	if vmConn, ok := c.(*vmConnection); ok {
 		// Trigger VM config extraction if not already done
 		vmConn.vmConfigOnce.Do(func() {
-			log.Printf("[DEBUG connContext] Extracting VM config for connection from %s", c.RemoteAddr())
+			debugf("[DEBUG connContext] Extracting VM config for connection from %s", c.RemoteAddr())
 			vmConn.extractVMConfig()
 		})
 		if vmConn.vmConfig != nil {
-			log.Printf("[DEBUG connContext] Setting VM config in context: VMID=%s", vmConn.vmid)
+			debugf("[DEBUG connContext] Setting VM config in context: VMID=%s", vmConn.vmid)
 			return context.WithValue(ctx, inventory.VMConfigContextKey, vmConn.vmConfig)
 		} else {
-			log.Printf("[DEBUG connContext] No VM config found for connection from %s", c.RemoteAddr())
+			debugf("[DEBUG connContext] No VM config found for connection from %s", c.RemoteAddr())
 		}
 	} else {
-		log.Printf("[DEBUG connContext] Connection is not *vmConnection, type: %T", c)
+		log.Printf("Connection is not a vmConnection (type %T), no VM can be bound to it", c)
 	}
 	return ctx
 }
@@ -251,41 +291,41 @@ func (c *vmConnection) extractVMConfigByRouting() {
 	remoteAddr := c.TCPConn.RemoteAddr()
 	if tcpAddr, ok := remoteAddr.(*net.TCPAddr); ok && tcpAddr.IP != nil {
 		remoteIP := tcpAddr.IP.String()
-		log.Printf("[DEBUG extractVMConfigByRouting] Starting VM config extraction for remote IP: %s", remoteIP)
+		debugf("[DEBUG extractVMConfigByRouting] Starting VM config extraction for remote IP: %s", remoteIP)
 
 		// Use ARP table to get MAC address, then find VM config
 		macAddr := c.getMACFromARP(remoteIP)
 		if macAddr != "" {
-			log.Printf("[DEBUG extractVMConfigByRouting] Found MAC address: %s for IP: %s", macAddr, remoteIP)
+			debugf("[DEBUG extractVMConfigByRouting] Found MAC address: %s for IP: %s", macAddr, remoteIP)
 			vmConfig := c.findVMConfigByMAC(macAddr)
 			if vmConfig != nil {
-				log.Printf("[DEBUG extractVMConfigByRouting] Found VM config: VMID=%s for MAC: %s", vmConfig.VMID, macAddr)
+				debugf("[DEBUG extractVMConfigByRouting] Found VM config: VMID=%s for MAC: %s", vmConfig.VMID, macAddr)
 				c.vmid = vmConfig.VMID
 				c.vmConfig = vmConfig
 				connectionMap.Store(c.TCPConn, vmConfig.VMID)
 				return
 			} else {
-				log.Printf("[DEBUG extractVMConfigByRouting] No VM config found for MAC: %s", macAddr)
+				debugf("[DEBUG extractVMConfigByRouting] No VM config found for MAC: %s", macAddr)
 			}
 		} else {
-			log.Printf("[DEBUG extractVMConfigByRouting] No MAC address found for IP: %s", remoteIP)
+			debugf("[DEBUG extractVMConfigByRouting] No MAC address found for IP: %s", remoteIP)
 		}
-		log.Printf("[DEBUG extractVMConfigByRouting] No VM config found for IP: %s", remoteIP)
+		debugf("[DEBUG extractVMConfigByRouting] No VM config found for IP: %s", remoteIP)
 	}
 }
 
 // getMACFromARP reads the ARP table from /proc/net/arp to get MAC address for an IP
 func (c *vmConnection) getMACFromARP(ip string) string {
-	log.Printf("[DEBUG getMACFromARPFile] Reading /proc/net/arp for IP: %s", ip)
+	debugf("[DEBUG getMACFromARPFile] Reading /proc/net/arp for IP: %s", ip)
 	data, err := os.ReadFile("/proc/net/arp")
 	if err != nil {
-		log.Printf("[DEBUG getMACFromARPFile] Failed to read /proc/net/arp: %v", err)
+		log.Printf("Failed to read /proc/net/arp: %v", err)
 		return ""
 	}
 
 	// Parse tab-separated format: IP address | HW type | Flags | HW address | Mask | Device
 	lines := strings.Split(string(data), "\n")
-	log.Printf("[DEBUG getMACFromARPFile] Parsing %d lines from /proc/net/arp", len(lines))
+	debugf("[DEBUG getMACFromARPFile] Parsing %d lines from /proc/net/arp", len(lines))
 	for _, line := range lines {
 		// Skip header line
 		if strings.HasPrefix(line, "IP address") {
@@ -296,12 +336,12 @@ func (c *vmConnection) getMACFromARP(ip string) string {
 			mac := strings.ToLower(fields[3])
 			// Skip incomplete entries (0x0 MAC)
 			if mac != "00:00:00:00:00:00" {
-				log.Printf("[DEBUG getMACFromARPFile] Found MAC %s for IP %s (device: %s)", mac, ip, fields[5])
+				debugf("[DEBUG getMACFromARPFile] Found MAC %s for IP %s (device: %s)", mac, ip, fields[5])
 				return mac
 			}
 		}
 	}
-	log.Printf("[DEBUG getMACFromARP] No MAC address found in /proc/net/arp for IP: %s", ip)
+	debugf("[DEBUG getMACFromARP] No MAC address found in /proc/net/arp for IP: %s", ip)
 	return ""
 }
 
@@ -316,7 +356,7 @@ var (
 // findVMConfigByMAC finds the VM config for the given MAC address
 func (c *vmConnection) findVMConfigByMAC(mac string) *inventory.VMConfig {
 	mac = strings.ToLower(strings.TrimSpace(mac))
-	log.Printf("[DEBUG findVMConfigByMAC] Looking for VM config with MAC: %s", mac)
+	debugf("[DEBUG findVMConfigByMAC] Looking for VM config with MAC: %s", mac)
 
 	vmConfigCacheMu.RLock()
 	defer vmConfigCacheMu.RUnlock()
@@ -325,12 +365,12 @@ func (c *vmConnection) findVMConfigByMAC(mac string) *inventory.VMConfig {
 	if vmid != "" {
 		vmConfig, ok := vmConfigCache[vmid]
 		if ok && vmConfig != nil {
-			log.Printf("[DEBUG findVMConfigByMAC] Found in cache: MAC %s -> VMID %s", mac, vmid)
+			debugf("[DEBUG findVMConfigByMAC] Found in cache: MAC %s -> VMID %s", mac, vmid)
 			return vmConfig
 		}
 	}
 
-	log.Printf("[DEBUG findVMConfigByMAC] MAC %s not found in cache", mac)
+	debugf("[DEBUG findVMConfigByMAC] MAC %s not found in cache", mac)
 	return nil
 }
 
@@ -349,17 +389,17 @@ func (s *Server) RefreshVMConfigCache() error {
 
 	if s.cfg.MDS.InventoryPath != "" {
 		source = s.cfg.MDS.InventoryPath
-		log.Printf("[DEBUG RefreshVMConfigCache] Loading YAML inventory from %s", source)
+		debugf("[DEBUG RefreshVMConfigCache] Loading YAML inventory from %s", source)
 		vmConfigMap, err = inventory.LoadYAML(s.cfg.MDS.InventoryPath)
 		topology = inventory.DefaultTopology()
 	} else {
 		source = "proxmox:/etc/pve"
-		log.Printf("[DEBUG RefreshVMConfigCache] Loading Proxmox VM configs")
+		debugf("[DEBUG RefreshVMConfigCache] Loading Proxmox VM configs")
 		vmConfigMap, err = proxmox.ParseVMConfigs("")
 		topology = proxmox.HostTopology("")
 	}
 	if err != nil {
-		log.Printf("[DEBUG RefreshVMConfigCache] Failed to load VM configs from %s: %v", source, err)
+		log.Printf("Failed to load VM configs from %s: %v", source, err)
 		return err
 	}
 
@@ -371,7 +411,7 @@ func (s *Server) RefreshVMConfigCache() error {
 		macCount += len(vmConfig.MACs)
 	}
 
-	log.Printf("[DEBUG RefreshVMConfigCache] Cache refresh complete (%s): %d VMs, %d MAC addresses cached", source, len(vmConfigCache), macCount)
+	log.Printf("Cache refresh complete (%s): %d VMs, %d MAC addresses cached", source, len(vmConfigCache), macCount)
 	return nil
 }
 
