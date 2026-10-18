@@ -20,6 +20,11 @@ Read on hogan on 2026-10-18 (`main` with #51 merged, installed
 
 A dedicated user, and no permission change on `/etc/pve` or the PKI.
 
+**D-d answered (maintainer, 2026-10-18): (a), a missing key fails the start.**
+Enrollment happens on every node that runs vTPM guests, because a guest only
+reaches the service of the node it runs on; a node without its key must stand
+out, not serve `404` quietly.
+
 ## Decisions, for the maintainer to overrule
 
 - **D-a. A static system user from `systemd-sysusers`, not `DynamicUser=`.**

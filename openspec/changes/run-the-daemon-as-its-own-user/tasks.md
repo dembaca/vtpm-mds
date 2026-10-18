@@ -8,7 +8,9 @@ answered D-d.**
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer** — answer D-d (missing key fails the start, or enrollment stays optional), and optionally overrule D-a to D-e, and verify the outcome is recorded in `design.md`
+- [x] 1.1 **Maintainer** — answer D-d (missing key fails the start, or enrollment stays optional), and optionally overrule D-a to D-e, and verify the outcome is recorded in `design.md`
+      **Done, 2026-10-18:** on the bus, (a) — a missing key fails the start;
+      recorded under "D-d answered". Nothing else overruled.
 - [x] 1.2 **Pre-review** — a Fable review of this record, and verify its findings are fixed or deferred by the maintainer
       **Done, 2026-10-18:** Fable found no reason to rethink and eight points; all
       are taken into the record: the enroll-route requirement is MODIFIED so a
@@ -21,7 +23,17 @@ answered D-d.**
 
 ## 2. Implement
 
-- [ ] 2.1 Prefer `$CREDENTIALS_DIRECTORY/devid_ca.key` in `loadDevIDEnroller` without touching the configured path, and verify with unit tests for credential present (with `devid_ca_key` pointing at a path that does not exist), absent, and empty, each with a mutation that fails it
+- [x] 2.1 Prefer `$CREDENTIALS_DIRECTORY/devid_ca.key` in `loadDevIDEnroller` without touching the configured path, and verify with unit tests for credential present (with `devid_ca_key` pointing at a path that does not exist), absent, and empty, each with a mutation that fails it
+      **Done, 2026-10-18:** `credentialCAKeyPath` and its use in
+      `loadDevIDEnroller` (`internal/server/server.go`); tests in
+      `internal/server/credential_test.go`: a credential with `devid_ca_key`
+      pointing into a missing directory loads and logs `DevID CA key from systemd
+      credential`; an empty `devid_ca_key` with a credential loads; no directory,
+      a directory without the file and an empty file each fall back to the
+      configured key without the log line. Mutations, each red: credential
+      ignored (2 tests fail), empty credential accepted (`empty credential`
+      fails), log line removed (1 test fails). `go vet ./...` and `go test ./...`
+      pass.
 - [ ] 2.2 Add `debian/vtpm-mds.sysusers` and `--with installsysusers`, and verify with `dpkg-deb -c`/`-I` that the sysusers file and its dependency are in the package, and `lintian --fail-on error,warning` passes
 - [ ] 2.3 Set `User=vtpm-mds`, `Group=vtpm-mds`, `SupplementaryGroups=www-data`, `StateDirectory=vtpm-mds` and `LoadCredential=` in the unit (drop `ReadWritePaths=`), update the unit comments and README.Debian (drop-in example with a reset line, restart after key rotation), and verify `systemd-analyze verify` and `--offline` security
 - [ ] 2.4 Run `go vet ./...`, `go test ./...` and `openspec validate --all --strict`, and verify all pass
