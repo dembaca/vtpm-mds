@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-18
 
-None. Five were archived on 2026-10-17 and three on 2026-10-18; the first two in this order:
+None. Five were archived on 2026-10-17 and four on 2026-10-18; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -227,6 +227,20 @@ VM 399 against `0.2.0+git20261018.3fcf3317b0d1` (six keys, the conflict, the
 old prefix ignored) and in the lab for the YAML defaults. `/latest/meta-data`
 without a slash answers `301` on hogan (go1.24) but `307` when built with a
 newer Go; only `placement` has an explicit redirect.
+
+The first item of the production-readiness list followed as the fourth
+archive of 2026-10-18: `openspec/changes/archive/2026-10-18-quiet-the-log-and-record-issuance/`
+(PR #49). `[DEBUG` lines are written only with `-debug`; four former debug lines
+that report a failure or a reload (`Failed to load VM configs`, `Failed to read
+/proc/net/arp`, an unexpected connection type, and the `N VMs, M MAC addresses`
+summary) are always written, without the marker. Each request writes one access
+line `METHOD "PATH" STATUS DURATION PEER VM`, the path quoted so a guest cannot
+forge a second line, the peer from the connection and never from
+`X-Forwarded-For`, `-` for an unbound caller. Each issued LDevID writes one line
+`devid issued serial=<hex> vm=<id> ek=<sha256>` and nothing else. Verified on
+hogan against `0.2.0+git20261018.57cc6cb3c8ac` (journal before and after, a
+`-debug` run, one enrolment of VM 399 into a scratch directory with SPIRE's
+material untouched) and in the lab.
 
 The Kubernetes consumer will become a small per-node DaemonSet that reads
 `placement/` from this service and labels its own node (maintainer, 2026-10-18),

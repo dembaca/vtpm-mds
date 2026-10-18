@@ -6,7 +6,9 @@ record.**
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer, optional** — overrule or accept D-a to D-h in `design.md`, and verify the outcome is recorded there
+- [x] 1.1 **Maintainer, optional** — overrule or accept D-a to D-h in `design.md`, and verify the outcome is recorded there
+      **Closed at the archive, 2026-10-18:** the maintainer overruled none of D-a
+      to D-h and merged #49 with them; the `Unmatched route` line stays.
       The ones most likely to be wanted differently: the field order of the access
       line (D-c), keeping the unmatched-route line (D-d), and no line for a refusal
       (D-f).
@@ -84,9 +86,25 @@ record.**
       Whether the fingerprint equals the one the start leg bound was not compared
       separately on hogan; the unit test of the real handlers shows it. The scratch
       directory was removed.
-- [ ] 3.4 **Cloud lab** — run the DevID end-to-end script and verify one `devid issued` line per run; say which layout was used
-- [ ] 3.5 Say what was not verified: a flooding guest (that is `throttle-guest-requests`), a journal read after a fault with debug off
+- [x] 3.4 **Cloud lab** — run the DevID end-to-end script and verify one `devid issued` line per run; say which layout was used
+      **Done, 2026-10-18, `agent-cursor-vtpm-22e0`, against `57cc6cb`:** passed,
+      on the YAML inventory with guest VM 100. No `[DEBUG` line without the flag;
+      the access line ended `169.254.169.10 100`; `-debug` brought the trace lines
+      back; one enrolment wrote exactly one `devid issued … vm=100` line; lockout
+      counter `0x0` before and after. The result post did not name the layout;
+      this lab's earlier runs used `swtpm-localca` and `/usr/share/OVMF/`.
+      Recorded by the coordinator at the archive, from the bus post.
+- [x] 3.5 Say what was not verified: a flooding guest (that is `throttle-guest-requests`), a journal read after a fault with debug off
+      **Done, 2026-10-18.** Not verified on the live stack: a flooding guest (that
+      is `throttle-guest-requests`); any of the four error lines that stay visible
+      without the flag, because no load, ARP read or connection failed during the
+      runs (unit tests cover them); that the issuance line's fingerprint equals
+      the one the start leg bound (shown by the handler test, not compared on
+      hogan).
 
 ## 4. Archive
 
-- [ ] 4.1 Archive with `openspec archive`, update `AGENTS.md` where it lists operability, and verify `openspec validate --all --strict` is still clean
+- [x] 4.1 Archive with `openspec archive`, update `AGENTS.md` where it lists operability, and verify `openspec validate --all --strict` is still clean
+      **Done, 2026-10-18,** by the coordinator from `main` at `b88b01f`, after #49
+      was merged: `openspec archive` added three requirements (`operability` +2,
+      `devid-enrollment` +1).
