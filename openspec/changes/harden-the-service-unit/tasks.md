@@ -6,7 +6,10 @@ pushed and the maintainer has not overruled D-a to D-g; D-f needs his answer.**
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer, optional** — overrule or accept D-a to D-g in `design.md`, and answer D-f (dedicated user now or later), and verify the outcome is recorded there
+- [x] 1.1 **Maintainer, optional** — overrule or accept D-a to D-g in `design.md`, and answer D-f (dedicated user now or later), and verify the outcome is recorded there
+      **Done, 2026-10-18:** on the bus the maintainer wants the dedicated user
+      (D-f) without any permission change on `/etc/pve`; it follows as its own
+      change, `run-the-daemon-as-its-own-user`. Nothing else was overruled.
 
 ## 2. Implement
 

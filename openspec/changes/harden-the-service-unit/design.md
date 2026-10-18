@@ -57,6 +57,11 @@ Evidence read on hogan on 2026-10-18 against `main@407bfca` and the installed
   `ssl-cert` can read the CA key depends on a mode only root can see. **Question
   for the maintainer:** stay with D-a (recommended for now), or have the key's mode
   checked (`stat /etc/ssl/private/proxmox_devid_ca.key`) and add the user here?
+- **D-f answered (maintainer, 2026-10-18):** yes to a dedicated user, as the next
+  change `run-the-daemon-as-its-own-user`: `User=vtpm-mds` with
+  `SupplementaryGroups=www-data` (the Proxmox default `root:www-data 0640` on
+  `/etc/pve` stays untouched) and the CA key passed by `LoadCredential=`, so
+  nothing on the host's file system changes.
 - **D-g. The target is a score of at most 4.0** on systemd 257, measured on the
   installed unit, not on the file in the repository.
 
