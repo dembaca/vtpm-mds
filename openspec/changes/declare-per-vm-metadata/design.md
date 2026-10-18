@@ -335,6 +335,18 @@ So among the standard roles only `Administrator` holds `Sys.Modify`, and a
 holder of `PVEVMAdmin` or `PVEAdmin` can change the VM name and, with the default
 `free`, set any unregistered tag such as `mds.zone.<anything>`.
 
+**Confirmed on the installed version** (coordinator, hogan, 2026-10-18,
+`pve-manager 9.2.3`, `qemu-server 9.1.16`, `libpve-access-control 9.1.1`, source
+under `/usr/share/perl5/PVE` read without root): the same privileges for the
+VM ID (`VM.Allocate` on `/vms/{vmid}`, `API2/Qemu.pm` around line 2736), the VM
+name (`VM.Config.Options` through `$generaloptions`, around lines 796 and 983),
+tags (`VM.Config.Options` plus `assert_tag_permissions`) and the node
+description (`PUT /nodes/{node}/config` checks `Sys.Modify` on `/`,
+`API2/NodeConfig.pm` around line 81, not on the node). One consequence the
+coordinator drew: `VM.Config.Options` granted on a single VM allows renaming and
+tagging it, but never a new VM ID, so per-VM ACLs can separate the ID from the
+name and tags even though the standard roles do not.
+
 **Matrix, source by purpose.** *Read* is serving the value through the metadata
 service to the guest itself; *certificate* is a value that ends up in the
 LDevID and is matched by a SPIRE selector.
@@ -392,12 +404,11 @@ LDevID and is matched by a SPIRE selector.
 
 **Not established.**
 
-- The Proxmox version on hogan. The tag format in `JSONSchema.pm` at `HEAD` is
+- The tag format. In `JSONSchema.pm` at `HEAD` it is
   `[a-z0-9_][a-z0-9_\-\+\.]*` (so `-` is allowed), yet hogan refused a tag with
-  `-` on 2026-10-17 (`invalid characters in tag`). Either the installed version
-  has a narrower format or the refusal came from another path; not resolved here,
-  and it means the sources above may not match the installed code in other
-  details either.
+  `-` on 2026-10-17 (`invalid characters in tag`). The installed privileges
+  agree with `HEAD` (above), so the roles part stands; the installed
+  `PVE_TAG_RE` was not read and the refusal is unexplained.
 - The real settings on hogan: `datacenter.cfg` (`registered-tags`,
   `user-tag-access`) and `user.cfg` need root; the coordinator asked the
   maintainer for the lines.
