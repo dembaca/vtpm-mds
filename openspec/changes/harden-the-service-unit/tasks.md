@@ -49,7 +49,12 @@ pushed and the maintainer has not overruled D-a to D-g; D-f needs his answer.**
       lockout counter `0x0` before and after, scratch removed). Certificate
       `CN=399`, serial `2CF03B98…`; journal: `devid issued serial=2cf03b98… vm=399
       ek=19517bd1…` between the access lines of start and finish (both `200`).
-- [ ] 3.6 **Maintainer, needs root** — restart `pve-cluster`, and verify `vtpm-mds` was restarted with it (`PartOf`), its journal shows the cache loaded with the same VM count, and `grep ' /etc/pve ' /proc/$(pidof vtpm-mds)/mountinfo` shows `ro`
+- [x] 3.6 **Maintainer, needs root** — restart `pve-cluster`, and verify `vtpm-mds` was restarted with it (`PartOf`), its journal shows the cache loaded with the same VM count, and `grep ' /etc/pve ' /proc/$(pidof vtpm-mds)/mountinfo` shows `ro`
+      **Done, 2026-10-18:** the maintainer ran `systemctl restart pve-cluster` as
+      root. The journal shows `vtpm-mds` stopped and started at 16:49:21 with it,
+      `Cache refresh complete (proxmox:/etc/pve): 3 VMs, 5 MAC addresses cached`;
+      the new process's mountinfo has `/etc/pve` mounted `ro,nosuid,nodev`; VM 399
+      read its placement and identity document right after.
 - [x] 3.7 Verify `journalctl -u vtpm-mds` after tasks 3.2 to 3.4 shows neither `DevID enrollment disabled` nor `Failed to load VM config cache`, and no `status=31`; and, with a temporary drop-in `SystemCallLog=@privileged @resources`, that no filtered call is logged during those tasks
       **Half done, 2026-10-18:** the journal since the install holds none of
       `DevID enrollment disabled`, `Failed to load VM config`, `status=31`,
@@ -57,7 +62,12 @@ pushed and the maintainer has not overruled D-a to D-g; D-f needs his answer.**
       drop-in was **not** run: writing a drop-in needs root, which the agent user
       does not have. Every task above succeeded, so no call the daemon needs
       was filtered on these paths.
-- [ ] 3.5 Say what was not verified
+- [x] 3.5 Say what was not verified
+      **Done, 2026-10-18.** Not verified: the `SystemCallLog` run of 3.7 (needs a
+      root drop-in); a CA key with another owner or mode than `root:root 0600`
+      (it would disable enrollment with the existing warning); the cloud lab,
+      which does not install the package; a reload in the instant pmxcfs is
+      down (the `PartOf` restart covers the remount, not that window).
 
 ## 4. Archive
 
