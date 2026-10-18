@@ -157,8 +157,10 @@ These specs describe what the code does **today**, including where it is weaker 
 the trust model in `ARCHITECTURE.md` implies. Read `devid-enrollment` before relying on
 enrollment for tenant isolation.
 
-DevID enroll routes are registered when `devid_ca_cert` / `devid_ca_key` are set and
-TPM attestation is enabled. The guest client is `bin/devid-enroll` (a cloud-init
+DevID enroll routes are registered when TPM attestation is enabled and the CA can be
+loaded: the certificate from `devid_ca_cert`, the key from the systemd credential
+`devid_ca.key` (the packaged unit passes `/etc/ssl/private/proxmox_devid_ca.key`)
+or, outside systemd, from `devid_ca_key`. The guest client is `bin/devid-enroll` (a cloud-init
 oneshot in the QEMU lab, and the `devid-enroll` package on real VM images); it
 writes `devid.crt.pem`, `devid.priv.blob` and `devid.pub.blob` for SPIRE.
 

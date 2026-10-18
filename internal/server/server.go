@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -426,9 +427,33 @@ func RefreshActiveVMConfigCache() error {
 	return srv.RefreshVMConfigCache()
 }
 
+// credentialCAKeyName is the systemd credential the unit passes the DevID CA
+// key as (LoadCredential=devid_ca.key:...).
+const credentialCAKeyName = "devid_ca.key"
+
+// credentialCAKeyPath returns the DevID CA key delivered as a systemd
+// credential, or "" when there is none. An empty credential counts as none.
+func credentialCAKeyPath() string {
+	dir := os.Getenv("CREDENTIALS_DIRECTORY")
+	if dir == "" {
+		return ""
+	}
+	path := filepath.Join(dir, credentialCAKeyName)
+	if fi, err := os.Stat(path); err != nil || fi.Size() == 0 {
+		return ""
+	}
+	return path
+}
+
 func loadDevIDEnroller(cfg *config.Config) (*devid.Enroller, error) {
 	certPath := cfg.MDS.DevIDCACert
 	keyPath := cfg.MDS.DevIDCAKey
+	// A credential replaces the configured path, which is then never touched:
+	// running as vtpm-mds the service cannot even stat it.
+	if cred := credentialCAKeyPath(); cred != "" {
+		keyPath = cred
+		log.Printf("DevID CA key from systemd credential")
+	}
 	if certPath == "" || keyPath == "" {
 		log.Printf("Warning: devid_ca_cert/devid_ca_key not set; skipping DevID routes")
 		return nil, nil

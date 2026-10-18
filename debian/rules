@@ -18,7 +18,7 @@ export GOMODCACHE := $(GO_WORKDIR)/mod
 VERSION := $(shell dpkg-parsechangelog -S Version)
 
 %:
-	dh $@
+	dh $@ --with installsysusers
 
 override_dh_auto_clean:
 	rm -rf bin
