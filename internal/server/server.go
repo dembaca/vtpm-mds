@@ -76,6 +76,7 @@ func New(cfg *config.Config) (*Server, error) {
 		handle("GET /latest/meta-data/public-ipv4", imds.HandlePublicIPv4)
 		handle("GET /latest/meta-data/local-ipv4", imds.HandleLocalIPv4)
 		handle("GET /latest/meta-data/placement/availability-zone", imds.HandleAvailabilityZone)
+		handle("GET /latest/meta-data/placement/region", imds.HandleRegion)
 		handle("GET /latest/meta-data/services/domain", imds.HandleDomain)
 		handle("GET /latest/meta-data/", imds.HandleMetaDataIndex)
 		handle("GET /latest/dynamic/instance-identity/document", imds.HandleInstanceIdentityDocument)
@@ -335,6 +336,7 @@ func (s *Server) RefreshVMConfigCache() error {
 
 	var (
 		vmConfigMap inventory.VMConfigMap
+		placement   inventory.Placement
 		err         error
 		source      string
 	)
@@ -343,10 +345,12 @@ func (s *Server) RefreshVMConfigCache() error {
 		source = s.cfg.MDS.InventoryPath
 		log.Printf("[DEBUG RefreshVMConfigCache] Loading YAML inventory from %s", source)
 		vmConfigMap, err = inventory.LoadYAML(s.cfg.MDS.InventoryPath)
+		placement = inventory.DefaultPlacement
 	} else {
 		source = "proxmox:/etc/pve"
 		log.Printf("[DEBUG RefreshVMConfigCache] Loading Proxmox VM configs")
 		vmConfigMap, err = proxmox.ParseVMConfigs("")
+		placement = proxmox.HostPlacement("")
 	}
 	if err != nil {
 		log.Printf("[DEBUG RefreshVMConfigCache] Failed to load VM configs from %s: %v", source, err)
@@ -354,6 +358,7 @@ func (s *Server) RefreshVMConfigCache() error {
 	}
 
 	vmConfigCache = vmConfigMap
+	inventory.SetHostPlacement(placement)
 
 	macCount := 0
 	for _, vmConfig := range vmConfigCache {
