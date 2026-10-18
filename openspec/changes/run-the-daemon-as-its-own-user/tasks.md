@@ -34,9 +34,19 @@ answered D-d.**
       ignored (2 tests fail), empty credential accepted (`empty credential`
       fails), log line removed (1 test fails). `go vet ./...` and `go test ./...`
       pass.
-- [ ] 2.2 Add `debian/vtpm-mds.sysusers` and `--with installsysusers`, and verify with `dpkg-deb -c`/`-I` that the sysusers file and its dependency are in the package, and `lintian --fail-on error,warning` passes
-- [ ] 2.3 Set `User=vtpm-mds`, `Group=vtpm-mds`, `SupplementaryGroups=www-data`, `StateDirectory=vtpm-mds` and `LoadCredential=` in the unit (drop `ReadWritePaths=`), update the unit comments and README.Debian (drop-in example with a reset line, restart after key rotation), and verify `systemd-analyze verify` and `--offline` security
-- [ ] 2.4 Run `go vet ./...`, `go test ./...` and `openspec validate --all --strict`, and verify all pass
+- [x] 2.2 Add `debian/vtpm-mds.sysusers` and `--with installsysusers`, and verify with `dpkg-deb -c`/`-I` that the sysusers file and its dependency are in the package, and `lintian --fail-on error,warning` passes
+      **Done, 2026-10-18:** `vtpm-mds_0.2.0+git20261018.493063dcb393_amd64.deb`
+      ships `/usr/lib/sysusers.d/vtpm-mds.conf`, `Depends:` carries `systemd |
+      systemd-standalone-sysusers | systemd-sysusers`, `postinst` runs
+      `systemd-sysusers vtpm-mds.conf` (added by `dh_installsysusers` 13.24.2), and
+      `lintian --fail-on error,warning` exits 0.
+- [x] 2.3 Set `User=vtpm-mds`, `Group=vtpm-mds`, `SupplementaryGroups=www-data`, `StateDirectory=vtpm-mds` and `LoadCredential=` in the unit (drop `ReadWritePaths=`), update the unit comments and README.Debian (drop-in example with a reset line, restart after key rotation), and verify `systemd-analyze verify` and `--offline` security
+      **Done, 2026-10-18:** unit and README.Debian changed as stated;
+      `systemd-analyze verify` reports nothing, `--offline=true` security **1.5 OK**
+      (1.9 as root).
+- [x] 2.4 Run `go vet ./...`, `go test ./...` and `openspec validate --all --strict`, and verify all pass
+      **Done, 2026-10-18:** `go vet ./...` clean, `go test ./...` passes, `openspec
+      validate --all --strict` 6 passed.
 
 ## 3. Verify on hogan
 
