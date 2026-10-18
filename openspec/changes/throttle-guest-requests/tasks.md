@@ -61,8 +61,9 @@ merged with it) before touching `server.go`.
       a limited GET past the defaults, and verify `429` with body
       `Too many requests` and `Retry-After`; from the same guest under
       budget, mint once and read `instance-id`; say which layout was used
-      **Done, 2026-10-18** (`426c680`): layout swtpm-localca + OVMF; token
-      31st→429; GET flood 121st limited request→429; `/health` 200.
+      **Done, 2026-10-18** (`426c680`, re-`76dc949`): layout swtpm-localca + OVMF;
+      token 31st→429; GET flood→429; `/health` 200; after D-l guest flood
+      again 30×200 then 429.
 - [x] 3.2 **Cloud lab** — open more than 16 concurrent connections from one
       guest (or a host netns peer) and verify further limited requests get
       `429` while `/health` stays `200`
@@ -72,12 +73,18 @@ merged with it) before touching `server.go`.
       `429` without a new certificate
       **Done:** 6 enroll POSTs under budget (400 auth); 7th→429. Full
       successful enroll under budget not re-run here (SPIRE path unchanged).
+- [x] 3.5 **Cloud lab** — while one peer floods, a second quiet peer still
+      receives `200` for token mint (and health); say how the second peer
+      was addressed
+      **Done, 2026-10-18** (`76dc949`): quiet peer = host `169.254.169.50`
+      on `br-imds` (`curl --interface`) while guest100 flooded; token PUT
+      **200** and `/health` **200**; `instance-id` **404** as unbound
+      (expected with `require_vm_identity`).
 - [x] 3.4 Say what was not verified: Hogan/VM 399 under the new package,
-      multi-guest fairness beyond two peers, and tuning the constants in
-      production
-      **Not verified:** Hogan/VM 399 package install; multi-guest fairness;
-      constant tuning in production; full SPIRE enroll under budget in this
-      run (only the enroll rate ceiling).
+      a second bound guest reading identity keys, and tuning the constants
+      in production
+      **Not verified:** Hogan/VM 399 package install; second *bound* guest
+      for identity keys; constant tuning; full SPIRE enroll under budget.
 
 ## 4. Archive
 
