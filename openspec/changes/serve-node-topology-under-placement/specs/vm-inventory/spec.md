@@ -37,7 +37,11 @@ form `vtpm_mds.io.<key>.<value>`, read from the live configuration's `tags` key.
 The tags SHALL be split at `;`, `,` and whitespace. The prefix `vtpm_mds.io.`
 SHALL be matched without regard to case. `<key>` SHALL be the characters after
 the prefix up to the next `.`, and `<value>` everything after that dot, dots
-included. A key SHALL be valid when it is 1 to 63 characters from `a-z`, `A-Z`,
+included. Keys SHALL be case-sensitive, only the exact key `zone` SHALL be the short form of
+`availability-zone`, and so `Zone` SHALL be a key of its own. The prefix
+`topology.vtpm_mds.io/` SHALL be matched as it is spelled, case included.
+
+A key SHALL be valid when it is 1 to 63 characters from `a-z`, `A-Z`,
 `0-9`, `_`, `-` and `+`, and a value SHALL be valid when it is 1 to 255
 characters from the same set and `.`. A key and a value SHALL be served exactly
 as their source spells them: the service SHALL NOT change their case. A VM with
@@ -326,6 +330,14 @@ the YAML inventory.
 - **WHEN** the inventory cache is loaded
 - **THEN** the host's topology has `rack` as `keller01` and no `row`, and the log
   names the ignored lines
+
+#### Scenario: Keys and the prefix are case-sensitive
+
+- **GIVEN** a description with `topology.vtpm_mds.io/Zone: x` and
+  `TOPOLOGY.VTPM_MDS.IO/rack: y`, on node `hogan`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's topology has `Zone` as `x`, no `rack`, and its
+  `availability-zone` is `hogan`
 
 #### Scenario: Keys beyond the limit are ignored
 

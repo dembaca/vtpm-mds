@@ -50,6 +50,11 @@ MAY be one that EC2 serves under `placement/` with another meaning, such as
 `Sys.Modify` on `/` can write, decides what the guests of that node read, and the
 service SHALL NOT keep a list of keys it refuses.
 
+`GET /latest/meta-data/placement` without the trailing slash SHALL be answered with
+a `301` redirect to `/latest/meta-data/placement/`, without a token, as the
+directory is a path of its own. Keys SHALL be case-sensitive: `Region` is not
+`region`.
+
 `GET /latest/meta-data/placement/` SHALL return the keys of the host's topology,
 one per line in ascending byte order, each terminated by a newline. It was answered
 by the metadata index before this requirement, as every unregistered path under
@@ -225,6 +230,17 @@ includes the `placement/` and `services/` prefixes that the index advertises.
 - **WHEN** a caller reads `placement/`
 - **THEN** the service responds `200` with the five lines `availability-zone`,
   `cluster`, `node`, `rack` and `region`, each terminated by a newline
+
+#### Scenario: The placement path without a slash redirects
+
+- **WHEN** a guest sends `GET /latest/meta-data/placement`
+- **THEN** the service responds `301` with `Location: /latest/meta-data/placement/`
+
+#### Scenario: Keys are case-sensitive
+
+- **GIVEN** a host whose topology has `region`
+- **WHEN** a caller reads `placement/Region`
+- **THEN** the service responds `404` with an empty body
 
 #### Scenario: An unbound caller reads the same topology
 

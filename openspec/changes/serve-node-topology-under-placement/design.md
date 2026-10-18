@@ -66,19 +66,28 @@ Taken from the coordinator's assignment: a key with neither line nor default,
   serve (`group-name`, `host-id` and `partition-number` among them): the maintainer's
   decision, and the trust is the administrator's. The index keeps listing
   `placement/` and the document keeps its fixed key set.
-- **D-f. The YAML backend declares no topology.** Its host topology stays zone
-  `proxmox` and region `local`, with no `node` and no `cluster`, so the lab can only
-  show the defaults and the `404`. A top-level `topology` mapping in the YAML
-  inventory would let the lab show arbitrary keys too; it is a small addition
-  (a mapping from key to value, same syntax, same rules) and is left out only
-  because the assignment does not name it. **Question for the maintainer:** add it
-  here, or leave the lab with defaults only?
-- **D-g. `placement/` lists the keys.** Without a listing a tool that walks the
-  tree, cloud-init for example, cannot find a key it does not know by name, and
-  the listing was already named a gap (`placement/` answers the metadata index).
-  It is one handler. It was not in the assignment: drop D-g and the proposal's
-  third item and nothing else changes. With it, an unknown `placement/<key>` is
-  `404` with an empty body, not the index.
+- **D-f. The YAML backend declares no topology** (the coordinator's
+  recommendation of 2026-10-18, taken unless the maintainer overrules). Its host
+  topology stays zone `proxmox` and region `local`, with no `node` and no
+  `cluster`, so the lab shows the defaults and the `404`, and unit tests cover the
+  reader. A top-level `topology` mapping would let the lab show arbitrary keys too;
+  it is a small addition left out.
+- **D-g. `placement/` lists the keys** (kept on the coordinator's recommendation:
+  the feature needs it). Without a listing a tool that walks the tree, cloud-init
+  for example, cannot find a key it does not know by name, and the listing was
+  already named a gap (`placement/` answers the metadata index). With it, an
+  unknown `placement/<key>` is `404` with an empty body, not the index, and
+  `placement` without a slash is a `301` to `placement/`.
+- **D-j. Case.** Keys are case-sensitive and only exactly `zone` is the short form
+  of `availability-zone`, so `Zone` is a key of its own and `placement/Zone`
+  serves it; the prefix `topology.vtpm_mds.io/` is matched as spelled, as the code
+  on `main` already does.
+- **D-k. The redirect is explicit.** `GET .../placement` is registered with a
+  handler that answers `301`. Go's `ServeMux` would redirect it by itself, but
+  with a status that depends on the Go version: the build used for this record
+  answers `307` for `/latest/meta-data` too, whereas the `instance-metadata` spec
+  says `301` for that path. This change does not touch the `meta-data` path; the
+  difference is reported to the coordinator.
 - **D-h. Order of the listing.** Ascending byte order, for a stable answer; EC2
   lists in its own fixed order, and nothing known depends on it.
 - **D-i. The identity document is unchanged.** It keeps exactly `availabilityZone`
