@@ -32,9 +32,11 @@ production readiness (points 1 and 4), for `agent-mac-vtpm-mds-3502f6`.
 - **D-a. `-debug` switches the `[DEBUG` lines, and only them.** Without it none is
   written; with it they are unchanged. The config dump stays as it is. There is no
   second level: the flag is on or off.
-- **D-b. The flag reaches the server as a value, not a global.** The server is told
-  at construction, so a test can start one with debug on and off. How is an
-  implementation note.
+- **D-b. The flag reaches the server through one switch.** `main` calls
+  `server.SetDebug` once, before the server is created. The lookup functions that
+  write most of the lines are package-level and run on a connection, so a value
+  threaded through them would be a refactor larger than this change; a single
+  atomic switch keeps it small and lets a test turn debug on and off.
 - **D-c. The access line.** `METHOD PATH STATUS DURATION PEER VM`, appended to the
   present order, so that a reader or a script that took the first four fields still
   does. `PEER` is the IP address of the connection, without the port (the port is
@@ -56,12 +58,24 @@ production readiness (points 1 and 4), for `agent-mac-vtpm-mds-3502f6`.
   change adds no line for an authentication failure. That belongs with the item
   that stops the error text from reaching the guest, and should decide what a
   refusal logs and what it tells the caller.
-- **D-h. The cache summary stops being debug output.** The line that ends a load
-  and says `N VMs, M MAC addresses` reports a start or a reload, which an operator
-  checks after every `systemctl reload`. It is written whatever the flag says, with
-  its `[DEBUG RefreshVMConfigCache]` prefix replaced by an ordinary one; the lines
-  that announce the load and its source stay debug. Without this the quiet journal
-  would not say whether a reload worked.
+- **D-h. Errors and the reload summary stop being debug output.** The
+  coordinator's rule, 2026-10-18: every line that reports an error or a refusal is
+  written without the flag and loses the `[DEBUG` marker. Going through the 22
+  `[DEBUG` lines of `server.go`, **four** change:
+
+  | Line (function) | Today | After |
+  |---|---|---|
+  | `Failed to load VM configs from …` (`RefreshVMConfigCache`) | debug | ordinary: a failed start or reload |
+  | `Failed to read /proc/net/arp` (`getMACFromARPFile`) | debug | ordinary: no caller can be bound |
+  | `Connection is not *vmConnection` (`connContext`) | debug | ordinary: it should not happen |
+  | `Cache refresh complete … N VMs, M MAC addresses` (`RefreshVMConfigCache`) | debug | ordinary: it reports the load, which an operator checks after every `systemctl reload` |
+
+  The other 18 are traces and stay debug: the start and the result of each lookup
+  (`Extracting VM config`, `Found MAC`, `Found in cache`, `Reading /proc/net/arp`,
+  `Parsing n lines`, `Loading … inventory`) and the misses (`No VM config found for
+  MAC` or `IP`, `No MAC address found`, `MAC not found in cache`). A miss is not an
+  error: the access line says `-` for the VM. The refusal of an identity path
+  (`Refusing …`) and the enrolment refusals carry no marker already.
 - **D-g. Where the line is written.** In `HandleFinish`, after `Finish` returns,
   using the certificate it returned: the handler has the VM ID and the fingerprint,
   and parsing the returned PEM gives the serial. `Finish` and the CA stay as they are.

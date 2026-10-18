@@ -13,7 +13,8 @@ line as a side effect of another log level or of any setting of the
 configuration file.
 
 Lines that report a start, a reload, a refusal, a failure or an enrolment, and the
-access line, are not debug output and SHALL be written either way.
+access line, are not debug output and SHALL be written either way, and SHALL NOT
+start with `[DEBUG`: a line that reports an error does not carry the debug marker.
 
 #### Scenario: A normal run writes no debug line
 
@@ -27,6 +28,13 @@ access line, are not debug output and SHALL be written either way.
 - **GIVEN** the service started with `-debug`
 - **WHEN** a guest sends a request
 - **THEN** the debug lines for its connection are written, as before
+
+#### Scenario: An error is written without the flag
+
+- **GIVEN** the service started without `-debug`
+- **WHEN** a start or a reload fails to load the VM configs
+- **THEN** a line naming the failure and its source is written, and it does not
+  start with `[DEBUG`
 
 #### Scenario: A reload writes no debug line without the flag
 
