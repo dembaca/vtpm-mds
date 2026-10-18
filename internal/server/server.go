@@ -219,9 +219,6 @@ func debugf(format string, args ...any) {
 	}
 }
 
-// connectionMap stores VMIDs per connection
-var connectionMap sync.Map
-
 // connContext stores VM config information in the request context
 func connContext(ctx context.Context, c net.Conn) context.Context {
 	if vmConn, ok := c.(*vmConnection); ok {
@@ -303,7 +300,6 @@ func (c *vmConnection) extractVMConfigByRouting() {
 				debugf("[DEBUG extractVMConfigByRouting] Found VM config: VMID=%s for MAC: %s", vmConfig.VMID, macAddr)
 				c.vmid = vmConfig.VMID
 				c.vmConfig = vmConfig
-				connectionMap.Store(c.TCPConn, vmConfig.VMID)
 				return
 			} else {
 				debugf("[DEBUG extractVMConfigByRouting] No VM config found for MAC: %s", macAddr)
@@ -315,18 +311,23 @@ func (c *vmConnection) extractVMConfigByRouting() {
 	}
 }
 
+// arpTablePath is the ARP table the caller's MAC is read from. It is a variable
+// only so that a test can supply a table of its own; a test that swaps it must
+// not run in parallel with another that reads it.
+var arpTablePath = "/proc/net/arp"
+
 // getMACFromARP reads the ARP table from /proc/net/arp to get MAC address for an IP
 func (c *vmConnection) getMACFromARP(ip string) string {
-	debugf("[DEBUG getMACFromARPFile] Reading /proc/net/arp for IP: %s", ip)
-	data, err := os.ReadFile("/proc/net/arp")
+	debugf("[DEBUG getMACFromARPFile] Reading %s for IP: %s", arpTablePath, ip)
+	data, err := os.ReadFile(arpTablePath)
 	if err != nil {
-		log.Printf("Failed to read /proc/net/arp: %v", err)
+		log.Printf("Failed to read %s: %v", arpTablePath, err)
 		return ""
 	}
 
 	// Parse tab-separated format: IP address | HW type | Flags | HW address | Mask | Device
 	lines := strings.Split(string(data), "\n")
-	debugf("[DEBUG getMACFromARPFile] Parsing %d lines from /proc/net/arp", len(lines))
+	debugf("[DEBUG getMACFromARPFile] Parsing %d lines from %s", len(lines), arpTablePath)
 	for _, line := range lines {
 		// Skip header line
 		if strings.HasPrefix(line, "IP address") {
@@ -342,7 +343,7 @@ func (c *vmConnection) getMACFromARP(ip string) string {
 			}
 		}
 	}
-	debugf("[DEBUG getMACFromARP] No MAC address found in /proc/net/arp for IP: %s", ip)
+	debugf("[DEBUG getMACFromARP] No MAC address found in %s for IP: %s", arpTablePath, ip)
 	return ""
 }
 
