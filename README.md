@@ -15,6 +15,7 @@ Binary: `vtpm-mds` (aliases: `qemu-mds`, `prox-mds`). Module path: `github.com/d
 | **TPM DevID enrollment** — LDevID certs + TPM2B blobs for SPIRE `tpm_devid` | implemented |
 | **Dual enroll auth** — MAC → inventory **and** TPM EK certificate header | implemented |
 | **Inventory backends** — YAML inventory (plain QEMU lab) or Proxmox `/etc/pve` | implemented |
+| **Instance tags and node topology** — Proxmox tags `vtpm_mds.io.<key>.<value>` under `tags/instance/`, zone and region from the node description | implemented |
 | **Host-anchored trust** — EK CA chain + optional DevID CA | implemented |
 | **TPM attestation** — verify VM identity using vTPM (swtpm) quotes | **removed** 2026-10-16: the endpoints affirmed without verifying |
 | **Short-lived identity documents (JWT/JWS)** | **removed** 2026-10-16: the published key set could not verify the token, and no verifier could reach it |

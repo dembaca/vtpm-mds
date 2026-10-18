@@ -184,24 +184,48 @@ byte-identical and SPIRE `1.14.0` still attests.
 
 Zone and region followed on 2026-10-18, from the per-VM metadata exploration
 (PR #33): `openspec/changes/archive/2026-10-18-serve-zone-and-region-per-vm/`.
-`placement/availability-zone` and the new `placement/region`, and the identity
-document, now resolve per caller: a Proxmox tag `mds.zone.<name>` /
-`mds.region.<name>` (YAML: `zone`, `region`), else
-`topology.kubernetes.io/zone|region` lines in this node's description (the
-same keys the RZ's node-label controller reads), else the node name and the
-cluster name. Names keep the case of their source. Two tags of one kind, an
-invalid name or a bad YAML value are logged and treated as absent. Proxmox
-rejects `-` in tags, so `_` is the separator in tag values. Verified on VM 399
-for every stage (no tags, tags, node description) and in the lab for YAML,
-upper case included. A tag edit is seen after a SIGHUP (`systemctl reload`).
+It added `placement/region` beside `placement/availability-zone` and resolved
+both per caller from `mds.zone.*`/`mds.region.*` tags, then the node description,
+then the node and cluster names. **Its per-VM half was replaced the same day**
+(next paragraph); what stays is the host fallback and names keeping the case of
+their source. Its claim that Proxmox rejects `-` in tags is unproven: the
+installed `PVE_TAG_RE` (pve-manager 9.2.3) allows `-`, and the rejection seen
+was probably a `;` inside one GUI entry.
+
+VM tags followed on 2026-10-18 as the second archive of the day:
+`openspec/changes/archive/2026-10-18-serve-vm-tags-as-instance-metadata/`
+(PR #46). A Proxmox tag `vtpm_mds.io.<key>.<value>` (YAML: a `tags` map) is
+served under `/latest/meta-data/tags/instance/<key>`; `tags/` is listed only for
+a VM that has a tag, and every tags path otherwise answers `404` with an empty
+body. Tags never enter the identity document or a certificate (the maintainer's
+decision). **Topology is per node, not per VM:** `placement/availability-zone`
+and `placement/region` come from `topology.vtpm_mds.io/zone|region` lines in
+this node's description, else the node name and the `cluster_name`; two lines of
+one kind declare nothing and are logged. `topology.kubernetes.io/*` lines and
+the former `mds.zone.*`/`mds.region.*` tags and YAML `zone`/`region` are ignored,
+the latter with one log line per load. Verified on VM 399 against the installed
+`0.2.0+git20261018.eaed1d1b54b6` (tags, no tags, one and two zone lines, region)
+and in the lab for the YAML map. **In the data centre keep both prefixes in a
+node description:** the node-label controller and an Ansible labelling role
+still read `topology.kubernetes.io/`, and the role fails when those lines are
+missing. Whether that consumer moves to this service is the maintainer's
+decision and work outside this repository (see the archived design's "Open
+question").
+
+Next, recorded by the maintainer and not yet written:
+`serve-node-topology-under-placement` — any `topology.vtpm_mds.io/<key>` line
+served as `placement/<key>`, `zone` as `availability-zone`, node and cluster as
+host-derived defaults, a key without a value `404` and unlisted.
 
 Still open from #33, each needing a go: `public-ipv4` and any value carrier
-(D2), D9 (trust of names in certificates); D8 is decided (the LDevID CN stays
-the VM ID, a readable SPIFFE ID comes from a SPIRE node alias on
-`tpm_devid:subject:cn:<vmid>`). Found on the way, each its own change if
-wanted: `GET …/meta-data/placement/` answers the `meta-data/` index instead of
-listing the placement keys, and one typo in the YAML inventory empties the
-whole inventory while the service reports healthy.
+(D2, later perhaps as a tag). D8 is decided (the LDevID CN stays the VM ID, a
+readable SPIFFE ID comes from a SPIRE node alias on
+`tpm_devid:subject:cn:<vmid>`), and D9 was researched (only `Administrator` has
+`Sys.Modify`, which guards the node description; nothing from tags goes into a
+certificate). Found on the way, each its own change if wanted: `GET
+…/meta-data/placement/` answers the `meta-data/` index instead of listing the
+placement keys, and one typo in the YAML inventory empties the whole inventory
+while the service reports healthy.
 
 Those first two both carry a `MODIFIED` block on `Refuse An Instance Identity
 To Callers With No VM Record`, so the signature change's block **was rebuilt
