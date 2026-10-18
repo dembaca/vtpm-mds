@@ -103,10 +103,21 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
       index of `meta-data/`, not a listing of `availability-zone` and `region`, as
       it did before: the index handler answers unknown paths. AWS lists the keys
       there. A possible follow-up record, not part of this change.
-- [ ] 3.3 **Maintainer's go needed** — add `mds.zone.<name>` and `mds.region.<name>` tags to VM 399, send SIGHUP, and verify both keys and the document show them; then remove the tags
+- [x] 3.3 **Maintainer's go needed** — add `mds.zone.<name>` and `mds.region.<name>` tags to VM 399, send SIGHUP, and verify both keys and the document show them; then remove the tags
       Changes a shared resource, VM 399's config, so it needs the maintainer's go
       in the session of whoever runs it. Without it the tag path is verified on
       constructed trees only; say so when archiving.
+      **Done, 2026-10-17, hogan (coordinator), against `7918274`:** passed, with
+      the maintainer's go. VM 399 carried `tags: mds.region.test_r;mds.zone.test_a`
+      (set by the maintainer; Proxmox sorts them), the service reloaded with
+      `systemctl reload` (SIGHUP, `3 VMs, 5 MAC addresses`). From VM 399:
+      `placement/availability-zone` `test_a`, `placement/region` `test_r`,
+      `instance-id` `i-399`, and the document `availabilityZone='test_a'
+      region='test_r'` agreed. Before, the same VM read the host values, so the
+      tag wins over the host placement, and `_` is kept.
+      **Found:** Proxmox rejects `-` in a tag (`tags: invalid format - invalid
+      characters in tag`), so the first attempt with `test-a` failed. D-a assumed
+      otherwise; it is corrected there. The maintainer removes the tags afterwards.
 - [x] 3.4 **Cloud lab** — declare `zone` and `region` for one entry of the lab inventory, and verify a guest reads them through both keys and the document, and that an entry declaring neither reads `proxmox` and `local`
       Say which layout was used (`swtpm-localca`, `/usr/share/OVMF/`).
       **Done, 2026-10-17, `agent-cursor-vtpm-22e0`, against `99cc9f4`:** passed.

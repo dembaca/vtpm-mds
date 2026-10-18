@@ -59,9 +59,12 @@ nodes):
 These fill gaps the sheet left; none changes M1–M5.
 
 - **D-a. Name syntax.** `<name>` is 1 to 63 characters from `a-z`, `A-Z`, `0-9`,
-  `_`, `-`, `+`, `.`, starting with a letter or digit: Proxmox's tag characters
-  (its tag format ignores case), so every valid tag can carry it, and valid in a
-  URL path and a JSON string. Capitals were added on the maintainer's decision
+  `_`, `-`, `+`, `.`, starting with a letter or digit: a superset of what a
+  Proxmox tag can carry, and valid in a URL path and a JSON string. The first
+  draft took `-`, `+` and `.` to be Proxmox tag characters; task 3.3 showed that
+  Proxmox rejects `-` in a tag (`invalid characters in tag`), so a VM tag can
+  carry `_` but not `-`. The syntax stays wide because the YAML inventory and
+  node descriptions are not bound by Proxmox's tag format. Capitals were added on the maintainer's decision
   below; the first draft allowed lowercase only.
 - **D-b. Splitting `tags`.** At `;`, `,` and whitespace. Proxmox writes `;`; the
   lenient split costs nothing and avoids a silent miss on a hand edit.
