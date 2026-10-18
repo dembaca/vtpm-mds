@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-18
 
-None. Five were archived on 2026-10-17 and four on 2026-10-18; the first two in this order:
+None. Five were archived on 2026-10-17 and five on 2026-10-18; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -241,6 +241,28 @@ forge a second line, the peer from the connection and never from
 hogan against `0.2.0+git20261018.57cc6cb3c8ac` (journal before and after, a
 `-debug` run, one enrolment of VM 399 into a scratch directory with SPIRE's
 material untouched) and in the lab.
+
+The unit hardening followed as the fifth archive of 2026-10-18:
+`openspec/changes/archive/2026-10-18-harden-the-service-unit/` (PR #51). The
+daemon still starts as root but keeps only `CAP_NET_BIND_SERVICE`, so it reads
+only what root owns (the CA key is `root:root 0600`, `/etc/pve` is
+`root:www-data 0640`); the file system is read-only except `/var/lib/vtpm-mds`,
+system calls are `@system-service` minus `@privileged @resources` and fail with
+`EPERM`, sockets are `AF_INET`/`AF_INET6`/`AF_UNIX`, and traffic is limited to
+`169.254.0.0/16` and loopback. The unit is `PartOf=pve-cluster.service`, so a
+pmxcfs restart rebuilds the read-only view of `/etc/pve`. `systemd-analyze
+security` went from 9.0 to **1.9** on the installed unit (systemd 257). **A CA
+key the daemon cannot read does not stop the start**; it logs `DevID enrollment
+disabled` — check for that line after any install. Verified on hogan against
+`0.2.0+git20261018.3f5c7fd8613c`, including an enrolment of VM 399 and a
+`pve-cluster` restart by the maintainer. Next: `run-the-daemon-as-its-own-user`
+(the maintainer said yes): `User=vtpm-mds`, `SupplementaryGroups=www-data`, the
+CA key through `LoadCredential=`, no permission change on the host.
+
+**Pre-review rule (maintainer, 2026-10-18):** before the coordinator calls a PR
+ready to merge, an agent on a **stronger** model than the author reviews it
+read-only (Sonnet → Opus, Opus → Fable, Cursor/Composer → Fable); findings are
+fixed or explicitly deferred by the maintainer.
 
 The Kubernetes consumer will become a small per-node DaemonSet that reads
 `placement/` from this service and labels its own node (maintainer, 2026-10-18),
