@@ -94,3 +94,9 @@ merged with it) before touching `server.go`.
       `AGENTS.md` or `README.md` only if the Impact of a packaging/docs
       touch is already accepted, and verify
       `openspec validate --all --strict` is still clean
+
+## 5. Pre-review fixes (Fable, 2026-10-18)
+
+- [x] 5.1 Per-peer token index (D-m), ConnState close of further connections (D-i),
+      `GET`-only `/health` (D-e), `Retry-After: 60` + `Connection: close` (D-g);
+      verify with `go test ./imds ./internal/server` and `openspec validate --all --strict`

@@ -86,19 +86,20 @@ after Mac's log-change merge.
   and enroll. Token PUT and enroll additionally count toward their own
   buckets. A peer may therefore trip the general limit without tripping
   the token limit, and vice versa.
-- **D-e. `/health` is exempt.** Registered outside the wrapped mux (or
-  short-circuited first in the middleware) so probes and Hogan's readiness
-  work do not compete with a flooding guest. Unmatched routes stay inside
+- **D-e. `GET /health` is exempt.** Only `GET /health` is short-circuited in
+  the middleware (not `POST`/`HEAD`/… on that path), so probes stay free
+  without opening an unlimited write surface. Unmatched routes stay inside
   the wrapper so a flood of unknown paths is still limited.
 - **D-f. No config keys in this change.** Limits are package constants.
   Exposing them under `mds.*` is a small follow-up if operations need to
   tune without a rebuild. Alternative: YAML now — rejected to keep the
   file set and the ACK surface small.
 - **D-g. `429` shape.** Status `429`, `Content-Type: text/plain`, body
-  `Too many requests` with a trailing newline, header
-  `Retry-After: 1` (seconds). Same for every limit. No JSON, no which-limit
-  detail to the guest (that belongs in the log). Distinct from `401`
-  (token) and `404` (unbound identity).
+  `Too many requests` with a trailing newline, headers
+  `Retry-After: 60` (the limit window in seconds) and `Connection: close`.
+  Same for every limit. No JSON, no which-limit detail to the guest (that
+  belongs in the log). Distinct from `401` (token) and `404` (unbound
+  identity).
 - **D-h. Token store quota (coordinator, 2026-10-18, overrules the first
   draft).** A **global** hard cap that answers `429` to every VM when full
   is itself a DoS, and without bridge MAC-binding a guest can mint under
@@ -116,12 +117,15 @@ after Mac's log-change merge.
   3. The store **remembers the minting peer** for quota/eviction only.
      `ValidateToken` stays peer-agnostic: a token still authenticates any
      caller (unchanged "Require A Valid Session Token" rule).
-- **D-i. Concurrent connections.** Track in `http.Server.ConnState` for
-  `StateNew` / `StateClosed` / `StateHijacked` per peer IP of the
-  `net.Conn`. When at the cap, the middleware rejects new HTTP requests
-  on that peer with `429` (the TCP accept still happens; Go does not give
-  a clean pre-accept filter without a custom listener). Alternative:
-  close the conn from `ConnState` — harsher and harder to test; rejected.
+- **D-i. Concurrent connections (revised after Fable pre-review).** Track
+  in `http.Server.ConnState` for `StateNew` / `StateClosed` /
+  `StateHijacked` per peer IP. On `StateNew`, if the peer already holds
+  16 counted connections, **close that connection immediately** and do
+  not increment the count — so the first 16 keep serving. A rejected
+  connection is remembered until `StateClosed` so the close does not
+  free a real slot. The TCP accept still happens (Go has no pre-accept
+  filter without a custom listener); the excess conn does not stay open
+  for Keep-Alive or ARP work.
 - **D-j. Logging.** One log line when a peer first trips a limit in a
   window (`rate limit: peer=%s kind=%s`), not one line per refused
   request. Exact format aligns with Mac's access-log change after rebase.
@@ -134,6 +138,13 @@ after Mac's log-change merge.
   minute (or on access), drop a peer entry when all three time lists are
   empty after prune, `conns == 0`, and every `logged` timestamp is older
   than the limit window. Same class of leak as `connectionMap` (#52).
+- **D-m. Per-peer token index (Fable pre-review, 2026-10-18).**
+  `GenerateToken` MUST NOT walk the whole token map under the write lock.
+  Keep `byPeer map[string][]*Token` ordered by `CreatedAt`; mint, expiry
+  discard and eviction for a peer touch only that slice. `liveCount`
+  drives the emergency brake. The minute ticker may still sweep all peers.
+  Log the emergency brake once per engagement (while at the cap), not once
+  per refused mint.
 
 ## Risks / Trade-offs
 

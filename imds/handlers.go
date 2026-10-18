@@ -100,7 +100,7 @@ func HandleCreateToken(s *TokenStore) http.HandlerFunc {
 		if err != nil {
 			if errors.Is(err, ErrTokenStoreEmergency) {
 				w.Header().Set("Content-Type", "text/plain")
-				w.Header().Set("Retry-After", "1")
+				w.Header().Set("Retry-After", "60")
 				w.WriteHeader(http.StatusTooManyRequests)
 				fmt.Fprint(w, "Too many requests\n")
 				return

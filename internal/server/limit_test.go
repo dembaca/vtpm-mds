@@ -3,15 +3,16 @@ package server
 import (
 	"io"
 	"net"
-	"strconv"
-	"time"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
-func TestGuestLimitExemptsHealth(t *testing.T) {
+func TestGuestLimitExemptsHealthGETOnly(t *testing.T) {
 	l := newGuestLimiter()
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -19,7 +20,6 @@ func TestGuestLimitExemptsHealth(t *testing.T) {
 	})
 	h := guestLimitMiddleware(l, inner)
 
-	// Exhaust request budget.
 	for i := 0; i < maxRequestsPerPeer; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/latest/meta-data/", nil)
 		req.RemoteAddr = "10.0.0.5:1234"
@@ -39,8 +39,11 @@ func TestGuestLimitExemptsHealth(t *testing.T) {
 	if body := rec.Body.String(); body != "Too many requests\n" {
 		t.Fatalf("body %q", body)
 	}
-	if rec.Header().Get("Retry-After") != "1" {
+	if rec.Header().Get("Retry-After") != retryAfterSeconds {
 		t.Fatalf("Retry-After %q", rec.Header().Get("Retry-After"))
+	}
+	if rec.Header().Get("Connection") != "close" {
+		t.Fatalf("Connection %q", rec.Header().Get("Connection"))
 	}
 
 	health := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -48,7 +51,15 @@ func TestGuestLimitExemptsHealth(t *testing.T) {
 	hrec := httptest.NewRecorder()
 	h.ServeHTTP(hrec, health)
 	if hrec.Code != http.StatusOK {
-		t.Fatalf("health want 200, got %d", hrec.Code)
+		t.Fatalf("GET /health want 200, got %d", hrec.Code)
+	}
+
+	postHealth := httptest.NewRequest(http.MethodPost, "/health", nil)
+	postHealth.RemoteAddr = "10.0.0.5:1234"
+	prec := httptest.NewRecorder()
+	h.ServeHTTP(prec, postHealth)
+	if prec.Code != http.StatusTooManyRequests {
+		t.Fatalf("POST /health want 429 when flooded, got %d", prec.Code)
 	}
 }
 
@@ -76,7 +87,6 @@ func TestGuestLimitTokenPUTBudget(t *testing.T) {
 		t.Fatalf("want 429, got %d body %q", rec.Code, rec.Body.String())
 	}
 
-	// Other peer unaffected.
 	other := httptest.NewRequest(http.MethodPut, "/latest/api/token", nil)
 	other.RemoteAddr = "10.0.0.9:9"
 	orec := httptest.NewRecorder()
@@ -86,47 +96,74 @@ func TestGuestLimitTokenPUTBudget(t *testing.T) {
 	}
 }
 
-func TestGuestLimitConnCap(t *testing.T) {
+func TestGuestLimitConnCapClosesFurtherConnection(t *testing.T) {
 	l := newGuestLimiter()
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	h := guestLimitMiddleware(l, inner)
 	peer := "198.51.100.9:1"
-	// Simulate maxConnsPerPeer+1 accepted connections.
-	for i := 0; i < maxConnsPerPeer+1; i++ {
-		l.trackConnState(&stubConn{addr: peer}, http.StateNew)
+
+	conns := make([]*stubConn, 0, maxConnsPerPeer)
+	for i := 0; i < maxConnsPerPeer; i++ {
+		c := &stubConn{addr: peer}
+		conns = append(conns, c)
+		l.trackConnState(c, http.StateNew)
 	}
+	l.mu.Lock()
+	n := l.peer(peerKeyFromAddr(peer)).conns
+	l.mu.Unlock()
+	if n != maxConnsPerPeer {
+		t.Fatalf("want %d counted conns, got %d", maxConnsPerPeer, n)
+	}
+
 	req := httptest.NewRequest(http.MethodGet, "/latest/meta-data/", nil)
 	req.RemoteAddr = peer
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("want 429 over conn cap, got %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200 at exactly %d conns, got %d", maxConnsPerPeer, rec.Code)
 	}
-	// Close one; under cap again for HTTP (still need request budget).
-	l.trackConnState(&stubConn{addr: peer}, http.StateClosed)
-	// New peer for a clean request budget check of conn alone:
-	l2 := newGuestLimiter()
-	h2 := guestLimitMiddleware(l2, inner)
-	for i := 0; i < maxConnsPerPeer; i++ {
-		l2.trackConnState(&stubConn{addr: peer}, http.StateNew)
+
+	over := &stubConn{addr: peer}
+	l.trackConnState(over, http.StateNew)
+	if atomic.LoadInt32(&over.closed) != 1 {
+		t.Fatal("17th connection should be closed at StateNew")
 	}
-	req2 := httptest.NewRequest(http.MethodGet, "/latest/meta-data/", nil)
-	req2.RemoteAddr = peer
-	rec2 := httptest.NewRecorder()
-	h2.ServeHTTP(rec2, req2)
-	if rec2.Code != http.StatusOK {
-		t.Fatalf("want 200 at exactly %d conns, got %d", maxConnsPerPeer, rec2.Code)
+	l.mu.Lock()
+	n = l.peer(peerKeyFromAddr(peer)).conns
+	l.mu.Unlock()
+	if n != maxConnsPerPeer {
+		t.Fatalf("over-cap conn must not increment count; got %d", n)
+	}
+
+	l.trackConnState(over, http.StateClosed)
+	l.mu.Lock()
+	n = l.peer(peerKeyFromAddr(peer)).conns
+	l.mu.Unlock()
+	if n != maxConnsPerPeer {
+		t.Fatalf("closing rejected conn changed count to %d", n)
+	}
+
+	l.trackConnState(conns[0], http.StateClosed)
+	next := &stubConn{addr: peer}
+	l.trackConnState(next, http.StateNew)
+	if atomic.LoadInt32(&next.closed) != 0 {
+		t.Fatal("connection under cap should not be closed")
 	}
 }
 
 type stubConn struct {
 	net.Conn
-	addr string
+	addr   string
+	closed int32
 }
 
 func (c *stubConn) RemoteAddr() net.Addr { return stubAddr(c.addr) }
+func (c *stubConn) Close() error {
+	atomic.StoreInt32(&c.closed, 1)
+	return nil
+}
 
 type stubAddr string
 
@@ -148,6 +185,26 @@ func TestScrubIdlePeersRemovesEmptyEntries(t *testing.T) {
 	l.scrubIdlePeers(now.Add(limitWindow + time.Second))
 	if l.peerCount() != 0 {
 		t.Fatalf("want 0 peers after scrub, got %d", l.peerCount())
+	}
+}
+
+func TestScrubKeepsPeerWithOpenConnection(t *testing.T) {
+	l := newGuestLimiter()
+	now := time.Now()
+	peer := "203.0.113.200"
+	if !l.allowRequest(peer, now) {
+		t.Fatal("seed")
+	}
+	c := &stubConn{addr: peer + ":1"}
+	l.trackConnState(c, http.StateNew)
+	l.scrubIdlePeers(now.Add(limitWindow + time.Second))
+	if l.peerCount() != 1 {
+		t.Fatalf("open connection must keep peer; got %d", l.peerCount())
+	}
+	l.trackConnState(c, http.StateClosed)
+	l.scrubIdlePeers(now.Add(2*limitWindow + time.Second))
+	if l.peerCount() != 0 {
+		t.Fatalf("want 0 after close+scrub, got %d", l.peerCount())
 	}
 }
 

@@ -14,11 +14,12 @@ import (
 
 // Guest throttle defaults (throttle-guest-requests D-c).
 const (
-	limitWindow          = 60 * time.Second
-	maxTokenPUTsPerPeer  = 30
-	maxRequestsPerPeer   = 120
-	maxConnsPerPeer      = 16
-	maxEnrollPerPeer     = 6
+	limitWindow         = 60 * time.Second
+	maxTokenPUTsPerPeer = 30
+	maxRequestsPerPeer  = 120
+	maxConnsPerPeer     = 16
+	maxEnrollPerPeer    = 6
+	retryAfterSeconds   = "60"
 )
 
 type limitKind string
@@ -32,8 +33,9 @@ const (
 
 // guestLimiter tracks per-peer rate and connection budgets.
 type guestLimiter struct {
-	mu    sync.Mutex
-	peers map[string]*peerBudget
+	mu      sync.Mutex
+	peers   map[string]*peerBudget
+	overCap map[net.Conn]struct{} // StateNew beyond cap; Closed must not decrement
 }
 
 type peerBudget struct {
@@ -45,7 +47,10 @@ type peerBudget struct {
 }
 
 func newGuestLimiter() *guestLimiter {
-	l := &guestLimiter{peers: make(map[string]*peerBudget)}
+	l := &guestLimiter{
+		peers:   make(map[string]*peerBudget),
+		overCap: make(map[net.Conn]struct{}),
+	}
 	go l.scrubLoop()
 	return l
 }
@@ -172,60 +177,61 @@ func (l *guestLimiter) allowEnroll(peer string, now time.Time) bool {
 	return true
 }
 
-func (l *guestLimiter) underConnCap(peer string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	p := l.peer(peer)
-	// ConnState has already counted this connection as StateNew. More than
-	// maxConnsPerPeer means this request is on a connection beyond the cap.
-	if p.conns > maxConnsPerPeer {
-		l.trip(peer, limitKindConn)
-		return false
-	}
-	return true
-}
-
-// trackConnState updates concurrent-connection counts for the peer.
+// trackConnState updates concurrent-connection counts for the peer (D-i).
+// A connection beyond the cap is closed at StateNew and never counted, so the
+// first maxConnsPerPeer connections keep serving.
 func (l *guestLimiter) trackConnState(c net.Conn, state http.ConnState) {
 	peer := peerKeyFromAddr(c.RemoteAddr().String())
+	var closeOver net.Conn
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	p := l.peer(peer)
 	switch state {
 	case http.StateNew:
-		p.conns++
+		if p.conns >= maxConnsPerPeer {
+			l.trip(peer, limitKindConn)
+			l.overCap[c] = struct{}{}
+			closeOver = c
+		} else {
+			p.conns++
+		}
 	case http.StateClosed, http.StateHijacked:
+		if _, ok := l.overCap[c]; ok {
+			delete(l.overCap, c)
+			break
+		}
 		if p.conns > 0 {
 			p.conns--
 		}
+	}
+	l.mu.Unlock()
+	if closeOver != nil {
+		_ = closeOver.Close()
 	}
 }
 
 func writeTooManyRequests(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Set("Retry-After", "1")
+	w.Header().Set("Retry-After", retryAfterSeconds)
+	w.Header().Set("Connection", "close")
 	w.WriteHeader(http.StatusTooManyRequests)
 	fmt.Fprint(w, "Too many requests\n")
 }
+
 
 func isEnrollPath(path string) bool {
 	return strings.HasPrefix(path, "/latest/devid/enroll/")
 }
 
-// guestLimitMiddleware applies per-peer budgets. GET /health is exempt.
+// guestLimitMiddleware applies per-peer budgets. GET /health is exempt (D-e).
 func guestLimitMiddleware(l *guestLimiter, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
+		if r.Method == http.MethodGet && r.URL.Path == "/health" {
 			next.ServeHTTP(w, r)
 			return
 		}
 		peer := peerKeyFromAddr(r.RemoteAddr)
 		now := time.Now()
 
-		if !l.underConnCap(peer) {
-			writeTooManyRequests(w)
-			return
-		}
 		if !l.allowRequest(peer, now) {
 			writeTooManyRequests(w)
 			return

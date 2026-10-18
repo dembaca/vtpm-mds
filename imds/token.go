@@ -31,12 +31,20 @@ type Token struct {
 	Peer      string // minting peer, for quota/eviction only
 }
 
-// TokenStore manages IMDSv2 tokens
+// TokenStore manages IMDSv2 tokens.
+//
+// Live tokens are indexed by value and also per minting peer (D-m): mint,
+// per-peer expiry and eviction touch only that peer's list under the write
+// lock. ValidateToken is a map lookup. The minute ticker still sweeps every
+// peer for expiry; the global emergency brake uses liveCount.
 type TokenStore struct {
-	mu       sync.RWMutex
-	tokens   map[string]*Token
-	tokenTTL time.Duration
-	cleanup  *time.Ticker
+	mu             sync.RWMutex
+	tokens         map[string]*Token
+	byPeer         map[string][]*Token // CreatedAt ascending
+	liveCount      int
+	emergencyBrake bool // true while at the global cap; one log per engagement
+	tokenTTL       time.Duration
+	cleanup        *time.Ticker
 }
 
 // NewTokenStore creates a new token store. cfg.MDS.TokenTTL is assumed to
@@ -48,6 +56,7 @@ func NewTokenStore(cfg *config.Config) *TokenStore {
 
 	store := &TokenStore{
 		tokens:   make(map[string]*Token),
+		byPeer:   make(map[string][]*Token),
 		tokenTTL: ttl,
 		cleanup:  time.NewTicker(1 * time.Minute),
 	}
@@ -61,6 +70,11 @@ func NewTokenStore(cfg *config.Config) *TokenStore {
 // caller's IP for quota only; validation stays peer-agnostic. An empty peer is
 // stored as "unknown".
 func (ts *TokenStore) GenerateToken(peer string) (*Token, error) {
+	return ts.generateTokenAt(peer, time.Now())
+}
+
+// generateTokenAt is GenerateToken with an injectable clock (tests).
+func (ts *TokenStore) generateTokenAt(peer string, now time.Time) (*Token, error) {
 	if peer == "" {
 		peer = "unknown"
 	}
@@ -71,7 +85,6 @@ func (ts *TokenStore) GenerateToken(peer string) (*Token, error) {
 	}
 
 	tokenValue := base64.StdEncoding.EncodeToString(b)
-	now := time.Now()
 	token := &Token{
 		Token:     tokenValue,
 		ExpiresAt: now.Add(ts.tokenTTL),
@@ -82,54 +95,73 @@ func (ts *TokenStore) GenerateToken(peer string) (*Token, error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
-	ts.discardExpiredLocked(now)
+	ts.prunePeerExpiredLocked(peer, now)
 	ts.evictOldestOfPeerLocked(peer, MaxLiveTokensPerPeer-1)
 
-	if len(ts.tokens) >= GlobalTokenEmergencyCap {
-		log.Printf("token store emergency brake: peer=%s size=%d cap=%d", peer, len(ts.tokens), GlobalTokenEmergencyCap)
+	if ts.liveCount >= GlobalTokenEmergencyCap {
+		if !ts.emergencyBrake {
+			log.Printf("token store emergency brake: peer=%s size=%d cap=%d", peer, ts.liveCount, GlobalTokenEmergencyCap)
+			ts.emergencyBrake = true
+		}
 		return nil, ErrTokenStoreEmergency
 	}
+	ts.emergencyBrake = false
 
 	ts.tokens[token.Token] = token
+	ts.byPeer[peer] = append(ts.byPeer[peer], token)
+	ts.liveCount++
 	return token, nil
 }
 
-// discardExpiredLocked removes expired tokens. Caller holds ts.mu.
-func (ts *TokenStore) discardExpiredLocked(now time.Time) {
-	for k, v := range ts.tokens {
-		if now.After(v.ExpiresAt) {
-			delete(ts.tokens, k)
-		}
+// prunePeerExpiredLocked removes expired tokens of peer only. Caller holds ts.mu.
+func (ts *TokenStore) prunePeerExpiredLocked(peer string, now time.Time) {
+	list := ts.byPeer[peer]
+	if len(list) == 0 {
+		return
 	}
+	n := 0
+	for _, tok := range list {
+		if now.After(tok.ExpiresAt) {
+			delete(ts.tokens, tok.Token)
+			ts.liveCount--
+			continue
+		}
+		list[n] = tok
+		n++
+	}
+	if n == 0 {
+		delete(ts.byPeer, peer)
+		return
+	}
+	ts.byPeer[peer] = list[:n]
 }
 
 // evictOldestOfPeerLocked deletes the oldest live tokens of peer until that
-// peer holds at most keep live tokens. Other peers are untouched.
+// peer holds at most keep. Other peers are untouched. Caller holds ts.mu.
+// byPeer[peer] is kept in CreatedAt ascending order.
 func (ts *TokenStore) evictOldestOfPeerLocked(peer string, keep int) {
 	if keep < 0 {
 		keep = 0
 	}
-	var mine []*Token
-	for _, v := range ts.tokens {
-		if v.Peer == peer {
-			mine = append(mine, v)
-		}
+	list := ts.byPeer[peer]
+	for len(list) > keep {
+		oldest := list[0]
+		delete(ts.tokens, oldest.Token)
+		ts.liveCount--
+		list = list[1:]
 	}
-	if len(mine) <= keep {
+	if len(list) == 0 {
+		delete(ts.byPeer, peer)
 		return
 	}
-	// Sort by CreatedAt ascending (oldest first) without importing sort for
-	// a tiny n: insertion of oldest picks.
-	for len(mine) > keep {
-		oldest := 0
-		for i := 1; i < len(mine); i++ {
-			if mine[i].CreatedAt.Before(mine[oldest].CreatedAt) {
-				oldest = i
-			}
-		}
-		delete(ts.tokens, mine[oldest].Token)
-		mine[oldest] = mine[len(mine)-1]
-		mine = mine[:len(mine)-1]
+	ts.byPeer[peer] = list
+}
+
+// discardExpiredLocked removes expired tokens across every peer (ticker).
+// Caller holds ts.mu.
+func (ts *TokenStore) discardExpiredLocked(now time.Time) {
+	for peer := range ts.byPeer {
+		ts.prunePeerExpiredLocked(peer, now)
 	}
 }
 
@@ -155,21 +187,15 @@ func (ts *TokenStore) LiveTokenCount() int {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.discardExpiredLocked(time.Now())
-	return len(ts.tokens)
+	return ts.liveCount
 }
 
 // LiveTokenCountForPeer returns unexpired tokens minted by peer (tests).
 func (ts *TokenStore) LiveTokenCountForPeer(peer string) int {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	now := time.Now()
-	n := 0
-	for _, v := range ts.tokens {
-		if v.Peer == peer && !now.After(v.ExpiresAt) {
-			n++
-		}
-	}
-	return n
+	ts.prunePeerExpiredLocked(peer, time.Now())
+	return len(ts.byPeer[peer])
 }
 
 // cleanupExpired removes expired tokens
@@ -177,6 +203,9 @@ func (ts *TokenStore) cleanupExpired() {
 	for range ts.cleanup.C {
 		ts.mu.Lock()
 		ts.discardExpiredLocked(time.Now())
+		if ts.liveCount < GlobalTokenEmergencyCap {
+			ts.emergencyBrake = false
+		}
 		ts.mu.Unlock()
 	}
 }
