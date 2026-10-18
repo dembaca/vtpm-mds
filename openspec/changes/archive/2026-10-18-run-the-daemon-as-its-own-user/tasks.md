@@ -85,4 +85,6 @@ answered D-d.**
 
 ## 4. Archive
 
-- [ ] 4.1 Archive with `openspec archive`, update `AGENTS.md`, and verify `openspec validate --all --strict` is still clean
+- [x] 4.1 Archive with `openspec archive`, update `AGENTS.md`, and verify `openspec validate --all --strict` is still clean
+      **Done, 2026-10-18,** by the coordinator from `main` at `18dd13f`, after #55
+      was merged. `AGENTS.md` updated.

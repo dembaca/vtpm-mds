@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-18
 
-None. Five were archived on 2026-10-17 and five on 2026-10-18; the first two in this order:
+None. Five were archived on 2026-10-17 and six on 2026-10-18; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -255,9 +255,23 @@ security` went from 9.0 to **1.9** on the installed unit (systemd 257). **A CA
 key the daemon cannot read does not stop the start**; it logs `DevID enrollment
 disabled` — check for that line after any install. Verified on hogan against
 `0.2.0+git20261018.3f5c7fd8613c`, including an enrolment of VM 399 and a
-`pve-cluster` restart by the maintainer. Next: `run-the-daemon-as-its-own-user`
-(the maintainer said yes): `User=vtpm-mds`, `SupplementaryGroups=www-data`, the
-CA key through `LoadCredential=`, no permission change on the host.
+`pve-cluster` restart by the maintainer.
+
+The daemon's own user followed as the sixth archive of 2026-10-18:
+`openspec/changes/archive/2026-10-18-run-the-daemon-as-its-own-user/` (PR #55).
+It runs as the system user `vtpm-mds` (from `systemd-sysusers`) with the extra
+group `www-data`, which reads `/etc/pve` as Proxmox ships it but not
+`/etc/pve/priv`; the CA key (`root:root 0600`) is read by systemd and handed over
+as the credential `devid_ca.key`, which the daemon prefers to `devid_ca_key`. **A
+missing key file now stops the start** (`243/CREDENTIALS`, the maintainer's
+D-d), because every node with vTPM guests must be able to enroll. A key elsewhere
+needs a drop-in that resets `LoadCredential=` first; a rotated key needs a
+restart. `systemd-analyze security` is **1.5 OK**. Verified on hogan against
+`0.2.0+git20261018.493063dcb393` (UID 987, an enrolment of VM 399, reload, and
+the maintainer's `setpriv` check that `priv/` is refused). Two review follow-ups
+wait for the next change to `debian/` or `loadDevIDEnroller` (see that design).
+**Every node holds the CA key**, so a compromised node can issue for any VM ID;
+an intermediate per node or per cluster is part of the open CA decision.
 
 **Pre-review rule (maintainer, 2026-10-18):** before the coordinator calls a PR
 ready to merge, an agent on a **stronger** model than the author reviews it
