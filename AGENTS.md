@@ -131,9 +131,9 @@ quote must cover — never had to be settled, because the conclusion was that
 nothing should consume them. The analysis is kept under item 6 so it is not
 re-derived.
 
-### Open changes as of 2026-10-17
+### Open changes as of 2026-10-18
 
-None. Five were archived on 2026-10-17 and one on 2026-10-18; the first two in this order:
+None. Five were archived on 2026-10-17 and three on 2026-10-18; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -212,20 +212,39 @@ missing. Whether that consumer moves to this service is the maintainer's
 decision and work outside this repository (see the archived design's "Open
 question").
 
-Next, recorded by the maintainer and not yet written:
-`serve-node-topology-under-placement` — any `topology.vtpm_mds.io/<key>` line
-served as `placement/<key>`, `zone` as `availability-zone`, node and cluster as
-host-derived defaults, a key without a value `404` and unlisted.
+The node topology followed as the third archive of 2026-10-18:
+`openspec/changes/archive/2026-10-18-serve-node-topology-under-placement/`
+(PR #48). Any `topology.vtpm_mds.io/<key>: <value>` line of the node
+description is served as `placement/<key>`, including EC2 keys such as
+`host-id` (the maintainer's choice: only an `Administrator` can write the
+description). `zone` is the short form of `availability-zone`; both set declare
+neither, with a log line, and the zone falls back to the node name. `node` and
+`cluster` default to the node name and the `cluster_name`. Keys are
+case-sensitive; a key with no value answers `404` with an empty body and is not
+listed; `placement/` now lists the keys and `placement` redirects with `301`.
+Every line under the prefix is readable by every guest of the node. Verified on
+VM 399 against `0.2.0+git20261018.3fcf3317b0d1` (six keys, the conflict, the
+old prefix ignored) and in the lab for the YAML defaults. `/latest/meta-data`
+without a slash answers `301` on hogan (go1.24) but `307` when built with a
+newer Go; only `placement` has an explicit redirect.
+
+The Kubernetes consumer will become a small per-node DaemonSet that reads
+`placement/` from this service and labels its own node (maintainer, 2026-10-18),
+outside this repository and later. Until then the data-centre node-label
+controller and an Ansible role read `topology.kubernetes.io/` from the same
+description, so keep both prefixes there.
 
 Still open from #33, each needing a go: `public-ipv4` and any value carrier
 (D2, later perhaps as a tag). D8 is decided (the LDevID CN stays the VM ID, a
 readable SPIFFE ID comes from a SPIRE node alias on
 `tpm_devid:subject:cn:<vmid>`), and D9 was researched (only `Administrator` has
 `Sys.Modify`, which guards the node description; nothing from tags goes into a
-certificate). Found on the way, each its own change if wanted: `GET
-…/meta-data/placement/` answers the `meta-data/` index instead of listing the
-placement keys, and one typo in the YAML inventory empties the whole inventory
-while the service reports healthy.
+certificate). Found on the way: one typo in the YAML inventory empties the
+whole inventory while the service reports healthy; it is on the
+production-readiness list of 2026-10-18, which the maintainer wants worked off
+before production (debug logging, unit hardening, reload on new VMs, issuance
+log, health detail, the connection-map leak, CA operation, throttling, and MAC
+binding on `vmbr_imds` with an EK pin per VM on Proxmox).
 
 Those first two both carry a `MODIFIED` block on `Refuse An Instance Identity
 To Callers With No VM Record`, so the signature change's block **was rebuilt
