@@ -66,12 +66,46 @@ at the coordinator's assignment, after the maintainer's answers of the same day.
 
 ## 3. Verify on the real systems
 
-- [ ] 3.1 **Hogan** — install the git-stamped package, tag VM 399 with `vtpm_mds.io.owner.team-a` and `vtpm_mds.io.rack.b.2`, reload, and verify from the guest that `tags/instance` lists both keys, each value is served with its dots, and the index lists `tags/`; then remove the tags
+- [x] 3.1 **Hogan** — install the git-stamped package, tag VM 399 with `vtpm_mds.io.owner.team-a` and `vtpm_mds.io.rack.b.2`, reload, and verify from the guest that `tags/instance` lists both keys, each value is served with its dots, and the index lists `tags/`; then remove the tags
+      **Done, 2026-10-18, hogan (coordinator), against `0.2.0+git20261018.eaed1d1b54b6`,
+      with the maintainer's go:** passed, in two rounds. VM 399 carried the tags
+      `owner` as `team-a`, `rack` as `b.2` and two more the maintainer had set
+      (an `fqdn` and a `public_ipv4`, each a `vtpm_mds.io.<key>.<value>` tag), one
+      per entry of the tag field. From the guest: the index lists `tags/`;
+      `tags/` answers `instance`; `tags/instance` lists the four keys; `owner`
+      reads `team-a` and `rack` reads `b.2`, the dot kept, and values with dots and
+      `-` come through unchanged; an unknown key answers `404` with an empty body,
+      not the router's; the identity document carries no tag field. The log
+      reported the former placement tags of VM 300 as `ignored legacy placement
+      tag … topology now comes from the node` (D-h). The tags stay in the VM's
+      config until the maintainer removes them (3.3).
       Changes a shared resource, VM 399's config, so it needs the maintainer's go
       in the session of whoever runs it.
 - [ ] 3.2 **Hogan** — put `topology.vtpm_mds.io/zone: TEST_Z` into the node notes, reload, and verify a guest reads `TEST_Z` through the key and the document, with the region from the cluster name, and that the old `topology.kubernetes.io/zone` line alone gives the node name
+      **Partly done, 2026-10-18, hogan, against `eaed1d1`:** the former line
+      `topology.kubernetes.io/zone: TEST_Z` alone no longer counts (zone is the
+      node name). The maintainer put `topology.vtpm_mds.io/region: bgl` into the
+      notes and the service served `bgl` as the region. With two
+      `topology.vtpm_mds.io/zone` lines (`hogan` and `TEST_Z`) the log read `host
+      placement: 2 zone lines in the description of /etc/pve/local/config, none
+      used` and the zone fell back to the node name, as "Two description lines of
+      one kind declare nothing" says; that cannot be told from a zone that really is
+      the node name. **Open:** a single zone line whose value differs from the node
+      name, read as the zone.
 - [ ] 3.3 **Hogan** — verify a VM without tags gets `404` with an empty body on `tags/instance`, and that an unbound caller (the host itself) gets the same
-- [ ] 3.4 **Cloud lab** — declare `tags` for one lab inventory entry, and verify a guest reads the keys and values through `tags/instance` and that an entry without tags gets `404`; say which layout was used
+      **Half done, 2026-10-18, hogan:** the host as an unbound caller got `404`
+      with an empty body on `tags/` and `tags/instance`, and its index had no
+      `tags/`. **Open:** a bound VM without tags, which needs the tags off VM 399
+      (no other VM here reaches the metadata bridge).
+- [x] 3.4 **Cloud lab** — declare `tags` for one lab inventory entry, and verify a guest reads the keys and values through `tags/instance` and that an entry without tags gets `404`; say which layout was used
+      **Done, 2026-10-18, `agent-cursor-vtpm-22e0`, against `eaed1d1`:** passed.
+      Layout `swtpm-localca` and `/usr/share/OVMF/`; the inventory is
+      `/var/lib/mds-lab/inventory/lab.yaml`, outside the repository. A YAML entry
+      with `tags` `owner`, `rack` and `fqdn` listed `tags/` in the index and served
+      each key and value (`team-a`, `b.2`, a lab name) with `200`. Placement was
+      the host's only, `proxmox` and `local`. After a SIGHUP without tags the index
+      had no `tags/` and every tags path answered `404` with an empty body.
+      **Not shown in the lab:** the Proxmox half, which only hogan can show.
       Declare them in the inventory outside the repository.
 - [ ] 3.5 Say what was not verified: a data-centre node's real description, a Kubernetes consumer, EC2's answer for an instance without tags
 
