@@ -103,6 +103,7 @@ func TestClosedConnectionsAreNotRetained(t *testing.T) {
 	if after > before {
 		grew = after - before
 	}
+	t.Logf("live heap objects grew by %d over %d connections", grew, n)
 	// A retained connection costs several objects, so a leak of one per
 	// connection would add several times n. Allow half of n for noise.
 	if grew > n/2 {

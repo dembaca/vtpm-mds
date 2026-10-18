@@ -22,6 +22,8 @@ request context.
 - **The `connectionMap` and its `Store` call are removed.** Nothing else changes: the
   record is still bound to the connection and still reaches handlers through the
   request context.
+- **The ARP table's path becomes a package variable** so a test can bind a caller
+  on any host; its value is unchanged.
 - **A new requirement says what was always intended:** the service keeps no
   per-connection state once a connection closes.
 

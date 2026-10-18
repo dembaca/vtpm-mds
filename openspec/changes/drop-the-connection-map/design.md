@@ -34,6 +34,12 @@ its own.
   package installed); the unit test is the counter-proof, the hogan run shows the
   new build is flat.
 
+- **D-d. One seam for the test.** The ARP table is read from the fixed path
+  `/proc/net/arp`, which a test on any other host cannot bind a caller through; the
+  test needs the caller bound, or the leak does not show. The path becomes a package
+  variable, `arpTablePath`, with its present value, so the test can point it at a
+  file of its own. No behaviour changes.
+
 ## Non-Goals
 
 - **Limiting connections**, `throttle-guest-requests`.

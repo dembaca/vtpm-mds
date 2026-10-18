@@ -218,9 +218,6 @@ func debugf(format string, args ...any) {
 	}
 }
 
-// connectionMap stores VMIDs per connection
-var connectionMap sync.Map
-
 // connContext stores VM config information in the request context
 func connContext(ctx context.Context, c net.Conn) context.Context {
 	if vmConn, ok := c.(*vmConnection); ok {
@@ -302,7 +299,6 @@ func (c *vmConnection) extractVMConfigByRouting() {
 				debugf("[DEBUG extractVMConfigByRouting] Found VM config: VMID=%s for MAC: %s", vmConfig.VMID, macAddr)
 				c.vmid = vmConfig.VMID
 				c.vmConfig = vmConfig
-				connectionMap.Store(c.TCPConn, vmConfig.VMID)
 				return
 			} else {
 				debugf("[DEBUG extractVMConfigByRouting] No VM config found for MAC: %s", macAddr)
