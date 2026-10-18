@@ -78,6 +78,9 @@ func New(cfg *config.Config) (*Server, error) {
 		handle("GET /latest/meta-data/placement/availability-zone", imds.HandleAvailabilityZone)
 		handle("GET /latest/meta-data/placement/region", imds.HandleRegion)
 		handle("GET /latest/meta-data/services/domain", imds.HandleDomain)
+		handle("GET /latest/meta-data/tags/{$}", imds.HandleTags)
+		handle("GET /latest/meta-data/tags/instance", imds.HandleInstanceTagKeys)
+		handle("GET /latest/meta-data/tags/instance/{key}", imds.HandleInstanceTag)
 		handle("GET /latest/meta-data/", imds.HandleMetaDataIndex)
 		handle("GET /latest/dynamic/instance-identity/document", imds.HandleInstanceIdentityDocument)
 		// No signature path is registered: .../signature, .../pkcs7 and
