@@ -30,7 +30,7 @@ view of `/etc/pve`.
 - **WHEN** an operator runs `systemd-analyze security vtpm-mds`
 - **THEN** the overall exposure is 4.0 or lower
 
-#### Scenario: The daemon keeps one capability
+#### Scenario: The daemon cannot use root's file privileges
 
 - **GIVEN** the running service
 - **WHEN** its capability sets are read from `/proc/<pid>/status`
