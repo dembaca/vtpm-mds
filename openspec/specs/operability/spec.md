@@ -204,10 +204,13 @@ journal line is written as an escape and the request writes exactly one line.
 ### Requirement: Confine The Daemon To What It Uses
 
 The shipped systemd unit SHALL confine `vtpm-mds` to the resources it uses. It
-SHALL limit the capability bounding set to `CAP_NET_BIND_SERVICE`, so that the
-daemon, although started as root, cannot read or write files that neither root
-nor the `root` group may access, cannot load kernel modules, and cannot
-change kernel tunables. It SHALL mount the file system read-only for the daemon
+SHALL run the daemon as the system user `vtpm-mds` with the supplementary group
+`www-data`, never as root, and SHALL limit the capability bounding set to
+`CAP_NET_BIND_SERVICE`, so that the daemon reads only what that user or its
+groups may read: the Proxmox cluster files (`root:www-data 0640`) but not
+`/etc/pve/priv/`. It cannot load kernel modules or change kernel tunables. The
+CA key SHALL reach it as a systemd credential, without a change to the key
+file's owner or mode. It SHALL mount the file system read-only for the daemon
 except for its state directory, deny it devices, new namespaces, set-user-ID
 programs and real-time scheduling, restrict its system calls to the
 `@system-service` set without `@privileged` and `@resources`, and restrict its
@@ -238,9 +241,17 @@ view of `/etc/pve`.
 - **WHEN** the guest reads the metadata tree and enrolls a DevID
 - **THEN** both succeed as before, and a reload rereads the guest configs
 
+#### Scenario: The daemon runs as its own user
+
+- **GIVEN** the running service
+- **WHEN** its credentials are read from `/proc/<pid>/status`
+- **THEN** its user is `vtpm-mds`, its groups are `vtpm-mds` and `www-data`, and
+  it cannot list `/etc/pve/priv/`
+
 #### Scenario: The CA key stays readable
 
-- **GIVEN** the confined service on a host whose CA key is `root:root 0600`
+- **GIVEN** the confined service on a host whose CA key is `root:root 0600` and
+  is passed as a systemd credential
 - **WHEN** a bound guest enrolls
 - **THEN** a certificate is issued, and the journal holds no `DevID enrollment
   disabled` line

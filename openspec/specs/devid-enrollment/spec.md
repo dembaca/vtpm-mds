@@ -19,9 +19,15 @@ capability, and the IMDSv2 token flow belongs to `instance-metadata`.
 
 The service SHALL mount `POST /latest/devid/enroll/start` and
 `POST /latest/devid/enroll/finish` only when `enable_tpm_attestation` is true
-and a DevID CA can be loaded. Loading SHALL require both `devid_ca_cert` and
-`devid_ca_key` to be non-empty, both paths to exist, and the PEM material to
-parse into a certificate plus a PKCS#8 or PKCS#1 private key.
+and a DevID CA can be loaded. The CA key SHALL come from a systemd credential
+when the environment variable `CREDENTIALS_DIRECTORY` names a directory holding a
+non-empty file `devid_ca.key`; the service SHALL then not read or stat the
+configured `devid_ca_key` at all, SHALL accept an empty `devid_ca_key`, and SHALL
+log once `DevID CA key from systemd credential`. An empty credential file SHALL
+count as absent. Without a usable credential, loading SHALL require both
+`devid_ca_cert` and `devid_ca_key` to be non-empty and both paths to exist. In
+every case the PEM material SHALL parse into a certificate plus a PKCS#8 or
+PKCS#1 private key.
 
 When either path is empty the service SHALL log
 `Warning: devid_ca_cert/devid_ca_key not set; skipping DevID routes` and
@@ -44,6 +50,21 @@ authentication time.
 - **WHEN** the daemon starts
 - **THEN** it logs `DevID enrollment routes registered` and both enroll paths
   accept `POST`
+
+#### Scenario: A credential replaces the configured key path
+
+- **GIVEN** `CREDENTIALS_DIRECTORY` holding a valid `devid_ca.key`, and a
+  `devid_ca_key` that names a path the service cannot reach
+- **WHEN** the daemon starts
+- **THEN** it logs `DevID CA key from systemd credential` and
+  `DevID enrollment routes registered`, and never touches the configured path
+
+#### Scenario: No credential keeps the configured path
+
+- **GIVEN** no `CREDENTIALS_DIRECTORY`, or one without `devid_ca.key`, or one
+  whose `devid_ca.key` is empty
+- **WHEN** the daemon starts
+- **THEN** it loads the key from `devid_ca_key`, as before
 
 #### Scenario: No DevID CA configured
 
