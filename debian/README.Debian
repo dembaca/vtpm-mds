@@ -34,10 +34,9 @@ hosts without vmbr_imds). On the lab host:
 The unit confines the daemon: it runs as root but keeps only
 CAP_NET_BIND_SERVICE, sees the file system read-only (except
 /var/lib/vtpm-mds) and may talk only to link-local and loopback
-addresses. It also runs in the ssl-cert group. It can therefore read only
-files that root owns, that root or ssl-cert may read by group, or that are
-world-readable in directories it may traverse. Keep the CA key,
-certificates and inventory so, and outside /home and /root (hidden by
+addresses. It can therefore read only files that root owns, that the root
+group may read, or that are world-readable in directories it may traverse.
+Keep the CA key (root:root 0600), certificates and inventory so, and outside /home and /root (hidden by
 ProtectHome). A CA key it cannot read does NOT stop the start: the journal
 says "DevID enrollment disabled" and enrollment answers 404, so check for
 that line after every install. An unreadable inventory is a warning too

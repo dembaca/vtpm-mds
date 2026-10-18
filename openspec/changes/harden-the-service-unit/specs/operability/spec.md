@@ -7,7 +7,7 @@
 The shipped systemd unit SHALL confine `vtpm-mds` to the resources it uses. It
 SHALL limit the capability bounding set to `CAP_NET_BIND_SERVICE`, so that the
 daemon, although started as root, cannot read or write files that neither root
-nor its groups (`root`, `ssl-cert`) may access, cannot load kernel modules, and cannot
+nor the `root` group may access, cannot load kernel modules, and cannot
 change kernel tunables. It SHALL mount the file system read-only for the daemon
 except for its state directory, deny it devices, new namespaces, set-user-ID
 programs and real-time scheduling, restrict its system calls to the
@@ -41,8 +41,7 @@ view of `/etc/pve`.
 
 #### Scenario: The CA key stays readable
 
-- **GIVEN** the confined service on a host whose CA key is readable by root or by
-  the `ssl-cert` group only
+- **GIVEN** the confined service on a host whose CA key is `root:root 0600`
 - **WHEN** a bound guest enrolls
 - **THEN** a certificate is issued, and the journal holds no `DevID enrollment
   disabled` line

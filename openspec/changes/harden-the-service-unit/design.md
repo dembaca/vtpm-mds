@@ -85,9 +85,13 @@ Evidence read on hogan on 2026-10-18 against `main@407bfca` and the installed
   the service starts, `/health` says ok, enrollment answers `404`. Without
   `CAP_DAC_OVERRIDE`, root reads only files it owns or may read by group, and a
   sibling file of the same site PKI (`proxmox_imds_ca.crt`) is
-  `ansible:ssl-cert 0640`. **D-i: `SupplementaryGroups=ssl-cert`**, which also
-  lets the process traverse `/etc/ssl/private` (`root:ssl-cert 0710`) by group.
-  Task 3.4 (an enrollment) is a merge blocker, and 3.7 greps for the warning.
+  `ansible:ssl-cert 0640`. **Settled by the maintainer the same day:** the key
+  is `root:root 0600`, and root owns `/etc/ssl/private` (`0710`), so root
+  reads it as owner and no extra group is needed; a `SupplementaryGroups=
+  ssl-cert` tried in between was removed again, as it would only widen what the
+  daemon can read. A site that re-owns the key loses enrollment with the
+  warning above, so task 3.4 (an enrollment) is a merge blocker and 3.7 greps
+  for the warning.
   Making an unreadable configured key fatal is a separate change.
 - **`EPERM` is not logged by itself.** A swallowed system call leaves no line;
   for the verification run, `SystemCallLog=@privileged @resources` in a drop-in

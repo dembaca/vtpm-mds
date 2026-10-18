@@ -28,10 +28,9 @@ PrivateTmp=true
 NoNewPrivileges=true
 
 # Confinement (harden-the-service-unit). Root without capabilities reads only
-# what root owns or its groups may read; ssl-cert covers a CA key that site
-# PKI tooling leaves group-readable under /etc/ssl/private.
+# what root owns or may read by group: /etc/pve, the CA key (root:root 0600 on
+# hogan) and the config all are.
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-SupplementaryGroups=ssl-cert
 ProtectSystem=strict
 PrivateDevices=true
 ProtectKernelTunables=true

@@ -48,8 +48,7 @@ nothing but its log. Every file it reads on hogan is owned by root.
   key it cannot read leaves enrollment disabled with the existing warning
   `DevID enrollment disabled` in the journal, and an unreadable inventory leaves
   the cache empty with a warning; neither stops the start (unchanged code paths,
-  made fatal only by a separate change). The unit adds the `ssl-cert` group so a
-  group-readable key under `/etc/ssl/private` stays readable, and `PartOf=
+  made fatal only by a separate change). The unit adds `PartOf=
   pve-cluster.service`. The
   `ReadWritePaths=/var/lib/vtpm-mds` line stays until the state directory is
   removed with the dead configuration keys (a later change).
