@@ -72,7 +72,19 @@ at the coordinator's assignment, after the maintainer's decision of the same day
       EC2 key overridden by the node, as decided. Everything else was as above.
       Changes a shared resource, the node notes, so it needs the maintainer's go
       in the session of whoever runs it.
-- [ ] 3.2 **Hogan** — verify that a description with `zone` and `availability-zone` both set gives the node name and a log line, that the former prefix `topology.kubernetes.io/` alone changes nothing, and that the identity document still has exactly its fixed keys
+- [x] 3.2 **Hogan** — verify that a description with `zone` and `availability-zone` both set gives the node name and a log line, that the former prefix `topology.kubernetes.io/` alone changes nothing, and that the identity document still has exactly its fixed keys
+      **Done, 2026-10-18, hogan (coordinator), against
+      `0.2.0+git20261018.3fcf3317b0d1`:** passed. With the node notes holding
+      `topology.vtpm_mds.io/zone`, `topology.vtpm_mds.io/availability-zone` (a different
+      value) and the former `topology.kubernetes.io/zone: alt`, after a reload, the log
+      read `host topology: 2 lines for key "availability-zone" in the description of
+      /etc/pve/local/config, none used`; `placement/availability-zone` answered the
+      node name, not any of the three values; the former line changed nothing, every
+      other key was as before, and the identity document kept its fixed ten keys with
+      the node name as `availabilityZone`. (The earlier alone-case, where the former
+      prefix gives the node and cluster names, is covered by the unit test
+      `TestTheFormerDescriptionPrefixIsNotRead`; on hogan it was seen together with
+      the other lines.)
 - [x] 3.3 **Cloud lab** — verify the YAML backend's defaults and the `404` of `placement/rack` and `placement/node`, and, if D-f is accepted, a `topology` mapping; say which layout was used
       **Done, 2026-10-18, `agent-cursor-vtpm-22e0`, against `3fcf331`:** passed.
       Layout `swtpm-localca` and `/usr/share/OVMF/OVMF_CODE_4M.fd`; the inventory is
@@ -84,7 +96,11 @@ at the coordinator's assignment, after the maintainer's decision of the same day
       without a slash answered `301` to `/latest/meta-data/placement/`; the identity
       document kept its fixed keys with `proxmox` and `local`. **Not shown in the
       lab:** the Proxmox half, the 64-key limit on a live stack.
-- [ ] 3.4 Say what was not verified: a data-centre node's real description, a Kubernetes consumer, the 64-key limit on the live stack
+- [x] 3.4 Say what was not verified: a data-centre node's real description, a Kubernetes consumer, the 64-key limit on the live stack
+      **Done, 2026-10-18.** Not verified: a data-centre node's real description (only
+      hogan's own notes and constructed trees were read); a Kubernetes consumer of
+      `placement/` keys; the 64-key limit on a live stack (unit test only); a bound
+      second VM during a flood is `throttle-guest-requests`' to show.
 
 ## 4. Archive
 
