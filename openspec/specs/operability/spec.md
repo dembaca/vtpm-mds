@@ -122,6 +122,135 @@ unit's start-limit directives.
 - **THEN** the unit's `StartLimitIntervalSec` / `StartLimitBurst` take effect
   and systemd stops retrying
 
+### Requirement: Write Debug Lines Only When Started With The Debug Flag
+
+The host service SHALL write the lines it marks as debug output, those whose text
+starts with `[DEBUG`, only when it was started with the `-debug` flag. Without the
+flag it SHALL write none of them, for any request, connection or reload. With the
+flag it SHALL write them as it did before this requirement. The flag SHALL be read
+once, at start: changing it takes a restart. The service SHALL NOT write a debug
+line as a side effect of another log level or of any setting of the
+configuration file.
+
+Lines that report a start, a reload, a refusal, a failure or an enrolment, and the
+access line, are not debug output and SHALL be written either way, and SHALL NOT
+start with `[DEBUG`: a line that reports an error does not carry the debug marker.
+
+#### Scenario: A normal run writes no debug line
+
+- **GIVEN** the service started without `-debug`
+- **WHEN** a guest sends a request that is bound to a VM, and another that is not
+- **THEN** no line starting with `[DEBUG` is written, and the access line of each
+  request is
+
+#### Scenario: A debug run writes the debug lines
+
+- **GIVEN** the service started with `-debug`
+- **WHEN** a guest sends a request
+- **THEN** the debug lines for its connection are written, as before
+
+#### Scenario: An error is written without the flag
+
+- **GIVEN** the service started without `-debug`
+- **WHEN** a start or a reload fails to load the VM configs
+- **THEN** a line naming the failure and its source is written, and it does not
+  start with `[DEBUG`
+
+#### Scenario: A reload writes no debug line without the flag
+
+- **GIVEN** the service started without `-debug`
+- **WHEN** it receives a SIGHUP
+- **THEN** the line that reports the reload and its VM count is written, and no
+  line starting with `[DEBUG` is
+
+### Requirement: Write One Access Line Per Request That Names The Peer And The VM
+
+For every request the host service SHALL write one access line holding, in this
+order, the method, the path, the response status, the time the request took, the
+IP address of the connection's peer without the port, and the ID of the VM record
+the connection is bound to, or `-` when it is bound to none. The peer SHALL be the
+address of the connection and SHALL NOT be taken from `X-Forwarded-For` or any
+other request header. A peer whose address cannot be parsed SHALL be written as
+`-`. The path SHALL be written quoted, so that a character in it that would end a
+journal line is written as an escape and the request writes exactly one line.
+
+#### Scenario: A bound caller is named
+
+- **GIVEN** a guest bound to VM `399` connecting from `10.0.0.5`
+- **WHEN** it reads `GET /latest/meta-data/instance-id` and gets `200`
+- **THEN** the access line holds `GET`, `"/latest/meta-data/instance-id"`, `200`,
+  a duration, `10.0.0.5` and `399`, in that order
+
+#### Scenario: An unbound caller is named too
+
+- **GIVEN** a caller bound to no VM record connecting from `10.0.0.9`
+- **WHEN** it reads `GET /health`
+- **THEN** the access line holds `10.0.0.9` as the peer and `-` as the VM
+
+#### Scenario: The peer is not taken from a header
+
+- **GIVEN** a request from `10.0.0.5` carrying `X-Forwarded-For: 10.9.9.9`
+- **WHEN** the access line is written
+- **THEN** the peer is `10.0.0.5`
+
+#### Scenario: A path cannot write a second line
+
+- **GIVEN** a request whose path, decoded, contains a line break followed by text
+  that looks like a log line
+- **WHEN** the access line is written
+- **THEN** exactly one line is written for the request, and the break appears in it
+  as an escape
+
+### Requirement: Confine The Daemon To What It Uses
+
+The shipped systemd unit SHALL confine `vtpm-mds` to the resources it uses. It
+SHALL limit the capability bounding set to `CAP_NET_BIND_SERVICE`, so that the
+daemon, although started as root, cannot read or write files that neither root
+nor the `root` group may access, cannot load kernel modules, and cannot
+change kernel tunables. It SHALL mount the file system read-only for the daemon
+except for its state directory, deny it devices, new namespaces, set-user-ID
+programs and real-time scheduling, restrict its system calls to the
+`@system-service` set without `@privileged` and `@resources`, and restrict its
+sockets to `AF_INET`, `AF_INET6` and `AF_UNIX`; a system call the filter blocks
+SHALL fail with `EPERM` rather than end the process. It SHALL deny
+traffic to and from every address except link-local IPv4 and loopback.
+
+`systemd-analyze security` of systemd 257 SHALL rate the installed unit at
+**4.0 or lower**. The unit SHALL be part of `pve-cluster.service`, so that a
+restart of the cluster file system restarts the daemon with a fresh read-only
+view of `/etc/pve`.
+
+#### Scenario: The installed unit is rated OK
+
+- **GIVEN** the host package installed and the service started
+- **WHEN** an operator runs `systemd-analyze security vtpm-mds`
+- **THEN** the overall exposure is 4.0 or lower
+
+#### Scenario: The daemon cannot use root's file privileges
+
+- **GIVEN** the running service
+- **WHEN** its capability sets are read from `/proc/<pid>/status`
+- **THEN** the bounding set holds `CAP_NET_BIND_SERVICE` and nothing else
+
+#### Scenario: Metadata and enrollment still work under the confinement
+
+- **GIVEN** the confined service on a Proxmox host with a bound guest
+- **WHEN** the guest reads the metadata tree and enrolls a DevID
+- **THEN** both succeed as before, and a reload rereads the guest configs
+
+#### Scenario: The CA key stays readable
+
+- **GIVEN** the confined service on a host whose CA key is `root:root 0600`
+- **WHEN** a bound guest enrolls
+- **THEN** a certificate is issued, and the journal holds no `DevID enrollment
+  disabled` line
+
+#### Scenario: The address filter is configured
+
+- **GIVEN** the running service
+- **WHEN** an operator runs `systemctl show -p IPAddressDeny -p IPAddressAllow vtpm-mds`
+- **THEN** every address is denied except `169.254.0.0/16` and loopback
+
 ## Notes
 
 Man pages `vtpm-mds(8)` and `devid-enroll(1)` document the flag; that is

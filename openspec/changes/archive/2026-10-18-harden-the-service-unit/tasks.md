@@ -74,4 +74,7 @@ pushed and the maintainer has not overruled D-a to D-g; D-f needs his answer.**
 
 ## 4. Archive
 
-- [ ] 4.1 Archive with `openspec archive`, update `AGENTS.md`, and verify `openspec validate --all --strict` is still clean
+- [x] 4.1 Archive with `openspec archive`, update `AGENTS.md`, and verify `openspec validate --all --strict` is still clean
+      **Done, 2026-10-18,** by the coordinator from `main` at `fd6cd27`, after #51
+      was merged: `openspec archive` added one `operability` requirement.
+      `AGENTS.md` updated.
