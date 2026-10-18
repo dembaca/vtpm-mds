@@ -66,10 +66,18 @@ These fill gaps the answers left.
 - **D-g. YAML parity.** `tags` is a mapping, trimmed, an invalid pair logged and
   ignored; it cannot fail the load, unlike `public_ipv4`, because it degrades to
   one tag fewer and nothing else.
-- **D-h. Old declarations fail soft.** A VM that still carries `mds.zone.x`, or a
-  YAML `zone`, loads without a message and reads the host's placement; neither
-  is logged, because the YAML key is an ignored unknown key and the Proxmox tag is
-  one without the prefix.
+- **D-h. Old declarations fail soft, and say so.** A VM that still carries
+  `mds.zone.x` or `mds.region.x`, or a YAML entry with `zone` or `region`, loads
+  and reads the host's placement, and the log carries one line per such
+  declaration and load, for example "ignored legacy placement tag
+  `mds.zone.x`; topology now comes from the node". A forgotten declaration would
+  otherwise be hard to find (the coordinator's suggestion, 2026-10-18).
+
+## What the lab no longer shows
+
+The YAML backend declares no placement at all now, neither for a VM nor for the
+host, so a lab guest always reads `proxmox` and `local`. Task 3.4 therefore checks
+tags only and does not ask for a zone.
 
 ## Trust (D9 applied)
 

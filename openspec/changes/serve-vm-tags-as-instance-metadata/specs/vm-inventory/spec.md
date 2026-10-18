@@ -7,7 +7,8 @@
 The YAML inventory SHALL be a mapping whose `vms` key holds the sequence of
 entries; other top-level keys SHALL be ignored. Each entry SHALL support `id`,
 `name`, `macs`, `ek_sha256`, `public_ipv4` and `tags`, and keys outside that set,
-including the former `zone` and `region`, SHALL be ignored.
+including the former `zone` and `region`, SHALL be ignored; a former `zone` or
+`region` with a value SHALL be logged with the entry's `id`, once per load.
 
 `id` SHALL be the record key, and an entry with an empty or missing `id` SHALL
 be skipped silently. `name`, `macs` and `ek_sha256` SHALL all be optional. Each
@@ -39,7 +40,8 @@ unlike a malformed `public_ipv4`, an ignored tag degrades to no tag and nothing
 else about the VM. A key and a value SHALL be kept exactly as spelled. The record
 SHALL carry the accepted pairs as its tags, and a record with none SHALL carry
 none. The host's placement for this backend is zone `proxmox` and region `local`;
-the YAML inventory declares no placement, neither for the host nor for a VM.
+the YAML inventory declares no placement, neither for the host nor for a VM, so a
+lab guest always reads `proxmox` and `local`.
 
 The YAML inventory is the only backend that can declare a public address. The
 Proxmox backend never stores a `public-ipv4` key, as `Derive VM Records From
@@ -112,8 +114,9 @@ an error.
 - **GIVEN** an inventory whose entry `100` declares `zone: rack-b` and `region:
   bgl-1`
 - **WHEN** the inventory is loaded
-- **THEN** the load succeeds and the record carries neither value anywhere that
-  `instance-metadata` reads a placement from
+- **THEN** the load succeeds, the record carries neither value anywhere that
+  `instance-metadata` reads a placement from, and the log names `100`, `zone` and
+  `region`
 
 #### Scenario: A malformed public address fails the load
 
@@ -166,8 +169,9 @@ exactly one tag for a key, and a valid key and value, SHALL carry that pair as
 its tags. A VM with two or more tags for one key, valid or not, SHALL carry no
 value for that key, and the service SHALL log the VM id and the key. A tag with
 the prefix and an invalid key or value SHALL be logged and ignored. A tag without
-the prefix SHALL be ignored without a log entry; that includes the former
-`mds.zone.<name>` and `mds.region.<name>`. A fault in one VM's tags SHALL NOT
+the prefix SHALL be ignored without a log entry, except that a tag beginning
+`mds.zone.` or `mds.region.`, the former placement tags, SHALL be logged with the
+VM id, once per load, and ignored. A fault in one VM's tags SHALL NOT
 affect another VM's record or the load.
 
 **Host placement.** The backend SHALL also determine the host's placement, the
@@ -311,8 +315,8 @@ the YAML inventory.
 
 - **GIVEN** a guest config with `tags: mds.zone.rack-b;mds.region.bgl-1`
 - **WHEN** the inventory cache is loaded
-- **THEN** the record carries no tags, and neither a placement nor a log entry
-  follows from them
+- **THEN** the record carries no tags, no placement follows from them, and the
+  log names the VM id and both tags
 
 #### Scenario: A hand-written zone line has no meaning
 
