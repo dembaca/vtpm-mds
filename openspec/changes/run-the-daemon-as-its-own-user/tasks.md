@@ -71,8 +71,17 @@ answered D-d.**
       successfully`. The journal since the install holds no `DevID enrollment
       disabled`, `Failed to load VM config`, `permission denied`, `operation not
       permitted` or `SIGSYS`.
-- [ ] 3.4 **Maintainer, needs root** — run `setpriv --reuid=vtpm-mds --regid=vtpm-mds --groups=www-data ls /etc/pve/priv` and verify it is refused while `cat /etc/pve/local/qemu-server/399.conf` under the same identity succeeds
-- [ ] 3.5 Say what was not verified
+- [x] 3.4 **Maintainer, needs root** — run `setpriv --reuid=vtpm-mds --regid=vtpm-mds --groups=www-data ls /etc/pve/priv` and verify it is refused while `cat /etc/pve/local/qemu-server/399.conf` under the same identity succeeds
+      **Done, 2026-10-18, by the maintainer as root:** `ls /etc/pve/priv` as
+      `vtpm-mds` with `www-data` → `cannot open directory '/etc/pve/priv':
+      Permission denied`; `cat /etc/pve/local/qemu-server/399.conf` under the same
+      identity printed the VM's configuration (not recorded here).
+- [x] 3.5 Say what was not verified
+      **Done, 2026-10-18.** Not verified: a missing key file failing the start
+      with `243/CREDENTIALS` on the live host (shown by `man systemd.exec` and the
+      pre-review, not provoked here — it would take the service down); a key at
+      another path via the documented drop-in; a purge (the user stays by design);
+      the cloud lab, which does not install the package.
 
 ## 4. Archive
 
