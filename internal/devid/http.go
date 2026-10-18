@@ -1,8 +1,10 @@
 package devid
 
 import (
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"io"
 	"log"
 	"net/http"
@@ -126,8 +128,26 @@ func (e *Enroller) HandleFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logIssuance(pemBytes, vmid, ekFP)
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(EnrollFinishResponse{
 		DevIDCertPEM: string(pemBytes),
 	})
+}
+
+// logIssuance writes the one line that says a certificate was issued: its serial
+// in hexadecimal, the VM it was issued to and the fingerprint of the EK certificate
+// the enrolment was bound to. It holds nothing else of the enrolment: not the
+// certificate, the keys, the challenge or the session. A certificate that cannot be
+// read back is logged with serial "unknown", which cannot happen for one that
+// Finish has just built.
+func logIssuance(certPEM []byte, vmid, ekFP string) {
+	serial := "unknown"
+	if block, _ := pem.Decode(certPEM); block != nil {
+		if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
+			serial = cert.SerialNumber.Text(16)
+		}
+	}
+	log.Printf("devid issued serial=%s vm=%s ek=%s", serial, vmid, ekFP)
 }
