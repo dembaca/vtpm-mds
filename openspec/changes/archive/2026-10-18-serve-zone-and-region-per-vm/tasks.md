@@ -9,8 +9,12 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
 - [x] 1.1 **Maintainer** — M1 to M5 decided as recommended, and verify the answers are recorded in `design.md` under a dated heading
       **Done, 2026-10-17:** "M1–M5 alle wie empfohlen" on the agent bus; recorded
       under "Decided (maintainer, 2026-10-17)" in `design.md`.
-- [ ] 1.2 **Maintainer, optional** — overrule or accept D-a to D-i in `design.md`, and verify the outcome is recorded there
+- [x] 1.2 **Maintainer, optional** — overrule or accept D-a to D-i in `design.md`, and verify the outcome is recorded there
       Silence is acceptance only once the coordinator has read them back.
+      **Closed 2026-10-18 by the coordinator.** The maintainer did not overrule
+      D-a to D-i. Two of them were changed by his later decisions, already in
+      `design.md`: the node description became the middle source, and names keep
+      the case of their source (no lowercasing), which reshaped D-a and D-h.
 
 ## 2. Implement
 
@@ -154,4 +158,7 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
 
 ## 4. Archive
 
-- [ ] 4.1 Archive with `openspec archive`, update `AGENTS.md` where it lists topology as open, and verify `openspec validate --all --strict` is still clean
+- [x] 4.1 Archive with `openspec archive`, update `AGENTS.md` where it lists topology as open, and verify `openspec validate --all --strict` is still clean
+      **Done 2026-10-18 by the coordinator** from `main` at `bce1a1a` (the #44
+      merge). Results of `openspec archive` and validation are in the archive
+      commit; `AGENTS.md` no longer lists zone and region as open.

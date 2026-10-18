@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-17
 
-None. Five were archived on 2026-10-17; the first two in this order:
+None. Five were archived on 2026-10-17 and one on 2026-10-18; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -182,12 +182,26 @@ VM 399 the derived EK, the persistent EK and the key in the NV EK certificate
 are the same key; the lab showed a foreign object there survives
 byte-identical and SPIRE `1.14.0` still attests.
 
-Deferred by the maintainer, and needing a record and a go before any code:
-per-VM metadata (`declare-per-vm-metadata`, PR #33; its D8 is decided: the
-LDevID CN stays the VM ID and a readable SPIFFE ID comes from a SPIRE node
-alias on `tpm_devid:subject:cn:<vmid>`, shown end to end in the lab; host-side
-names as extra subject attributes wait for a SPIRE release with `subject:oid`
-selectors).
+Zone and region followed on 2026-10-18, from the per-VM metadata exploration
+(PR #33): `openspec/changes/archive/2026-10-18-serve-zone-and-region-per-vm/`.
+`placement/availability-zone` and the new `placement/region`, and the identity
+document, now resolve per caller: a Proxmox tag `mds.zone.<name>` /
+`mds.region.<name>` (YAML: `zone`, `region`), else
+`topology.kubernetes.io/zone|region` lines in this node's description (the
+same keys the RZ's node-label controller reads), else the node name and the
+cluster name. Names keep the case of their source. Two tags of one kind, an
+invalid name or a bad YAML value are logged and treated as absent. Proxmox
+rejects `-` in tags, so `_` is the separator in tag values. Verified on VM 399
+for every stage (no tags, tags, node description) and in the lab for YAML,
+upper case included. A tag edit is seen after a SIGHUP (`systemctl reload`).
+
+Still open from #33, each needing a go: `public-ipv4` and any value carrier
+(D2), D9 (trust of names in certificates); D8 is decided (the LDevID CN stays
+the VM ID, a readable SPIFFE ID comes from a SPIRE node alias on
+`tpm_devid:subject:cn:<vmid>`). Found on the way, each its own change if
+wanted: `GET …/meta-data/placement/` answers the `meta-data/` index instead of
+listing the placement keys, and one typo in the YAML inventory empties the
+whole inventory while the service reports healthy.
 
 Those first two both carry a `MODIFIED` block on `Refuse An Instance Identity
 To Callers With No VM Record`, so the signature change's block **was rebuilt

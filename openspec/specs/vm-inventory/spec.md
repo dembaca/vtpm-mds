@@ -49,8 +49,8 @@ backend SHALL NOT cause the other backend to be tried.
 
 The YAML inventory SHALL be a mapping whose `vms` key holds the sequence of
 entries; other top-level keys SHALL be ignored. Each entry SHALL support `id`,
-`name`, `macs`, `ek_sha256` and `public_ipv4`, and keys outside that set SHALL
-be ignored.
+`name`, `macs`, `ek_sha256`, `public_ipv4`, `zone` and `region`, and keys outside
+that set SHALL be ignored.
 
 `id` SHALL be the record key, and an entry with an empty or missing `id` SHALL
 be skipped silently. `name`, `macs` and `ek_sha256` SHALL all be optional. Each
@@ -72,6 +72,17 @@ not having declared one.
 The record's raw configuration map SHALL contain `name`, holding the entry's
 `name` value, and SHALL contain `public-ipv4` holding the validated address
 when, and only when, one is declared.
+
+`zone` and `region` SHALL be optional and SHALL each declare the placement the
+`instance-metadata` capability serves for that VM. Each SHALL be trimmed. A
+value that is empty after trimming SHALL be treated as absent. A value that is
+not a valid placement name, as defined for tags below, SHALL be logged with the
+entry's `id` and the field and SHALL be treated as absent: unlike a malformed
+`public_ipv4`, it SHALL NOT fail the load, because an absent placement degrades
+to the host's value and not to no value. The record's raw configuration map SHALL
+contain `zone` and `region` holding the validated values when, and only when,
+they are declared. The host's placement for this backend is zone `proxmox` and
+region `local`.
 
 The YAML inventory is the only backend that can declare a public address. The
 Proxmox backend never stores a `public-ipv4` key, as `Derive VM Records From
@@ -124,6 +135,22 @@ an error.
 - **THEN** that record's raw configuration map has no `public-ipv4` key at all,
   which is distinguishable from holding an empty one
 
+#### Scenario: A declared zone and region reach the record
+
+- **GIVEN** an inventory whose entry `100` declares `zone: rack-b` and `region:
+  bgl-1`
+- **WHEN** the inventory is loaded
+- **THEN** that record's raw configuration map holds `zone` as `rack-b` and
+  `region` as `bgl-1`
+
+#### Scenario: An invalid zone is logged and ignored
+
+- **GIVEN** an inventory whose entry `100` declares `zone: "Rack B!"` and a valid
+  `region`, alongside a valid entry `101`
+- **WHEN** the inventory is loaded
+- **THEN** the load succeeds, record `100` carries its region and no `zone` key,
+  record `101` is unaffected, and the log names `100` and `zone`
+
 #### Scenario: A malformed public address fails the load
 
 - **GIVEN** an inventory whose entry `100` declares `public_ipv4` as
@@ -157,6 +184,53 @@ ignored. Every other line SHALL be split on the first `:` — or, failing that,
 the first `=` — and stored key/value in the record's raw configuration map
 with both sides trimmed, except that a `public-ipv4` key SHALL NOT be stored.
 The record name SHALL be the `name` key of that map when present.
+
+The key `zone` and the key `region` SHALL NOT be stored from a line either, as
+`public-ipv4` is not: their only source on this backend is the VM's tags, so a
+line that someone added by hand cannot declare a placement. The `tags` key SHALL
+be stored like any other.
+
+**Placement tags.** A VM's zone SHALL be declared by a tag of the form
+`mds.zone.<name>` and its region by a tag `mds.region.<name>`, read from the
+live configuration's `tags` key. The tags SHALL be split at `;`, `,` and
+whitespace. `<name>` SHALL be every character after the prefix and SHALL be
+valid when it is 1 to 63 characters from `a-z`, `A-Z`, `0-9`, `_`, `-`, `+` and
+`.`, starting with a letter or digit. A name SHALL be served exactly as its
+source spells it: the service SHALL NOT change its case. A VM with exactly one valid tag of a kind
+SHALL carry that value in its raw configuration map, under `zone` or `region`.
+A VM with two or more tags of one kind, valid or not, SHALL carry no value of
+that kind, and the service SHALL log the VM id and the kind. A tag with the
+prefix and an invalid name SHALL be logged and ignored. A fault in one VM's
+tags SHALL NOT affect another VM's record or the load.
+
+**Host placement.** The backend SHALL also determine the host's placement, the
+zone and the region each from the first of three sources that gives a valid
+name: first the `topology.kubernetes.io/zone` and `topology.kubernetes.io/region`
+lines of the description of the node the service runs on; then the node name, the
+target name of the `/etc/pve/local` link, as the zone, and the `cluster_name` of
+`/etc/pve/corosync.conf` as the region; then `proxmox` and `local`. The two are
+resolved independently, so a description that names a zone only leaves the region
+to the cluster name.
+
+The description of a node is stored in `/etc/pve/local/config`, which most nodes
+do not have, as lines that start with `#`, each the URL-encoded text of one line
+of the description, so that `topology.kubernetes.io/zone: DUS4` is stored as
+`#topology.kubernetes.io/zone%3A DUS4`. The service SHALL decode each such line
+and read a placement from a decoded line of the form
+`topology.kubernetes.io/zone: <name>` or `topology.kubernetes.io/region: <name>`.
+A line that does not decode or does not have that form SHALL be ignored. A
+missing file SHALL declare nothing and SHALL NOT be logged as a fault. Two or
+more lines of one kind, valid or not, SHALL declare nothing of that kind, and a
+single line whose name is not a valid placement name SHALL be logged and ignored;
+the next source is then used.
+
+A name from any source SHALL be kept exactly as spelled: the service SHALL NOT
+change its case, so that a zone copied from the same description by another
+program reads alike. A node name or cluster name that is not a valid placement
+name SHALL be logged and the next source used. The host placement SHALL be
+determined whenever the inventory is loaded, so a SIGHUP reload refreshes it.
+Only the guests of this node reach this service, so the placement of this node is
+that of every caller it can bind.
 
 A MAC address SHALL be taken only from a line matching
 `^net<N>[:=]\s*virtio=<17 characters of hex and colons>`, and SHALL be stored
@@ -221,6 +295,92 @@ the YAML inventory.
   `[special:cloudinit]` section
 - **WHEN** the inventory cache is loaded
 - **THEN** the record has only the live NIC's MAC
+
+#### Scenario: A zone tag becomes the VM's zone
+
+- **GIVEN** a guest config whose live section has `tags: mds.zone.rack-b;web`
+- **WHEN** the inventory cache is loaded
+- **THEN** the record's raw configuration map holds `zone` as `rack-b` and has no
+  `region` key
+
+#### Scenario: Two zone tags declare nothing
+
+- **GIVEN** a guest config with `tags: mds.zone.a;mds.zone.b;mds.region.r`
+- **WHEN** the inventory cache is loaded
+- **THEN** the record has no `zone` key, `region` is `r`, and the log names the
+  VM id and `zone`
+
+#### Scenario: An invalid placement tag is ignored
+
+- **GIVEN** a guest config with `tags: mds.zone.` and another guest with a valid
+  `mds.zone.rack-b`
+- **WHEN** the inventory cache is loaded
+- **THEN** the first record has no `zone` key and the second has `rack-b`
+
+#### Scenario: A placement tag in a snapshot does not count
+
+- **GIVEN** a guest config whose live section has no placement tag and whose
+  `[before-change]` snapshot section has `tags: mds.zone.old`
+- **WHEN** the inventory cache is loaded
+- **THEN** the record has no `zone` key
+
+#### Scenario: A hand-written zone line is not stored
+
+- **GIVEN** a guest config whose live section contains `zone: rack-x` and
+  `region: bgl-x`
+- **WHEN** the inventory cache is loaded
+- **THEN** the record's raw configuration map has neither key
+
+#### Scenario: The host's placement is this node and this cluster
+
+- **GIVEN** `/etc/pve/local` links to `nodes/hogan` and
+  `/etc/pve/corosync.conf` names the cluster `bgl-cluster`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `hogan` and its region is `bgl-cluster`
+
+#### Scenario: Capitals in a node or cluster name are kept
+
+- **GIVEN** `/etc/pve/local` links to `nodes/Hogan` and `/etc/pve/corosync.conf`
+  names the cluster `BGL-Cluster`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `Hogan` and its region is `BGL-Cluster`
+
+#### Scenario: The node description gives the host's placement
+
+- **GIVEN** the node's `config` holds the description lines `Location:
+  DUS4.M1.02.03`, `topology.kubernetes.io/region: DUS` and
+  `topology.kubernetes.io/zone: DUS4`, each stored as a `#` line with its `:`
+  encoded as `%3A`, and the node and cluster have other names
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `DUS4` and its region is `DUS`
+
+#### Scenario: A description naming one kind leaves the other to the names
+
+- **GIVEN** a description with `topology.kubernetes.io/zone: DUS4` only, on node
+  `hogan` in cluster `bgl-cluster`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `DUS4` and its region is `bgl-cluster`
+
+#### Scenario: An invalid description value falls back to the names
+
+- **GIVEN** a description with `topology.kubernetes.io/zone: bad!zone` and a
+  valid region, on node `hogan`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `hogan`, the region is the description's, and the
+  log names the invalid value
+
+#### Scenario: Two description lines of one kind declare nothing
+
+- **GIVEN** a description with two `topology.kubernetes.io/zone` lines and one
+  region line, on node `hogan`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's zone is `hogan` and the region is the description's
+
+#### Scenario: A host without a cluster file has region local
+
+- **GIVEN** `/etc/pve/corosync.conf` does not exist
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's region is `local` and the load does not fail
 
 #### Scenario: A hand-written public address is not stored
 
