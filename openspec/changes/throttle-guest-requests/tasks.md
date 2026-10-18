@@ -23,10 +23,11 @@ merged with it) before touching `server.go`.
       (D-e), peer keying (D-a), and `ConnState` accounting for the connection
       cap (D-i), and verify with unit tests for every scenario of the three
       delta specs that do not need a live listener
-- [ ] 2.2 Enforce the token-map capacity in `imds/token.go` (D-h) and map
-      the full-store error to `429` in the token handler, and verify with
-      token-store and handler tests for the two "Bound The Session Token
-      Store" scenarios
+- [ ] 2.2 Enforce per-peer live-token quota and the global emergency brake
+      in `imds/token.go` (D-h: 32 per peer with oldest-of-peer eviction;
+      65536 global → `429` + log), pass the minting peer into
+      `GenerateToken`, and verify with token-store and handler tests for
+      every scenario of "Bound Session Tokens Per Peer"
 - [ ] 2.3 Wire one middleware wrap and the `ConnState` hook in
       `internal/server/server.go` (only those additions in that file), after
       rebasing onto Mac's merged log-change, and verify with a server-level

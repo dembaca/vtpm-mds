@@ -27,7 +27,8 @@ after Mac's log-change merge.
 
 - Cap what one peer IP can do to token mint, general HTTP, enroll, and
   concurrent TCP connections, with a stable `429` answer.
-- Cap the process-wide token map so memory cannot grow with mint floods.
+- Cap live tokens **per peer** so one guest cannot fill the store; keep only a
+  high global emergency brake.
 - Keep a quiet, correct cloud-init + SPIRE enroll path under the defaults.
 - Leave `/health` usable for probes under load from other peers.
 
@@ -62,10 +63,10 @@ after Mac's log-change merge.
   raw `RemoteAddr` including port (each connection would be its own peer).
 - **D-b. Where the code lives.** `internal/server/limit.go` owns the
   middleware, the per-peer counters, and `ConnState` accounting.
-  `imds/token.go` only enforces the map capacity inside `GenerateToken`
-  (returns a distinct error the token handler maps to `429`). Alternative:
-  everything under `imds/` — rejected because concurrent connections are
-  an `http.Server` concern and enroll is outside `imds`.
+  `imds/token.go` records the minting peer on each token (for quota only)
+  and enforces D-h inside `GenerateToken`. Alternative: everything under
+  `imds/` — rejected because concurrent connections are an `http.Server`
+  concern and enroll is outside `imds`.
 - **D-c. Default numbers** (constants, not config):
 
   | Limit | Default | Rationale |
@@ -74,7 +75,8 @@ after Mac's log-change merge.
   | HTTP requests per peer | 120 / 60 s | metadata tree walks; blocks sustained flood |
   | Concurrent connections per peer | 16 | parallel SDK clients; blocks conn exhaustion |
   | Enroll start+finish per peer | 6 / 60 s | one enroll is two POSTs; allows a retry |
-  | Token map capacity | 4096 | ~hours of normal mint at lab scale |
+  | Live tokens per peer | 32 | oldest of that peer evicted (D-h) |
+  | Global token emergency cap | 65536 | Notbremse + log; see D-h |
 
   Sliding window of 60 s for the rate buckets (fixed window also fine;
   implementer's choice, tested). Numbers are mine; the maintainer can
@@ -97,10 +99,23 @@ after Mac's log-change merge.
   `Retry-After: 1` (seconds). Same for every limit. No JSON, no which-limit
   detail to the guest (that belongs in the log). Distinct from `401`
   (token) and `404` (unbound identity).
-- **D-h. Token map full.** `GenerateToken` refuses when `len(tokens) >= cap`
-  after a best-effort sweep of expired entries; the handler answers `429`
-  with the same body as D-g. No eviction of live tokens: a full map means
-  wait for expiry or restart.
+- **D-h. Token store quota (coordinator, 2026-10-18, overrules the first
+  draft).** A **global** hard cap that answers `429` to every VM when full
+  is itself a DoS, and without bridge MAC-binding a guest can mint under
+  many peer IPs. Instead:
+  1. **Per peer:** at most 32 unexpired tokens. Before recording a 33rd for
+     that peer, discard expired entries for the peer, then **evict the
+     oldest live token of that peer only** — never another peer's. Mint
+     still returns `200` with the new token.
+  2. **Global emergency brake:** if the store would exceed 65536 tokens
+     after per-peer eviction and expiry sweep, refuse the mint with `429`
+     (D-g) and one log line. This brake only really holds after callers are
+     bound to bridge ports (Hogan's separate change); until then a spoofing
+     guest can still approach it via many IPs, which the per-peer mint rate
+     (D-c) bounds but does not eliminate.
+  3. The store **remembers the minting peer** for quota/eviction only.
+     `ValidateToken` stays peer-agnostic: a token still authenticates any
+     caller (unchanged "Require A Valid Session Token" rule).
 - **D-i. Concurrent connections.** Track in `http.Server.ConnState` for
   `StateNew` / `StateClosed` / `StateHijacked` per peer IP of the
   `net.Conn`. When at the cap, the middleware rejects new HTTP requests
@@ -125,10 +140,12 @@ after Mac's log-change merge.
   bounds damage from one source address.
 - **[Risk] Shared `"unknown"` bucket** → Mitigation: only unparseable
   peers; normal TCP guests always parse.
-- **[Risk] Token map full blocks everyone, not just the flooder** →
-  Mitigation: capacity 4096 and per-peer mint limit make a single peer
-  unable to fill it alone within one TTL; document restart as the escape
-  hatch.
+- **[Risk] Global emergency brake still shared across VMs** → Mitigation:
+  set very high (65536); per-peer eviction is the normal path; name in the
+  design that the brake is honest only after bridge binding.
+- **[Risk] Evicting a peer's oldest token breaks a still-running client** →
+  Mitigation: 32 is above cloud-init's usual mint count; clients remint on
+  `401`.
 
 ## Migration Plan
 

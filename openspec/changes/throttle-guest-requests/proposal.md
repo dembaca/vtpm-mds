@@ -17,9 +17,11 @@ on the IMDS bridge.
   `RemoteAddr` via the existing `PeerIP` helper): token mint rate, general
   request rate, concurrent connections, and DevID enroll rate. A peer over a
   limit gets `429` with a short plain body; `/health` stays unlimited.
-- **Bound the token map.** When the process-wide store is at capacity, a new
-  mint is refused with `429` instead of growing forever. Expired tokens are
-  still reaped as today.
+- **Bound live tokens per peer.** Each peer may hold at most 32 unexpired
+  tokens; minting another evicts that peer's oldest token (never another
+  peer's). A high global emergency cap refuses with `429` and a log line
+  only when the whole store would blow past it (coordinator change to D-h,
+  2026-10-18).
 - **One middleware line in `server.go`.** The limiter lives in a new file
   (`internal/server/limit.go` or `imds/limit.go`); `imds/token.go` learns the
   map capacity. Concurrent-connection accounting uses `http.Server.ConnState`.
@@ -41,7 +43,8 @@ on the IMDS bridge.
 
 - `instance-metadata`: the token-mint requirement stops forbidding rate
   limits; new requirements cover per-peer token and request limits, the
-  token-map capacity, and the `429` answer shape.
+  per-peer token quota (with a high global emergency brake), and the `429`
+  answer shape.
 - `operability`: new requirement for a per-peer concurrent-connection limit
   and for `/health` remaining exempt from guest throttles.
 - `devid-enrollment`: enroll start/finish are subject to the same per-peer

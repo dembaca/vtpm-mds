@@ -9,10 +9,11 @@ unconditionally, independently of `mds.enable_ec2_compat`.
 
 The handler SHALL NOT authenticate or authorize the caller and SHALL NOT
 require a request body. The handler MAY refuse a caller that has exceeded the
-per-peer token-mint limit or that would grow the token store past its capacity
-(see "Limit Guests Per Peer" and "Bound The Session Token Store"); such a
-refusal SHALL be the `429` answer of those requirements and SHALL NOT record a
-token.
+per-peer token-mint limit or that would trip the token store's global
+emergency brake (see "Limit Guests Per Peer" and "Bound Session Tokens Per
+Peer"); such a refusal SHALL be the `429` answer of those requirements and
+SHALL NOT record a token. Reaching a peer's live-token quota SHALL NOT refuse
+the mint: the store SHALL evict that peer's oldest live token instead.
 
 On success it SHALL respond `200` with `Content-Type: text/plain` and a body
 consisting of the standard base64 encoding of 32 bytes drawn from the
@@ -31,7 +32,7 @@ If the random source fails, the handler SHALL respond `500` with the body
 #### Scenario: Guest opens a metadata session
 
 - **WHEN** a guest sends `PUT /latest/api/token` with no headers and no body
-  and is under the per-peer token-mint limit with room in the token store
+  and is under the per-peer token-mint limit and the global emergency brake
 - **THEN** the service responds `200` with `Content-Type: text/plain` and a
   44-character base64 token as the entire body
 
@@ -39,7 +40,7 @@ If the random source fails, the handler SHALL respond `500` with the body
 
 - **WHEN** a guest sends `PUT /latest/api/token` with
   `X-aws-ec2-metadata-token-ttl-seconds: 21600`
-  and is under the per-peer token-mint limit with room in the token store
+  and is under the per-peer token-mint limit and the global emergency brake
 - **THEN** the service responds `200` and the returned token still expires after
   `mds.token_ttl`, and the response carries no TTL header
 
@@ -47,7 +48,7 @@ If the random source fails, the handler SHALL respond `500` with the body
 
 - **GIVEN** `mds.enable_ec2_compat` is false
 - **WHEN** a guest sends `PUT /latest/api/token` under the per-peer token-mint
-  limit with room in the token store
+  limit and the global emergency brake
 - **THEN** the service responds `200` with a token
 
 #### Scenario: Random source failure
@@ -110,29 +111,49 @@ path. The token-mint budget SHALL count only `PUT /latest/api/token`.
 - **WHEN** that peer sends `GET /health`
 - **THEN** the service responds `200` and does not apply the guest throttle
 
-### Requirement: Bound The Session Token Store
+### Requirement: Bound Session Tokens Per Peer
 
-The process-wide session token store SHALL hold at most 4096 tokens at once.
-Before recording a newly minted token, the service SHALL discard expired
-entries it still holds. If the store is at capacity after that discard, the
-mint SHALL fail: the token handler SHALL respond `429` with the same body and
-`Retry-After` header as "Limit Guests Per Peer", and SHALL NOT record a token.
+The session token store SHALL associate each recorded token with the peer IP
+that minted it, for quota and eviction only. Validation of a presented token
+SHALL remain independent of the caller's peer, as required by "Require A Valid
+Session Token For Every Metadata Read".
 
-Tokens SHALL remain unbound to the minting peer, held in memory only, and
-invalid after restart, as required by "Require A Valid Session Token For Every
-Metadata Read".
+Each peer SHALL hold at most 32 unexpired tokens. Before recording a new token
+for a peer, the service SHALL discard that peer's expired entries. If the peer
+still holds 32 live tokens, the service SHALL delete the oldest of those
+(by creation time) and then record the new token. Eviction SHALL NOT delete
+another peer's tokens. The mint SHALL respond `200` with the new token.
 
-#### Scenario: Mint refused when the store is full
+The store SHALL also enforce a global emergency capacity of 65536 tokens. If
+after per-peer expiry discard and per-peer eviction the store would still
+exceed that capacity, the mint SHALL fail: the token handler SHALL respond
+`429` with the same body and `Retry-After` header as "Limit Guests Per Peer",
+SHALL NOT record a token, and the service SHALL emit one log line for the
+event. This global brake is a last resort; without bridge-port binding of
+callers it can still be approached by a guest that spoofs many peer IPs.
 
-- **GIVEN** the token store already holds 4096 unexpired tokens
-- **WHEN** a peer under the per-peer mint limit sends `PUT /latest/api/token`
-- **THEN** the service responds `429` with body `Too many requests` and does
-  not grow the store
+Tokens SHALL be held in memory only and SHALL NOT survive a service restart.
 
-#### Scenario: Expiry frees capacity
+#### Scenario: Peer over the live-token quota keeps minting by eviction
 
-- **GIVEN** the token store is at capacity and at least one held token is
-  expired
-- **WHEN** a peer under the per-peer mint limit sends `PUT /latest/api/token`
-- **THEN** the service discards expired entries, records a new token, and
-  responds `200`
+- **GIVEN** a peer already holds 32 unexpired tokens
+- **WHEN** that peer, under the per-peer mint rate limit, sends
+  `PUT /latest/api/token`
+- **THEN** the service deletes the oldest of that peer's tokens, records the
+  new token, responds `200`, and does not delete any other peer's tokens
+
+#### Scenario: Another peer's tokens are untouched
+
+- **GIVEN** peer A holds 32 unexpired tokens and peer B holds at least one
+- **WHEN** peer A mints another token
+- **THEN** peer B's tokens remain in the store and peer A's count of live
+  tokens stays 32 including the new one
+
+#### Scenario: Global emergency brake refuses the mint
+
+- **GIVEN** the store already holds 65536 unexpired tokens and per-peer
+  eviction cannot bring it under that capacity
+- **WHEN** a peer under the per-peer mint rate limit sends
+  `PUT /latest/api/token`
+- **THEN** the service responds `429` with body `Too many requests`, does not
+  record a token, and logs the emergency brake once for the event
