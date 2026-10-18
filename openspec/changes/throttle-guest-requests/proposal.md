@@ -24,7 +24,7 @@ on the IMDS bridge.
   2026-10-18).
 - **One middleware line in `server.go`.** The limiter lives in a new file
   (`internal/server/limit.go` or `imds/limit.go`); `imds/token.go` learns the
-  map capacity. Concurrent-connection accounting uses `http.Server.ConnState`.
+  per-peer quota. Concurrent-connection accounting uses `http.Server.ConnState`.
 - **Lab verification** with a flooding guest on the QEMU lab, after the
   coordinator's ACK of this record. Code rebases behind Mac's log-change
   merge when that lands, so `server.go` conflict surface stays one line.
