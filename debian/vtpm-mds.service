@@ -17,19 +17,27 @@ Restart=on-failure
 RestartSec=5s
 
 # Bind the IMDS bridge address (Ansible vmbr_imds / nftables DNAT).
-# Runs as root for /etc/pve and the CA key; see the confinement below.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 LimitNOFILE=65536
 
-# State directory; config lives in /etc/vtpm-mds.
-ReadWritePaths=/var/lib/vtpm-mds
+# Its own user (run-the-daemon-as-its-own-user). www-data reads /etc/pve as
+# Proxmox ships it (root:www-data 0640), but not /etc/pve/priv.
+User=vtpm-mds
+Group=vtpm-mds
+SupplementaryGroups=www-data
+# The CA key is read by systemd as root and handed over as a credential; a
+# missing file stops the start (243/CREDENTIALS). Another path: a drop-in that
+# first resets the setting with an empty "LoadCredential=" line.
+LoadCredential=devid_ca.key:/etc/ssl/private/proxmox_devid_ca.key
+
+# State directory, owned by the user; config lives in /etc/vtpm-mds.
+StateDirectory=vtpm-mds
+StateDirectoryMode=0750
 ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
 
-# Confinement (harden-the-service-unit). Root without capabilities reads only
-# what root owns or may read by group: /etc/pve, the CA key (root:root 0600 on
-# hogan) and the config all are.
+# Confinement (harden-the-service-unit).
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ProtectSystem=strict
 PrivateDevices=true

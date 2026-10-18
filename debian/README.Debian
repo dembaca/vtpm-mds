@@ -31,20 +31,33 @@ hosts without vmbr_imds). On the lab host:
   systemctl status vtpm-mds
   curl -sS http://169.254.169.1/health
 
-The unit confines the daemon: it runs as root but keeps only
-CAP_NET_BIND_SERVICE, sees the file system read-only (except
-/var/lib/vtpm-mds) and may talk only to link-local and loopback
-addresses. It can therefore read only files that root owns, that the root
-group may read, or that are world-readable in directories it may traverse.
-Keep the CA key (root:root 0600), certificates and inventory so, and outside /home and /root (hidden by
-ProtectHome). A CA key it cannot read does NOT stop the start: the journal
-says "DevID enrollment disabled" and enrollment answers 404, so check for
-that line after every install. An unreadable inventory is a warning too
-("Failed to load VM config cache"). Writes outside /var/lib/vtpm-mds fail
-as a read-only file system. Guests must use a 169.254.0.0/16 source
-address on vmbr_imds; any other address times out without a log line.
-The unit is PartOf pve-cluster, so restarting pve-cluster restarts it too. Check the confinement
-with "systemd-analyze security vtpm-mds".
+The daemon runs as the system user vtpm-mds (created by systemd-sysusers)
+with the extra group www-data, which reads /etc/pve as Proxmox ships it
+(root:www-data 0640) but not /etc/pve/priv. It keeps only
+CAP_NET_BIND_SERVICE, sees the file system read-only (except its state
+directory /var/lib/vtpm-mds) and may talk only to link-local and loopback
+addresses. Guests must use a 169.254.0.0/16 source address on vmbr_imds;
+any other address times out without a log line. The unit is PartOf
+pve-cluster, so restarting pve-cluster restarts it too. Check the
+confinement with "systemd-analyze security vtpm-mds".
+
+The DevID CA key is not read by the daemon from disk: systemd reads
+/etc/ssl/private/proxmox_devid_ca.key as root and hands it over as the
+credential devid_ca.key, so the key keeps its owner and mode
+(root:root 0600). If that file is missing, the service does not start
+(systemctl status shows 243/CREDENTIALS). A key elsewhere needs a
+drop-in that first resets the setting:
+
+  # systemctl edit vtpm-mds
+  [Service]
+  LoadCredential=
+  LoadCredential=devid_ca.key:/path/to/your/devid_ca.key
+
+A rotated key needs "systemctl restart vtpm-mds"; a reload does not
+reread it. The journal says "DevID CA key from systemd credential" at
+start. Certificates and the inventory must stay readable by vtpm-mds or
+www-data; an unreadable inventory is a warning ("Failed to load VM config
+cache").
 
 Build
 -----
