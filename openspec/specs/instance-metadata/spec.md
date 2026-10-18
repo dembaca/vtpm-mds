@@ -259,7 +259,9 @@ these paths SHALL be refused:
 The remaining metadata paths SHALL NOT be refused, because none of them asserts
 an identity the service vouches for. `local-hostname` echoes the caller's own
 `Host` header, `local-ipv4` reports the caller's own peer address,
-`placement/availability-zone` and `services/domain` are fixed strings, and
+`placement/availability-zone` and `placement/region` carry the host's own
+placement, which an unbound caller cannot steer, `services/domain` is a fixed
+string, and
 `public-ipv4` is unavailable to an unbound caller for the same reason it is
 unavailable to any caller with no declared address — a public address is read
 from the bound VM record, and an unbound caller has none. The index asserts no
@@ -451,10 +453,22 @@ and no trailing newline unless stated otherwise:
   address is an IPv4-mapped IPv6 address SHALL be served the IPv4 form. When
   the peer has no IPv4 address, the service SHALL respond `404` with an empty
   body and `Content-Type: text/plain`, as it does for `public-ipv4`.
-- `GET /latest/meta-data/placement/availability-zone` SHALL return the fixed
-  string `proxmox`.
+- `GET /latest/meta-data/placement/availability-zone` SHALL return the zone of
+  the asking caller, and `GET /latest/meta-data/placement/region` its region,
+  as defined below. Neither is ever empty.
 - `GET /latest/meta-data/services/domain` SHALL return the fixed string
   `localdomain`.
+The zone of a caller SHALL be the zone declared for its bound VM record when one
+is declared, and otherwise the host's zone. Its region SHALL be the region
+declared for its bound VM record when one is declared, and otherwise the host's
+region. The two are resolved independently, so a VM may declare one and take the
+host's value for the other. The host's zone and region are those of the
+inventory backend in use, as `vm-inventory` defines them. A caller with no bound
+VM record has nothing declared and SHALL be served the host's zone and region.
+The values SHALL NOT be derived from the connection or from any request header.
+`placement/region` was not a registered key before this requirement; it was
+answered by the index handler like any unknown key under `/latest/meta-data/`.
+
 `GET /latest/meta-data/public-ipv4` SHALL return the public IPv4 address
 declared for the caller's bound VM record, when one is declared. The service
 SHALL NOT derive the value from the connection, from any request header, or
@@ -514,10 +528,41 @@ includes the `placement/` and `services/` prefixes that the index advertises.
 
 #### Scenario: Placement and domain are fixed strings
 
-- **GIVEN** a valid session token
+- **GIVEN** a valid session token and a YAML inventory in which no entry
+  declares a zone or a region
 - **WHEN** a guest reads `placement/availability-zone` and `services/domain`
 - **THEN** the service responds `200` with `proxmox` and `localdomain`
   respectively, regardless of which VM is asking
+
+#### Scenario: A declared zone and region are served
+
+- **GIVEN** a valid session token and a caller bound to a VM record that
+  declares zone `rack-b` and region `bgl-1`
+- **WHEN** it reads `placement/availability-zone` and `placement/region`
+- **THEN** the service responds `200` with `rack-b` and `bgl-1` respectively, with
+  no trailing newline
+
+#### Scenario: Nothing declared gives the host's placement
+
+- **GIVEN** a valid session token and a caller bound to a VM record that
+  declares neither a zone nor a region, on a host whose zone is `hogan` and
+  whose region is `bgl-cluster`
+- **WHEN** it reads `placement/availability-zone` and `placement/region`
+- **THEN** the service responds `200` with `hogan` and `bgl-cluster`
+
+#### Scenario: One value declared, the other taken from the host
+
+- **GIVEN** a caller bound to a VM record that declares zone `rack-b` and no
+  region, on a host whose region is `bgl-cluster`
+- **WHEN** it reads both placement keys
+- **THEN** the zone is `rack-b` and the region is `bgl-cluster`
+
+#### Scenario: An unbound caller is served the host's placement
+
+- **GIVEN** a valid session token and a caller with no bound VM record
+- **WHEN** it reads `placement/availability-zone` and `placement/region`
+- **THEN** the service responds `200` with the host's zone and region, and no VM's
+  declaration is visible to it
 
 #### Scenario: Public address is served when declared
 
@@ -553,11 +598,12 @@ With `mds.enable_ec2_compat` enabled,
 `instanceId`, `imageId`, `instanceType`, `region`, `availabilityZone`,
 `privateIp`, `devpayProductCodes`, `version`, `billingProducts` and `accountId`.
 
-`imageId` SHALL be `proxmox-unknown`, `instanceType` SHALL be `vm`, `region`
-SHALL be `local`, `availabilityZone` SHALL be `proxmox`, `version` SHALL be
-`2017-09-30`, `accountId` SHALL be `012345678901`, and `devpayProductCodes` and
-`billingProducts` SHALL both be `null`. Only `instanceId` and `privateIp` vary
-by caller.
+`imageId` SHALL be `proxmox-unknown`, `instanceType` SHALL be `vm`, `version`
+SHALL be `2017-09-30`, `accountId` SHALL be `012345678901`, and
+`devpayProductCodes` and `billingProducts` SHALL both be `null`. `region` and
+`availabilityZone` SHALL be the caller's region and zone exactly as
+`placement/region` and `placement/availability-zone` serve them. `instanceId`,
+`privateIp`, `region` and `availabilityZone` vary by caller.
 
 `privateIp` SHALL be the IPv4 address of the connection's peer, derived exactly
 as `local-ipv4` is, and SHALL NOT honour `X-Forwarded-For`, even though
@@ -585,7 +631,17 @@ verifies it against a key this service holds.
 - **WHEN** it sends `GET /latest/dynamic/instance-identity/document`
 - **THEN** the service responds `200` with `Content-Type: application/json`, and
   the document reports `imageId` `proxmox-unknown`, `instanceType` `vm`,
-  `region` `local`, `availabilityZone` `proxmox` and `privateIp` `10.0.0.5`
+  `region` and `availabilityZone` equal to what `placement/region` and
+  `placement/availability-zone` return to the same caller, and `privateIp`
+  `10.0.0.5`; with a YAML inventory that declares neither, that is `local` and
+  `proxmox`
+
+#### Scenario: The document and the placement keys agree
+
+- **GIVEN** a caller bound to a VM record that declares zone `rack-b` and region
+  `bgl-1`
+- **WHEN** it reads the identity document
+- **THEN** `region` is `bgl-1` and `availabilityZone` is `rack-b`
 
 #### Scenario: Identity document for a peer with no IPv4 address
 
