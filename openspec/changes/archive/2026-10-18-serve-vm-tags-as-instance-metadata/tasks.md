@@ -9,11 +9,17 @@ at the coordinator's assignment, after the maintainer's answers of the same day.
 - [x] 1.1 **Maintainer** — answer the coordinator's five questions, and verify the answers are recorded in `design.md` under a dated heading
       **Done, 2026-10-18:** on the agent bus; recorded under "Decided (maintainer,
       2026-10-18)".
-- [ ] 1.2 **Maintainer, optional** — overrule or accept D-a to D-h in `design.md`, and verify the outcome is recorded there
+- [x] 1.2 **Maintainer, optional** — overrule or accept D-a to D-h in `design.md`, and verify the outcome is recorded there
       The ones most likely to be wanted differently: the prefix matched without
       regard to case (D-b), the 63 and 255 character limits (D-a), and `404` for a
       VM without tags (D-d).
-- [ ] 1.3 **Maintainer** — answer the open question in `design.md` (does each Kubernetes node read its own zone from the service), and verify the sentence is recorded as a goal or dropped
+      **Closed at the archive, 2026-10-18:** the maintainer did not overrule any of
+      D-a to D-h; he merged #46 with them as written.
+- [x] 1.3 **Maintainer** — answer the open question in `design.md` (does each Kubernetes node read its own zone from the service), and verify the sentence is recorded as a goal or dropped
+      **Dropped from this change, 2026-10-18,** not answered: the choice is
+      about the consumer, outside this repository, and this record never
+      depended on it. What was learned about the consumer is under "Open
+      question" in `design.md`.
 - [x] 1.4 **Coordinator** — ACK the record and the deltas, and verify the ACK is on the bus before any code is written
       **Done, 2026-10-18:** ACK on the bus for #46 at `2669a0b`, with two notes
       (a log line for former declarations, and the lab naming) taken into D-h and
@@ -124,4 +130,7 @@ at the coordinator's assignment, after the maintainer's answers of the same day.
 
 ## 4. Archive
 
-- [ ] 4.1 Archive with `openspec archive`, update `AGENTS.md` where it lists topology and tags, and verify `openspec validate --all --strict` is still clean
+- [x] 4.1 Archive with `openspec archive`, update `AGENTS.md` where it lists topology and tags, and verify `openspec validate --all --strict` is still clean
+      **Done, 2026-10-18,** by the coordinator from `main` at `210e906`, after
+      #46 was merged: `openspec archive` applied `instance-metadata` +1 ~2 and
+      `vm-inventory` +2 -2. `AGENTS.md` and the README feature table updated.

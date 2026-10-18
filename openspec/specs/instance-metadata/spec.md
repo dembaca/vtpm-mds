@@ -438,9 +438,11 @@ and no trailing newline unless stated otherwise:
   terminated by a newline. It SHALL always list `instance-id`,
   `local-hostname`, `local-ipv4`, `placement/` and `services/`. It SHALL list
   `public-ipv4` if and only if the service has a public address to serve the
-  asking caller, as defined below. The index is therefore the first metadata
-  value that depends on which VM is asking: a caller with a declared public
-  address receives six lines, one without receives five. The index SHALL NOT be
+  asking caller, as defined below, and `tags/` if and only if the asking
+  caller's VM record carries at least one instance tag, as
+  `Serve Instance Tags From The Bound VM Record` defines. The index is therefore
+  a metadata value that depends on which VM is asking: a caller with a declared
+  public address and tags receives seven lines, one with neither receives five. The index SHALL NOT be
   cached across callers.
 - `GET /latest/meta-data/local-hostname` SHALL return the request's `Host`
   header truncated at the first colon, or `localhost.localdomain` when `Host` is
@@ -458,16 +460,13 @@ and no trailing newline unless stated otherwise:
   as defined below. Neither is ever empty.
 - `GET /latest/meta-data/services/domain` SHALL return the fixed string
   `localdomain`.
-The zone of a caller SHALL be the zone declared for its bound VM record when one
-is declared, and otherwise the host's zone. Its region SHALL be the region
-declared for its bound VM record when one is declared, and otherwise the host's
-region. The two are resolved independently, so a VM may declare one and take the
-host's value for the other. The host's zone and region are those of the
-inventory backend in use, as `vm-inventory` defines them. A caller with no bound
-VM record has nothing declared and SHALL be served the host's zone and region.
-The values SHALL NOT be derived from the connection or from any request header.
-`placement/region` was not a registered key before this requirement; it was
-answered by the index handler like any unknown key under `/latest/meta-data/`.
+The zone of a caller SHALL be the host's zone and its region the host's region,
+whichever VM is asking: no VM declares a placement of its own. The host's zone
+and region are those of the inventory backend in use, as `vm-inventory` defines
+them. A caller with no bound VM record SHALL be served the same values. The
+values SHALL NOT be derived from the connection or from any request header.
+Before this change a VM could declare its own zone and region; that declaration
+is removed, and a placement finer than the node has no source.
 
 `GET /latest/meta-data/public-ipv4` SHALL return the public IPv4 address
 declared for the caller's bound VM record, when one is declared. The service
@@ -536,33 +535,33 @@ includes the `placement/` and `services/` prefixes that the index advertises.
 
 #### Scenario: A declared zone and region are served
 
-- **GIVEN** a valid session token and a caller bound to a VM record that
-  declares zone `rack-b` and region `bgl-1`
+- **GIVEN** a valid session token, a host whose node description declares zone
+  `DUS4` and region `DUS`, and a caller bound to any VM record
 - **WHEN** it reads `placement/availability-zone` and `placement/region`
-- **THEN** the service responds `200` with `rack-b` and `bgl-1` respectively, with
-  no trailing newline
+- **THEN** the service responds `200` with `DUS4` and `DUS` respectively, with no
+  trailing newline
 
 #### Scenario: Nothing declared gives the host's placement
 
-- **GIVEN** a valid session token and a caller bound to a VM record that
-  declares neither a zone nor a region, on a host whose zone is `hogan` and
-  whose region is `bgl-cluster`
+- **GIVEN** a valid session token and a caller bound to a VM record, on a host
+  whose description declares neither a zone nor a region, whose zone is `hogan`
+  and whose region is `bgl-cluster`
 - **WHEN** it reads `placement/availability-zone` and `placement/region`
 - **THEN** the service responds `200` with `hogan` and `bgl-cluster`
 
 #### Scenario: One value declared, the other taken from the host
 
-- **GIVEN** a caller bound to a VM record that declares zone `rack-b` and no
-  region, on a host whose region is `bgl-cluster`
+- **GIVEN** a caller bound to a VM record, on a host whose description declares a
+  zone `DUS4` and no region, and whose cluster is named `bgl-cluster`
 - **WHEN** it reads both placement keys
-- **THEN** the zone is `rack-b` and the region is `bgl-cluster`
+- **THEN** the zone is `DUS4` and the region is `bgl-cluster`
 
 #### Scenario: An unbound caller is served the host's placement
 
 - **GIVEN** a valid session token and a caller with no bound VM record
 - **WHEN** it reads `placement/availability-zone` and `placement/region`
-- **THEN** the service responds `200` with the host's zone and region, and no VM's
-  declaration is visible to it
+- **THEN** the service responds `200` with the host's zone and region, the same
+  values a bound caller reads
 
 #### Scenario: Public address is served when declared
 
@@ -589,6 +588,21 @@ includes the `placement/` and `services/` prefixes that the index advertises.
 
 - **WHEN** a guest sends `GET /latest/meta-data`
 - **THEN** the service responds `301` with `Location: /latest/meta-data/`
+
+#### Scenario: A VM-level placement declaration is not served
+
+- **GIVEN** a caller bound to a VM record whose Proxmox tags include
+  `mds.zone.rack-b` and whose YAML entry once declared `zone: rack-b`
+- **WHEN** it reads `placement/availability-zone`
+- **THEN** the service responds with the host's zone and not `rack-b`
+
+#### Scenario: Index lists tags when the VM has some
+
+- **GIVEN** a valid session token and a caller bound to a VM record carrying one
+  instance tag
+- **WHEN** it sends `GET /latest/meta-data/`
+- **THEN** the listing contains `tags/`, and for a caller whose VM carries none it
+  does not
 
 ### Requirement: Serve The Instance Identity Document Without A Signature
 
@@ -638,10 +652,11 @@ verifies it against a key this service holds.
 
 #### Scenario: The document and the placement keys agree
 
-- **GIVEN** a caller bound to a VM record that declares zone `rack-b` and region
-  `bgl-1`
+- **GIVEN** a host whose node description declares zone `DUS4` and region `DUS`,
+  and a caller bound to any VM record
 - **WHEN** it reads the identity document
-- **THEN** `region` is `bgl-1` and `availabilityZone` is `rack-b`
+- **THEN** `region` is `DUS` and `availabilityZone` is `DUS4`, as the placement
+  keys serve them
 
 #### Scenario: Identity document for a peer with no IPv4 address
 
@@ -672,3 +687,76 @@ verifies it against a key this service holds.
 - **WHEN** it sends `GET /latest/dynamic/instance-identity/signature`
 - **THEN** the response is `404` with the body `404 page not found`, not `401`,
   because there is no handler to ask for a token
+
+### Requirement: Serve Instance Tags From The Bound VM Record
+
+With `mds.enable_ec2_compat` enabled, the service SHALL serve the instance tags
+of the VM the connection is bound to, in the shape EC2 gives instance metadata
+tags, to an authenticated caller and with `Content-Type: text/plain`:
+
+- `GET /latest/meta-data/tags/` SHALL return the single line `instance`, followed
+  by a newline.
+- `GET /latest/meta-data/tags/instance` SHALL return the keys of the VM's tags,
+  one per line in ascending byte order, each terminated by a newline.
+- `GET /latest/meta-data/tags/instance/<key>` SHALL return the value of that tag,
+  with no trailing newline, and with the case the tag's source spells it.
+
+Each of the three SHALL respond `404` with an empty body and
+`Content-Type: text/plain` when the VM carries no instance tags, when the key is
+not one of its tags, and when no VM record is bound to the connection, so that an
+unbound caller cannot read another VM's tags and the answer stays distinct from the
+catch-all handler's `404 page not found`. The three paths SHALL NOT be answered by
+the metadata index, although they lie under `/latest/meta-data/`. The tags come
+from the bound VM record only, as `vm-inventory` defines them, and SHALL NOT be
+derived from the connection or from any request header.
+
+The tags are information the operator, and whoever may edit the VM, put into its
+configuration so the guest can read them: the service SHALL NOT place them in the
+instance identity document and SHALL NOT use them for anything else.
+
+#### Scenario: A guest lists its tags
+
+- **GIVEN** a valid session token and a caller bound to a VM carrying the tags
+  `rack` as `b.2` and `owner` as `team-a`
+- **WHEN** it sends `GET /latest/meta-data/tags/instance`
+- **THEN** the service responds `200` with the two lines `owner` and `rack`, each
+  terminated by a newline
+
+#### Scenario: A guest reads one tag
+
+- **GIVEN** the same caller
+- **WHEN** it sends `GET /latest/meta-data/tags/instance/rack`
+- **THEN** the service responds `200` with the body `b.2` and no trailing newline
+
+#### Scenario: The tags directory names the instance tags
+
+- **GIVEN** the same caller
+- **WHEN** it sends `GET /latest/meta-data/tags/`
+- **THEN** the service responds `200` with the line `instance`
+
+#### Scenario: A VM without tags has none to list
+
+- **GIVEN** a valid session token and a caller bound to a VM that carries no
+  instance tag
+- **WHEN** it sends `GET /latest/meta-data/tags/instance`
+- **THEN** the service responds `404` with an empty body
+
+#### Scenario: An unknown key is not the index
+
+- **GIVEN** a caller bound to a VM carrying `owner`
+- **WHEN** it sends `GET /latest/meta-data/tags/instance/missing`
+- **THEN** the service responds `404` with an empty body, and in particular not
+  `200` with the metadata index
+
+#### Scenario: An unbound caller reads no tags
+
+- **GIVEN** a valid session token and a caller with no bound VM record
+- **WHEN** it sends `GET /latest/meta-data/tags/instance`
+- **THEN** the service responds `404` with an empty body, and no VM's tags are
+  visible to it
+
+#### Scenario: The tags are not in the identity document
+
+- **GIVEN** a caller bound to a VM carrying `owner`
+- **WHEN** it reads the instance identity document
+- **THEN** the document carries exactly its fixed key set and no tag

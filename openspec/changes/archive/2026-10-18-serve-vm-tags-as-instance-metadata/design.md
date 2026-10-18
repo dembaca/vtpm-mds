@@ -102,6 +102,21 @@ DaemonSet that patches its own node object or by `--node-labels` at bootstrap. T
 coordinator asked the maintainer on the bus whether that is the plan; this record
 does not depend on the answer, but the sentence would become a goal if it is.
 
+**Status at the archive, 2026-10-18: not answered, and not a goal of this
+change.** What was learned about the consumer, read-only, from its source and
+its rollout role: the node-label controller runs as one replica with a Proxmox
+API token, every 30 seconds; it matches a Kubernetes node to a VM by name, among
+the VMs in a pool, and reads the **host's** description line by line, taking the
+first word after `Location: `, `topology.kubernetes.io/region` and
+`topology.kubernetes.io/zone`. A `topology.vtpm_mds.io/` line next to those does
+not disturb it, and an Ansible role that labels nodes once fails when the
+`topology.kubernetes.io/` lines are missing — so a data-centre description has
+to carry both prefixes for as long as either consumer reads the old one. Two ways
+for the consumer were put to the maintainer: keep the central controller and
+teach it the new prefix, or replace it by a per-node component that reads
+`placement/` from this service and patches its own node, which needs no API
+token in the VM. Either is work on the consumer, not here.
+
 ## Implementation notes
 
 Written for the coordinator's review; code only after the ACK.
