@@ -404,11 +404,20 @@ LDevID and is matched by a SPIRE selector.
 
 **Not established.**
 
-- The tag format. In `JSONSchema.pm` at `HEAD` it is
-  `[a-z0-9_][a-z0-9_\-\+\.]*` (so `-` is allowed), yet hogan refused a tag with
-  `-` on 2026-10-17 (`invalid characters in tag`). The installed privileges
-  agree with `HEAD` (above), so the roles part stands; the installed
-  `PVE_TAG_RE` was not read and the refusal is unexplained.
+- **Why hogan refused a `-` in a tag.** The format is not the cause: the
+  installed `JSONSchema.pm` (line 884, coordinator, 2026-10-18) has
+  `PVE_TAG_RE = qr/[a-z0-9_][a-z0-9_\-\+\.]*/i`, as at `HEAD`, so `-` is a valid
+  tag character, and the message `invalid characters in tag` (line 896) comes
+  from the same check. The first attempt on 2026-10-17 was
+  `mds.zone.test-a;mds.region.test-r` as one entry, and `;` is not valid inside a
+  single tag; that is the coordinator's likely explanation. **It does not fit
+  everything:** the later value `mds.region.test_r;mds.zone.test_a` was stored,
+  with a `;` in it. How it was entered (GUI field, `qm set`) was not recorded, so
+  the cause stays unproven. **What stands corrected:** the statements in the
+  archived `serve-zone-and-region-per-vm` (task 3.3 and D-a) that Proxmox rejects
+  `-` in a tag are an observation with an unconfirmed cause, not a rule. The
+  service accepts `-` in a tag value either way. An archived record is the
+  coordinator's to edit; this is the correction.
 - The real settings on hogan: `datacenter.cfg` (`registered-tags`,
   `user-tag-access`) and `user.cfg` need root; the coordinator asked the
   maintainer for the lines.
