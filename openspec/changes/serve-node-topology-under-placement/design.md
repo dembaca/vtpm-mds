@@ -91,8 +91,13 @@ Taken from the coordinator's assignment: a key with neither line nor default,
   handler that answers `301`. Go's `ServeMux` would redirect it by itself, but
   with a status that depends on the Go version: the build used for this record
   answers `307` for `/latest/meta-data` too, whereas the `instance-metadata` spec
-  says `301` for that path. This change does not touch the `meta-data` path; the
-  difference is reported to the coordinator.
+  says `301` for that path. This change does not touch the `meta-data` path.
+  Measured by the coordinator on hogan, 2026-10-18: the installed build (Go
+  1.24.4, `go.mod` 1.24.0) answers `301` for `/latest/meta-data`, as the spec says;
+  the `307` comes from the newer toolchain used for this record. The spec holds
+  there, but through the toolchain and not through the code, so an explicit
+  redirect for `meta-data`, like the one for `placement`, would be a small change
+  of its own (not made here).
 - **D-h. Order of the listing.** Ascending byte order, for a stable answer; EC2
   lists in its own fixed order, and nothing known depends on it.
 - **D-i. The identity document is unchanged.** It keeps exactly `availabilityZone`

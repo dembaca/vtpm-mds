@@ -61,7 +61,17 @@ at the coordinator's assignment, after the maintainer's decision of the same day
       Changes a shared resource, the node notes, so it needs the maintainer's go
       in the session of whoever runs it.
 - [ ] 3.2 **Hogan** — verify that a description with `zone` and `availability-zone` both set gives the node name and a log line, that the former prefix `topology.kubernetes.io/` alone changes nothing, and that the identity document still has exactly its fixed keys
-- [ ] 3.3 **Cloud lab** — verify the YAML backend's defaults and the `404` of `placement/rack` and `placement/node`, and, if D-f is accepted, a `topology` mapping; say which layout was used
+- [x] 3.3 **Cloud lab** — verify the YAML backend's defaults and the `404` of `placement/rack` and `placement/node`, and, if D-f is accepted, a `topology` mapping; say which layout was used
+      **Done, 2026-10-18, `agent-cursor-vtpm-22e0`, against `3fcf331`:** passed.
+      Layout `swtpm-localca` and `/usr/share/OVMF/OVMF_CODE_4M.fd`; the inventory is
+      `/var/lib/mds-lab/inventory/lab.yaml`, outside the repository, with no
+      `topology` mapping (D-f). From guest `guest100` (`i-100`): `placement/` listed
+      `availability-zone` and `region`; `placement/availability-zone` answered
+      `proxmox` and `placement/region` `local`; `placement/rack`, `placement/node`
+      and `placement/cluster` each answered `404` with an empty body; `placement`
+      without a slash answered `301` to `/latest/meta-data/placement/`; the identity
+      document kept its fixed keys with `proxmox` and `local`. **Not shown in the
+      lab:** the Proxmox half, the 64-key limit on a live stack.
 - [ ] 3.4 Say what was not verified: a data-centre node's real description, a Kubernetes consumer, the 64-key limit on the live stack
 
 ## 4. Archive
