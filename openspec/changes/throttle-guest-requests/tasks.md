@@ -100,3 +100,5 @@ merged with it) before touching `server.go`.
 - [x] 5.1 Per-peer token index (D-m), ConnState close of further connections (D-i),
       `GET`-only `/health` (D-e), `Retry-After: 60` + `Connection: close` (D-g);
       verify with `go test ./imds ./internal/server` and `openspec validate --all --strict`
+- [x] 5.2 Re-review follow-up: document connection over-cap as TCP close/reset
+      (not `429`); `gofmt` on `limit.go` / `server.go`

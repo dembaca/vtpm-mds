@@ -123,13 +123,13 @@ func New(cfg *config.Config) (*Server, error) {
 	})
 
 	srv.httpServer = &http.Server{
-		Addr:        cfg.MDS.ListenAddr,
-		Handler:     vmConfigMiddleware(loggingMiddleware(guestLimitMiddleware(srv.limiter, mux))),
-		ConnContext: connContext,
-		ConnState:   srv.limiter.trackConnState,
-		ReadTimeout: 15 * time.Second,
+		Addr:         cfg.MDS.ListenAddr,
+		Handler:      vmConfigMiddleware(loggingMiddleware(guestLimitMiddleware(srv.limiter, mux))),
+		ConnContext:  connContext,
+		ConnState:    srv.limiter.trackConnState,
+		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
-		IdleTimeout: 60 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	return srv, nil

@@ -217,7 +217,6 @@ func writeTooManyRequests(w http.ResponseWriter) {
 	fmt.Fprint(w, "Too many requests\n")
 }
 
-
 func isEnrollPath(path string) bool {
 	return strings.HasPrefix(path, "/latest/devid/enroll/")
 }

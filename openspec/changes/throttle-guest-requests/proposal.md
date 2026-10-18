@@ -16,7 +16,9 @@ on the IMDS bridge.
 - **Per-peer limits** on the guest-facing HTTP surface (keyed by peer IP from
   `RemoteAddr` via the existing `PeerIP` helper): token mint rate, general
   request rate, concurrent connections, and DevID enroll rate. A peer over a
-  limit gets `429` with a short plain body; `/health` stays unlimited.
+  rate/enroll/token limit gets `429` with a short plain body; a further TCP
+  connection beyond the concurrent-connection cap is closed at accept
+  (`StateNew`). `GET /health` stays unlimited.
 - **Bound live tokens per peer.** Each peer may hold at most 32 unexpired
   tokens; minting another evicts that peer's oldest token (never another
   peer's). A high global emergency cap refuses with `429` and a log line

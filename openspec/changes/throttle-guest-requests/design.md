@@ -26,7 +26,8 @@ after Mac's log-change merge.
 **Goals:**
 
 - Cap what one peer IP can do to token mint, general HTTP, enroll, and
-  concurrent TCP connections, with a stable `429` answer.
+  concurrent TCP connections: rate/enroll/token limits answer `429`; an
+  over-cap further TCP connection is closed at `StateNew` (reset), not `429`.
 - Cap live tokens **per peer** so one guest cannot fill the store; keep only a
   high global emergency brake.
 - Keep a quiet, correct cloud-init + SPIRE enroll path under the defaults.
