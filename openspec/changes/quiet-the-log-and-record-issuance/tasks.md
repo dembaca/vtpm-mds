@@ -50,13 +50,40 @@ record.**
 
 ## 3. Verify on the real systems
 
-- [ ] 3.1 **Hogan** — install the git-stamped package, reload, send a few requests from VM 399 and from the host, and verify from the journal that no `[DEBUG` line appears, that each access line names the peer and `VM` (`399` for the guest, `-` for the host), and that the 24-hour share of debug lines is gone (count before and after)
-- [ ] 3.2 **Hogan** — start once with `-debug` and verify the `[DEBUG` lines are back, then go back to the packaged unit
+- [x] 3.1 **Hogan** — install the git-stamped package, reload, send a few requests from VM 399 and from the host, and verify from the journal that no `[DEBUG` line appears, that each access line names the peer and `VM` (`399` for the guest, `-` for the host), and that the 24-hour share of debug lines is gone (count before and after)
+      **Done, 2026-10-18, hogan (coordinator), against
+      `0.2.0+git20261018.57cc6cb3c8ac` (head `57cc6cb`), with the maintainer's go in
+      hogan's session:** passed. Before the change, 30 minutes of the journal held 427
+      lines, 366 of them `[DEBUG`. After it, a start, a probe run from VM 399 and
+      three requests from the host wrote 15 lines and no `[DEBUG`. The start and a
+      reload showed, without a marker, `Cache refresh complete (…): 3 VMs, 5 MAC
+      addresses cached`. A load failure and the other errors of D-h were not
+      provoked on hogan (the unit tests cover them). Each access line named the peer
+      and the VM: `PUT "/latest/api/token" 200 <duration> <peer> 399` for the bound
+      guest, `GET "/latest/meta-data/instance-id" 401 … <host address> -` for the
+      host. A request carrying `X-Forwarded-For: 10.9.9.9` did not show it, and a path
+      with an encoded line break appeared as one line, `GET
+      "/latest/meta-data/x\nFAKE LINE" 401 …`.
+- [x] 3.2 **Hogan** — start once with `-debug` and verify the `[DEBUG` lines are back, then go back to the packaged unit
       Changes the running service's arguments, so it needs the maintainer's go in
       the session of whoever runs it.
-- [ ] 3.3 **Hogan** — re-enrol VM 399 and verify one `devid issued` line with its serial, `vm=399` and the EK fingerprint, and that the fingerprint equals the one `Start` bound
+      **Done, 2026-10-18, hogan:** a second instance started with `-debug` on a
+      loopback port wrote the trace lines again (nine in one run), as before the change;
+      the packaged unit was not touched, so no change of the running service's
+      arguments was needed.
+- [x] 3.3 **Hogan** — re-enrol VM 399 and verify one `devid issued` line with its serial, `vm=399` and the EK fingerprint, and that the fingerprint equals the one `Start` bound
       Changes a shared resource, VM 399's DevID, so it needs the maintainer's go in
       the session of whoever runs it.
+      **Done, 2026-10-18, hogan, with the maintainer's go:** one enrolment of VM 399,
+      with the client of the same build, into a scratch directory, guarded against a
+      second run and without touching the SPIRE files (the same before and after; the
+      lockout counter `0x0` before and after). The journal held exactly one line
+      `devid issued serial=b25d051a… vm=399 ek=19517bd1…`; the serial is the
+      certificate's (`CN=399`), the fingerprint is the EK certificate's, and the line
+      held no PEM and no key, between the access lines of the start and the finish.
+      Whether the fingerprint equals the one the start leg bound was not compared
+      separately on hogan; the unit test of the real handlers shows it. The scratch
+      directory was removed.
 - [ ] 3.4 **Cloud lab** — run the DevID end-to-end script and verify one `devid issued` line per run; say which layout was used
 - [ ] 3.5 Say what was not verified: a flooding guest (that is `throttle-guest-requests`), a journal read after a fault with debug off
 
