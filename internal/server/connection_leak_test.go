@@ -32,6 +32,14 @@ func TestClosedConnectionsAreNotRetained(t *testing.T) {
 	defer log.SetOutput(os.Stderr)
 
 	srv, token := signatureTestServer(t)
+	vmConfigCacheMu.RLock()
+	savedCache := vmConfigCache
+	vmConfigCacheMu.RUnlock()
+	t.Cleanup(func() {
+		vmConfigCacheMu.Lock()
+		vmConfigCache = savedCache
+		vmConfigCacheMu.Unlock()
+	})
 	if err := srv.RefreshVMConfigCache(); err != nil {
 		t.Fatalf("RefreshVMConfigCache: %v", err)
 	}

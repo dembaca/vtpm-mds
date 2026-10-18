@@ -14,7 +14,7 @@ memory grow without end.
 #### Scenario: Many closed connections leave nothing behind
 
 - **GIVEN** a service bound to a VM record for its callers
-- **WHEN** a caller opens and closes ten thousand connections, each sending a
+- **WHEN** a caller opens and closes thousands of connections, each sending a
   request
 - **THEN** the service's live heap afterwards is not larger by an amount that
   grows with the number of connections
