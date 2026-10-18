@@ -65,9 +65,11 @@ merged with it) before touching `server.go`.
       token 31st→429; GET flood→429; `/health` 200; after D-l guest flood
       again 30×200 then 429.
 - [x] 3.2 **Cloud lab** — open more than 16 concurrent connections from one
-      guest (or a host netns peer) and verify further limited requests get
-      `429` while `/health` stays `200`
-      **Done:** 18 host TCP conns to 169.254.169.1 → HTTP 429; `/health` 200.
+      guest (or a host netns peer) and verify the further connection is
+      closed (reset) while `/health` stays `200` on an allowed connection
+      **Done (first measure, pre–StateNew-close):** 18 host TCP conns → HTTP
+      429; `/health` 200. **After D-i:** further conn closed at `StateNew`
+      (unit-tested); re-measure in lab after rebase behind #52.
 - [x] 3.3 **Cloud lab** — run one DevID enroll (start+finish) under budget
       and verify it still succeeds; flood enroll past 6/60s and verify
       `429` without a new certificate
