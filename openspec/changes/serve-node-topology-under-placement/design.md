@@ -38,6 +38,11 @@ prefix to be served under `placement/` (see the proposal).
 | The default set `region`, `zone`, `rack`, `cluster`, `node` | `rack` has no default. |
 | Trust | The node description can be written only by a Proxmox administrator (`Sys.Modify` on `/`, `declare-per-vm-metadata` D9), who can do everything in the cluster anyway. |
 
+Decided on the same day, after the record was proposed (#48): **D-g
+(`placement/` lists the keys): "OK"; D-f (a YAML `topology` mapping): "no strong
+opinion"**, so it stays out as the coordinator recommended; "otherwise everything
+is OK for the go". Both are recorded below as decided.
+
 Taken from the coordinator's assignment: a key with neither line nor default,
 `rack` for example, is answered `404` and is not listed; `zone` and
 `availability-zone` both set declare nothing, with a log line.
@@ -67,12 +72,12 @@ Taken from the coordinator's assignment: a key with neither line nor default,
   decision, and the trust is the administrator's. The index keeps listing
   `placement/` and the document keeps its fixed key set.
 - **D-f. The YAML backend declares no topology** (the coordinator's
-  recommendation of 2026-10-18, taken unless the maintainer overrules). Its host
+  recommendation of 2026-10-18; the maintainer had no strong opinion). Its host
   topology stays zone `proxmox` and region `local`, with no `node` and no
   `cluster`, so the lab shows the defaults and the `404`, and unit tests cover the
   reader. A top-level `topology` mapping would let the lab show arbitrary keys too;
   it is a small addition left out.
-- **D-g. `placement/` lists the keys** (kept on the coordinator's recommendation:
+- **D-g. `placement/` lists the keys** (the maintainer: "OK"; the coordinator:
   the feature needs it). Without a listing a tool that walks the tree, cloud-init
   for example, cannot find a key it does not know by name, and the listing was
   already named a gap (`placement/` answers the metadata index). With it, an

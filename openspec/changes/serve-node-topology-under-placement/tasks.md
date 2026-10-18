@@ -9,7 +9,10 @@ at the coordinator's assignment, after the maintainer's decision of the same day
 - [x] 1.1 **Maintainer** — decide that any key under `topology.vtpm_mds.io/` is served under `placement/<key>`, `zone` is `availability-zone`, `cluster` and `node` default from the host, and verify the answers are recorded in `design.md` under a dated heading
       **Done, 2026-10-18:** on the agent bus; recorded under "Decided
       (maintainer, 2026-10-18)".
-- [ ] 1.2 **Maintainer, optional** — overrule or accept D-a to D-i in `design.md`, and verify the outcome is recorded there
+- [x] 1.2 **Maintainer, optional** — overrule or accept D-a to D-i in `design.md`, and verify the outcome is recorded there
+      **Done, 2026-10-18:** the maintainer: D-g OK, no strong opinion on D-f,
+      "otherwise everything is OK for the go"; D-a to D-e, D-h and D-i stand. The
+      outcome is under "Decided (maintainer, 2026-10-18)" in `design.md`.
       The ones most likely to be wanted differently: the YAML topology mapping
       (D-f), the `placement/` listing (D-g), the limit of 64 keys (D-c).
 - [x] 1.3 **Coordinator** — ACK the record and the deltas, and verify the ACK is on the bus before any code is written
