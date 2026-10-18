@@ -80,10 +80,9 @@ func parseVMConfig(vmid, data string) *inventory.VMConfig {
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
 			value := strings.TrimSpace(parts[1])
-			// Proxmox cannot write these keys, so a line carrying one was
-			// added by hand and is gone after the next edit of the VM. A zone
-			// and a region come from the VM's tags and from nowhere else.
-			if key != "public-ipv4" && key != "zone" && key != "region" {
+			// Proxmox cannot write this key, so a line carrying one was
+			// added by hand and is gone after the next edit of the VM.
+			if key != "public-ipv4" {
 				vmConfig.RawConfig[key] = value
 			}
 		}
@@ -98,63 +97,82 @@ func parseVMConfig(vmid, data string) *inventory.VMConfig {
 		vmConfig.Name = name
 	}
 
-	zone, region := placementFromTags(vmid, vmConfig.RawConfig["tags"])
-	if zone != "" {
-		vmConfig.RawConfig["zone"] = zone
-	}
-	if region != "" {
-		vmConfig.RawConfig["region"] = region
-	}
+	vmConfig.Tags = instanceTags(vmid, vmConfig.RawConfig["tags"])
 
 	return vmConfig
 }
 
-const (
-	zoneTagPrefix   = "mds.zone."
-	regionTagPrefix = "mds.region."
-)
+// tagPrefix starts a Proxmox tag that declares an instance tag:
+// vtpm_mds.io.<key>.<value>. Proxmox ignores case in tags, so the prefix is
+// matched the same way; the key and the value keep the case they were written in.
+const tagPrefix = "vtpm_mds.io."
 
-// placementFromTags reads the zone and region a VM declares in its tags. A kind
-// is declared by exactly one tag with a valid name. Two or more tags of one
-// kind, valid or not, declare nothing, so a typo next to a good tag is never
-// resolved silently in the good tag's favour; a single tag with an invalid
-// name is ignored. Each fault is logged and touches only this VM.
-func placementFromTags(vmid, tags string) (zone, region string) {
+// legacyPlacementPrefixes began the tags with which a VM once declared its own
+// zone and region. They place nothing now, and a VM still carrying one is logged.
+var legacyPlacementPrefixes = []string{"mds.zone.", "mds.region."}
+
+type tagEntry struct {
+	key, value string
+	ok         bool
+}
+
+// instanceTags reads the instance tags a VM declares. A key is declared by
+// exactly one tag with a valid key and value. Two or more tags for one key, valid
+// or not, declare nothing, so a typo next to a good tag is never resolved
+// silently in the good tag's favour; a single invalid tag is ignored. Each fault
+// is logged and touches only this VM, and a tag without the prefix is none of this
+// code's business.
+func instanceTags(vmid, tags string) map[string]string {
 	fields := strings.FieldsFunc(tags, func(r rune) bool {
 		return r == ';' || r == ',' || unicode.IsSpace(r)
 	})
-	return placementOfKind(vmid, "zone", zoneTagPrefix, fields),
-		placementOfKind(vmid, "region", regionTagPrefix, fields)
-}
 
-func placementOfKind(vmid, kind, prefix string, tags []string) string {
-	var found []string
-	for _, tag := range tags {
-		if strings.HasPrefix(tag, prefix) {
-			found = append(found, strings.TrimPrefix(tag, prefix))
+	entries := map[string][]tagEntry{}
+	var order []string
+	for _, tag := range fields {
+		lower := strings.ToLower(tag)
+		for _, legacy := range legacyPlacementPrefixes {
+			if strings.HasPrefix(lower, legacy) {
+				log.Printf("VM %s: ignored legacy placement tag %q; topology now comes from the node", vmid, tag)
+			}
+		}
+		if !strings.HasPrefix(lower, tagPrefix) {
+			continue
+		}
+		key, value, hasValue := strings.Cut(tag[len(tagPrefix):], ".")
+		e := tagEntry{key: key, value: value, ok: hasValue && inventory.ValidTagKey(key) && inventory.ValidTagValue(value)}
+		if _, seen := entries[key]; !seen {
+			order = append(order, key)
+		}
+		entries[key] = append(entries[key], e)
+	}
+
+	var out map[string]string
+	for _, key := range order {
+		list := entries[key]
+		switch {
+		case len(list) > 1:
+			log.Printf("VM %s: %d tags for key %q, none used", vmid, len(list), key)
+		case !list[0].ok:
+			log.Printf("VM %s: tag %q is not a valid instance tag, ignored", vmid, tagPrefix+key+"."+list[0].value)
+		default:
+			if out == nil {
+				out = make(map[string]string)
+			}
+			out[key] = list[0].value
 		}
 	}
-	switch {
-	case len(found) == 0:
-		return ""
-	case len(found) > 1:
-		log.Printf("VM %s: %d %s tags, none used", vmid, len(found), kind)
-		return ""
-	case !inventory.ValidPlacementName(found[0]):
-		log.Printf("VM %s: %s tag %q is not a valid placement name, ignored", vmid, kind, prefix+found[0])
-		return ""
-	}
-	return found[0]
+	return out
 }
 
 var clusterNamePattern = regexp.MustCompile(`(?m)^\s*cluster_name:\s*(\S+)`)
 
 // descriptionLine matches a line of a node description that declares a placement.
-var descriptionLine = regexp.MustCompile(`^\s*topology\.kubernetes\.io/(zone|region):\s*(\S+)\s*$`)
+var descriptionLine = regexp.MustCompile(`^\s*topology\.vtpm_mds\.io/(zone|region):\s*(\S+)\s*$`)
 
 // HostPlacement returns the placement of the node this service runs on, from
 // three sources in this order: the zone and region lines of the node's
-// description (topology.kubernetes.io/zone and .../region), then the node name,
+// description (topology.vtpm_mds.io/zone and .../region), then the node name,
 // the target of <pveRoot>/local, as the zone and the cluster_name of
 // <pveRoot>/corosync.conf as the region, then the defaults, "proxmox" and
 // "local". Each of the two is resolved on its own, so a description that names a
@@ -197,8 +215,8 @@ func HostPlacement(pveRoot string) inventory.Placement {
 
 // descriptionPlacement reads the zone and region a node declares in its
 // description. Proxmox keeps the description in <node>/config as '#' lines, each
-// URL-encoded, so "topology.kubernetes.io/zone: DUS4" is stored as
-// "#topology.kubernetes.io/zone%3A DUS4". A kind is declared by exactly one line
+// URL-encoded, so "topology.vtpm_mds.io/zone: DUS4" is stored as
+// "#topology.vtpm_mds.io/zone%3A DUS4". A kind is declared by exactly one line
 // with a valid name; two or more lines of one kind declare nothing, as two tags
 // do. A missing file declares nothing and is not an error: most nodes have no
 // node config.

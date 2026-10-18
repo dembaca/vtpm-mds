@@ -42,3 +42,31 @@ func TestASuccessfulLoadSetsTheHostPlacement(t *testing.T) {
 		t.Fatalf("got %+v after a YAML load, want %+v", got, inventory.DefaultPlacement)
 	}
 }
+
+// The three tags paths are registered, so an unbound caller gets the empty 404
+// of a tags path and never the metadata index, which answers every unregistered
+// path under /latest/meta-data/ (serve-vm-tags-as-instance-metadata, task 2.4).
+func TestTagsPathsAreRegisteredNotTheIndex(t *testing.T) {
+	srv, token := signatureTestServer(t)
+	for _, path := range []string{
+		"/latest/meta-data/tags/",
+		"/latest/meta-data/tags/instance",
+		"/latest/meta-data/tags/instance/owner",
+	} {
+		req := httptest.NewRequest("GET", path, nil)
+		req.RemoteAddr = "10.0.0.5:5000"
+		req.Header.Set("X-Aws-Ec2-Metadata-Token", token)
+		got := serve(srv, req)
+		if got.status != http.StatusNotFound || got.body != "" || got.contentType != "text/plain" {
+			t.Errorf("%s: got %d %q (%s), want 404 with an empty text/plain body", path, got.status, got.body, got.contentType)
+		}
+	}
+	// A path under tags/ that is not registered is still the index's, like any
+	// unknown key.
+	req := httptest.NewRequest("GET", "/latest/meta-data/tags/other", nil)
+	req.RemoteAddr = "10.0.0.5:5000"
+	req.Header.Set("X-Aws-Ec2-Metadata-Token", token)
+	if got := serve(srv, req); got.status != http.StatusOK || !strings.Contains(got.body, "instance-id") {
+		t.Errorf("tags/other: got %d %q, want the index", got.status, got.body)
+	}
+}

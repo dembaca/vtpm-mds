@@ -1,6 +1,7 @@
 package proxmox
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -164,94 +165,166 @@ func TestAHandWrittenPublicAddressIsNotStored(t *testing.T) {
 	}
 }
 
-func raw(t *testing.T, tags string) map[string]string {
+func record(t *testing.T, lines string) *inventory.VMConfig {
 	t.Helper()
 	m := parse(t, pveTree(t, "hogan", map[string]map[string]string{
-		"hogan": {"100.conf": "name: guest-a\n" + tags},
+		"hogan": {"100.conf": "name: guest-a\n" + lines},
 	}))
-	return m["100"].RawConfig
+	return m["100"]
 }
 
-// A zone tag becomes the VM's zone, and declares no region.
-func TestAZoneTagBecomesTheVMsZone(t *testing.T) {
-	r := raw(t, "tags: mds.zone.rack-b;web\n")
-	if r["zone"] != "rack-b" {
-		t.Errorf("zone: got %q, want rack-b", r["zone"])
+// logged runs f and returns everything it wrote to the standard logger.
+func logged(t *testing.T, f func()) string {
+	t.Helper()
+	var buf strings.Builder
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+	f()
+	return buf.String()
+}
+
+// A tag with the prefix becomes an instance tag; one without is none of our
+// business, and neither is logged.
+func TestATagBecomesAnInstanceTag(t *testing.T) {
+	var vm *inventory.VMConfig
+	out := logged(t, func() { vm = record(t, "tags: vtpm_mds.io.owner.team-a;web\n") })
+	if got := vm.Tags; len(got) != 1 || got["owner"] != "team-a" {
+		t.Fatalf("got tags %v, want owner=team-a", got)
 	}
-	if _, ok := r["region"]; ok {
-		t.Errorf("no region tag, yet region = %q", r["region"])
+	if out != "" {
+		t.Errorf("an ordinary tag was logged: %q", out)
 	}
-	if r["tags"] != "mds.zone.rack-b;web" {
-		t.Errorf("the tags key itself must still be stored, got %q", r["tags"])
+	if vm.RawConfig["tags"] != "vtpm_mds.io.owner.team-a;web" {
+		t.Errorf("the tags key itself must still be stored, got %q", vm.RawConfig["tags"])
 	}
 }
 
-// Both kinds, with the lenient separators.
+// The first dot after the key ends it; the value keeps every dot after it.
+func TestAValueKeepsItsDots(t *testing.T) {
+	vm := record(t, "tags: vtpm_mds.io.rack.b.2.07\n")
+	if vm.Tags["rack"] != "b.2.07" {
+		t.Fatalf("got %v, want rack=b.2.07", vm.Tags)
+	}
+}
+
+// The prefix is matched without regard to case, key and value keep theirs.
+func TestCaseIsKeptAndThePrefixIsMatchedWithoutIt(t *testing.T) {
+	vm := record(t, "tags: VTPM_MDS.IO.Owner.Team-A\n")
+	if vm.Tags["Owner"] != "Team-A" || len(vm.Tags) != 1 {
+		t.Fatalf("got %v, want Owner=Team-A", vm.Tags)
+	}
+}
+
+// All three separators Proxmox or a hand edit may use.
 func TestTagsAreSplitAtSemicolonCommaAndSpace(t *testing.T) {
-	r := raw(t, "tags: web, mds.zone.a mds.region.r;db\n")
-	if r["zone"] != "a" || r["region"] != "r" {
-		t.Errorf("got zone %q, region %q; want a and r", r["zone"], r["region"])
+	vm := record(t, "tags: web, vtpm_mds.io.a.1 vtpm_mds.io.b.2;db\n")
+	if len(vm.Tags) != 2 || vm.Tags["a"] != "1" || vm.Tags["b"] != "2" {
+		t.Fatalf("got %v, want a=1 and b=2", vm.Tags)
 	}
 }
 
-// Two zone tags declare nothing, and the other kind is unaffected.
-func TestTwoZoneTagsDeclareNothing(t *testing.T) {
-	r := raw(t, "tags: mds.zone.a;mds.zone.b;mds.region.r\n")
-	if _, ok := r["zone"]; ok {
-		t.Errorf("two zone tags must declare no zone, got %q", r["zone"])
+// Two tags for one key declare nothing for it, and the other keys are unaffected.
+func TestTwoTagsWithOneKeyDeclareNothing(t *testing.T) {
+	var vm *inventory.VMConfig
+	out := logged(t, func() {
+		vm = record(t, "tags: vtpm_mds.io.owner.a;vtpm_mds.io.owner.b;vtpm_mds.io.rack.7\n")
+	})
+	if _, ok := vm.Tags["owner"]; ok {
+		t.Errorf("two owner tags must declare none, got %q", vm.Tags["owner"])
 	}
-	if r["region"] != "r" {
-		t.Errorf("region: got %q, want r", r["region"])
+	if vm.Tags["rack"] != "7" {
+		t.Errorf("rack: got %q, want 7", vm.Tags["rack"])
+	}
+	if !strings.Contains(out, "VM 100") || !strings.Contains(out, `"owner"`) {
+		t.Errorf("the log must name the VM and the key, got %q", out)
 	}
 }
 
-// An invalid tag next to a valid one still counts as two, so a typo is never
-// resolved silently in the good tag's favour.
+// An invalid tag next to a valid one for the key still counts as two, so a typo
+// is never resolved silently in the good tag's favour.
 func TestAnInvalidTagNextToAValidOneDeclaresNothing(t *testing.T) {
-	r := raw(t, "tags: mds.zone.rack-b;mds.zone.Rack_B!\n")
-	if _, ok := r["zone"]; ok {
-		t.Errorf("got zone %q, want none", r["zone"])
+	vm := record(t, "tags: vtpm_mds.io.owner.team-a;vtpm_mds.io.owner.Team!A\n")
+	if _, ok := vm.Tags["owner"]; ok {
+		t.Errorf("got owner %q, want none", vm.Tags["owner"])
 	}
 }
 
 // A single invalid tag is ignored, and another VM's valid tag is unaffected.
-func TestAnInvalidPlacementTagIsIgnored(t *testing.T) {
+func TestAnInvalidTagIsIgnored(t *testing.T) {
 	m := parse(t, pveTree(t, "hogan", map[string]map[string]string{
 		"hogan": {
-			"100.conf": "tags: mds.zone.\n",
-			"101.conf": "tags: mds.zone.rack-b\n",
-			"102.conf": "tags: mds.zone.bad!\n",
+			"100.conf": "tags: vtpm_mds.io.owner.\n",
+			"101.conf": "tags: vtpm_mds.io.owner.team-a\n",
+			"102.conf": "tags: vtpm_mds.io.owner\n",
+			"103.conf": "tags: vtpm_mds.io.bad!key.x\n",
+			"104.conf": "tags: vtpm_mds.io..x\n",
 		},
 	}))
-	if _, ok := m["100"].RawConfig["zone"]; ok {
-		t.Errorf("VM 100 has an empty zone name, got %q", m["100"].RawConfig["zone"])
+	for _, id := range []string{"100", "102", "103", "104"} {
+		if len(m[id].Tags) != 0 {
+			t.Errorf("VM %s has an invalid tag, got %v", id, m[id].Tags)
+		}
 	}
-	if _, ok := m["102"].RawConfig["zone"]; ok {
-		t.Errorf("VM 102 has an invalid zone name, got %q", m["102"].RawConfig["zone"])
-	}
-	if m["101"].RawConfig["zone"] != "rack-b" {
-		t.Errorf("VM 101 was affected: %v", m["101"].RawConfig)
+	if m["101"].Tags["owner"] != "team-a" {
+		t.Errorf("VM 101 was affected: %v", m["101"].Tags)
 	}
 }
 
-// A placement tag in a snapshot section does not count.
-func TestAPlacementTagInASnapshotDoesNotCount(t *testing.T) {
+// The limits of a key and a value.
+func TestKeyAndValueLimits(t *testing.T) {
+	longKey := strings.Repeat("k", 64)
+	longValue := strings.Repeat("v", 256)
+	vm := record(t, "tags: vtpm_mds.io."+longKey+".x;vtpm_mds.io.a."+longValue+";vtpm_mds.io.ok."+strings.Repeat("v", 255)+"\n")
+	if len(vm.Tags) != 1 || len(vm.Tags["ok"]) != 255 {
+		t.Fatalf("got %d tags, want only ok with 255 characters", len(vm.Tags))
+	}
+}
+
+// A tag in a snapshot section does not count.
+func TestATagInASnapshotDoesNotCount(t *testing.T) {
 	m := parse(t, pveTree(t, "hogan", map[string]map[string]string{
-		"hogan": {"100.conf": "name: guest-a\n\n[before-change]\ntags: mds.zone.old\n"},
+		"hogan": {"100.conf": "name: guest-a\n\n[before-change]\ntags: vtpm_mds.io.owner.old\n"},
 	}))
-	if z, ok := m["100"].RawConfig["zone"]; ok {
-		t.Errorf("the snapshot's tag was read: zone %q", z)
+	if len(m["100"].Tags) != 0 {
+		t.Errorf("the snapshot's tag was read: %v", m["100"].Tags)
 	}
 }
 
-// A hand-written zone or region line is not stored, in either form.
-func TestAHandWrittenZoneAndRegionAreNotStored(t *testing.T) {
+// A VM without any instance tag carries none, which is nil and not empty.
+func TestAVMWithoutInstanceTagsCarriesNone(t *testing.T) {
+	if vm := record(t, "tags: web;db\n"); vm.Tags != nil {
+		t.Errorf("got %v, want nil", vm.Tags)
+	}
+}
+
+// The tags that once declared a zone and a region place nothing, give no
+// instance tag, and are logged once each so a forgotten one can be found.
+func TestAFormerPlacementTagPlacesNothingAndIsLogged(t *testing.T) {
+	var vm *inventory.VMConfig
+	out := logged(t, func() { vm = record(t, "tags: mds.zone.rack-b;MDS.Region.bgl-1;web\n") })
+	if vm.Tags != nil {
+		t.Errorf("got tags %v, want none", vm.Tags)
+	}
+	for _, want := range []string{`"mds.zone.rack-b"`, `"MDS.Region.bgl-1"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the log lacks %s: %q", want, out)
+		}
+	}
+	if _, ok := vm.RawConfig["zone"]; ok {
+		t.Errorf("a zone reached the record: %q", vm.RawConfig["zone"])
+	}
+}
+
+// A hand-written zone or region line has no meaning: it is stored like any other
+// key, in either form, and nothing reads it.
+func TestAHandWrittenZoneAndRegionHaveNoMeaning(t *testing.T) {
 	for _, lines := range []string{"zone: rack-x\nregion: bgl-x\n", "zone=rack-x\nregion=bgl-x\n"} {
-		r := raw(t, lines)
-		for _, key := range []string{"zone", "region"} {
-			if v, ok := r[key]; ok {
-				t.Errorf("%q: %s was stored as %q", lines, key, v)
-			}
+		vm := record(t, lines)
+		if vm.RawConfig["zone"] != "rack-x" || vm.RawConfig["region"] != "bgl-x" {
+			t.Errorf("%q: stored %v", lines, vm.RawConfig)
+		}
+		if vm.Tags != nil {
+			t.Errorf("%q: got tags %v", lines, vm.Tags)
 		}
 	}
 }
@@ -310,11 +383,14 @@ func TestHostNamesKeepTheirCase(t *testing.T) {
 	}
 }
 
-// A capital in a tag is served as spelled too.
-func TestACapitalInATagIsKept(t *testing.T) {
-	r := raw(t, "tags: mds.zone.DUS4;mds.region.DUS\n")
-	if r["zone"] != "DUS4" || r["region"] != "DUS" {
-		t.Fatalf("got zone %q, region %q; want DUS4 and DUS", r["zone"], r["region"])
+// The former prefix is not read: a description that carries it alone leaves the
+// host's placement to the names.
+func TestTheFormerDescriptionPrefixIsNotRead(t *testing.T) {
+	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
+	nodeConfig(t, root, "hogan", "topology.kubernetes.io/zone: DUS4", "topology.kubernetes.io/region: DUS")
+	got := HostPlacement(root)
+	if want := (inventory.Placement{Zone: "hogan", Region: "bgl-cluster"}); got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
 
@@ -350,7 +426,7 @@ func nodeConfig(t *testing.T, root, node string, lines ...string) {
 // the lines that declare nothing are ignored.
 func TestTheNodeDescriptionGivesTheHostPlacement(t *testing.T) {
 	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
-	nodeConfig(t, root, "hogan", "Location: DUS4.M1.02.03", "topology.kubernetes.io/region: DUS", "topology.kubernetes.io/zone: DUS4")
+	nodeConfig(t, root, "hogan", "Location: DUS4.M1.02.03", "topology.vtpm_mds.io/region: DUS", "topology.vtpm_mds.io/zone: DUS4")
 	got := HostPlacement(root)
 	if want := (inventory.Placement{Zone: "DUS4", Region: "DUS"}); got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
@@ -360,7 +436,7 @@ func TestTheNodeDescriptionGivesTheHostPlacement(t *testing.T) {
 // A description that names one kind leaves the other to the names.
 func TestADescriptionWithOneKindTakesTheOtherFromTheNames(t *testing.T) {
 	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
-	nodeConfig(t, root, "hogan", "topology.kubernetes.io/zone: DUS4")
+	nodeConfig(t, root, "hogan", "topology.vtpm_mds.io/zone: DUS4")
 	got := HostPlacement(root)
 	if want := (inventory.Placement{Zone: "DUS4", Region: "bgl-cluster"}); got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
@@ -378,7 +454,7 @@ func TestANodeWithoutAConfigFileUsesTheNames(t *testing.T) {
 // An invalid value in the description is ignored, and the names stand in.
 func TestAnInvalidDescriptionValueFallsBackToTheNames(t *testing.T) {
 	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
-	nodeConfig(t, root, "hogan", "topology.kubernetes.io/zone: bad!zone", "topology.kubernetes.io/region: DUS")
+	nodeConfig(t, root, "hogan", "topology.vtpm_mds.io/zone: bad!zone", "topology.vtpm_mds.io/region: DUS")
 	got := HostPlacement(root)
 	if want := (inventory.Placement{Zone: "hogan", Region: "DUS"}); got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
@@ -388,7 +464,7 @@ func TestAnInvalidDescriptionValueFallsBackToTheNames(t *testing.T) {
 // Two lines of one kind declare nothing, as two tags do.
 func TestTwoDescriptionLinesOfOneKindDeclareNothing(t *testing.T) {
 	root := hostTree(t, "hogan", "")
-	nodeConfig(t, root, "hogan", "topology.kubernetes.io/zone: DUS3", "topology.kubernetes.io/zone: DUS4", "topology.kubernetes.io/region: DUS")
+	nodeConfig(t, root, "hogan", "topology.vtpm_mds.io/zone: DUS3", "topology.vtpm_mds.io/zone: DUS4", "topology.vtpm_mds.io/region: DUS")
 	got := HostPlacement(root)
 	if want := (inventory.Placement{Zone: "hogan", Region: "DUS"}); got != want {
 		t.Fatalf("got %+v, want %+v", got, want)

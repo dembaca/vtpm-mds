@@ -16,6 +16,10 @@ type VMConfig struct {
 	VMID      string            // Logical VM ID
 	Name      string            // Optional human-readable name
 	RawConfig map[string]string // Optional key/value metadata
+	// Tags are the instance tags served under /latest/meta-data/tags/instance/.
+	// They are kept apart from RawConfig so that a tag can never collide with a
+	// Proxmox key such as name, and nil when the VM has none.
+	Tags map[string]string
 	MACs      []string          // NIC MAC addresses used for caller identification
 	// EKSHA256 is an optional pin: lowercase hex SHA-256 of the TPM EK
 	// certificate DER. When set, DevID enroll requires a matching EK cert.
@@ -33,8 +37,10 @@ type fileFormat struct {
 		MACs       []string `yaml:"macs"`
 		EKSHA256   string   `yaml:"ek_sha256"`
 		PublicIPv4 string   `yaml:"public_ipv4"`
-		Zone       string   `yaml:"zone"`
-		Region     string   `yaml:"region"`
+		// Zone and Region are read only to say they no longer place anything.
+		Zone   string            `yaml:"zone"`
+		Region string            `yaml:"region"`
+		Tags   map[string]string `yaml:"tags"`
 	} `yaml:"vms"`
 }
 
@@ -77,24 +83,34 @@ func LoadYAML(path string) (VMConfigMap, error) {
 			raw["public-ipv4"] = ip.To4().String()
 		}
 
-		// A declared zone or region degrades to the host's value when it is
-		// not a valid name, so unlike public_ipv4 it is logged and ignored
-		// rather than failing the load.
+		// Topology belongs to the node, not to a VM: a zone or region declared
+		// here has no effect, and the log says so once per load.
 		for field, declared := range map[string]string{"zone": vm.Zone, "region": vm.Region} {
-			declared = strings.TrimSpace(declared)
-			switch {
-			case declared == "":
-			case ValidPlacementName(declared):
-				raw[field] = declared
-			default:
-				log.Printf("inventory entry %q: %s %q is not a valid placement name, ignored", vm.ID, field, declared)
+			if strings.TrimSpace(declared) != "" {
+				log.Printf("inventory entry %q: ignored legacy %s %q; topology now comes from the node", vm.ID, field, declared)
 			}
+		}
+
+		// An invalid tag degrades to one tag fewer, so unlike public_ipv4 it is
+		// logged and ignored rather than failing the load.
+		var tags map[string]string
+		for key, value := range vm.Tags {
+			key, value = strings.TrimSpace(key), strings.TrimSpace(value)
+			if !ValidTagKey(key) || !ValidTagValue(value) {
+				log.Printf("inventory entry %q: tag %q=%q is not a valid instance tag, ignored", vm.ID, key, value)
+				continue
+			}
+			if tags == nil {
+				tags = make(map[string]string)
+			}
+			tags[key] = value
 		}
 
 		out[vm.ID] = &VMConfig{
 			VMID:      vm.ID,
 			Name:      vm.Name,
 			RawConfig: raw,
+			Tags:      tags,
 			MACs:      macs,
 			EKSHA256:  strings.ToLower(strings.TrimSpace(vm.EKSHA256)),
 		}

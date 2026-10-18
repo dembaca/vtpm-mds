@@ -45,34 +45,29 @@ func placementOfRequest(t *testing.T, req *http.Request) (zone, region string) {
 	return zrec.Body.String(), rrec.Body.String()
 }
 
-// A declared zone and region are served, with no trailing newline.
-func TestADeclaredZoneAndRegionAreServed(t *testing.T) {
+// The host's zone and region are served, with no trailing newline, to a caller
+// bound to any VM record.
+func TestTheHostsZoneAndRegionAreServed(t *testing.T) {
 	setupTestStore()
-	withHostPlacement(t, inventory.Placement{Zone: "hogan", Region: "bgl-cluster"})
-	zone, region := placementOfRequest(t, declaring(t, "/latest/meta-data/placement/region",
-		map[string]string{"zone": "rack-b", "region": "bgl-1"}))
-	if zone != "rack-b" || region != "bgl-1" {
-		t.Fatalf("got zone %q, region %q; want rack-b and bgl-1", zone, region)
+	withHostPlacement(t, inventory.Placement{Zone: "DUS4", Region: "DUS"})
+	zone, region := placementOfRequest(t, declaring(t, "/latest/meta-data/placement/region", map[string]string{"name": "x"}))
+	if zone != "DUS4" || region != "DUS" {
+		t.Fatalf("got zone %q, region %q; want DUS4 and DUS", zone, region)
 	}
 }
 
-// Nothing declared gives the host's placement.
-func TestNothingDeclaredGivesTheHostsPlacement(t *testing.T) {
+// A zone or a region in the VM record no longer places it: the record's raw
+// configuration and its tags are never read for a placement.
+func TestAVMLevelPlacementIsNotServed(t *testing.T) {
 	setupTestStore()
 	withHostPlacement(t, inventory.Placement{Zone: "hogan", Region: "bgl-cluster"})
-	zone, region := placementOfRequest(t, declaring(t, "/latest/meta-data/placement/region", map[string]string{"name": "x"}))
+	req := unboundRequest(t, "/latest/meta-data/placement/region")
+	req = req.WithContext(context.WithValue(req.Context(), inventory.VMConfigContextKey,
+		&inventory.VMConfig{VMID: "100", RawConfig: map[string]string{"zone": "rack-b", "region": "bgl-1"},
+			Tags: map[string]string{"zone": "rack-b"}}))
+	zone, region := placementOfRequest(t, req)
 	if zone != "hogan" || region != "bgl-cluster" {
 		t.Fatalf("got zone %q, region %q; want hogan and bgl-cluster", zone, region)
-	}
-}
-
-// One value declared, the other taken from the host.
-func TestOneValueDeclaredTheOtherFromTheHost(t *testing.T) {
-	setupTestStore()
-	withHostPlacement(t, inventory.Placement{Zone: "hogan", Region: "bgl-cluster"})
-	zone, region := placementOfRequest(t, declaring(t, "/latest/meta-data/placement/region", map[string]string{"zone": "rack-b"}))
-	if zone != "rack-b" || region != "bgl-cluster" {
-		t.Fatalf("got zone %q, region %q; want rack-b and bgl-cluster", zone, region)
 	}
 }
 
@@ -86,24 +81,12 @@ func TestAnUnboundCallerIsServedTheHostsPlacement(t *testing.T) {
 	}
 }
 
-// A value in the record that is not a valid name is never served: the host's
-// value stands in, so the key is never empty or unsafe.
-func TestAnInvalidDeclaredValueIsNotServed(t *testing.T) {
-	setupTestStore()
-	withHostPlacement(t, inventory.Placement{Zone: "hogan", Region: "bgl-cluster"})
-	zone, region := placementOfRequest(t, declaring(t, "/latest/meta-data/placement/region",
-		map[string]string{"zone": "Rack B!", "region": ""}))
-	if zone != "hogan" || region != "bgl-cluster" {
-		t.Fatalf("got zone %q, region %q; want hogan and bgl-cluster", zone, region)
-	}
-}
-
 // The identity document agrees with the placement keys.
 func TestTheDocumentAndThePlacementKeysAgree(t *testing.T) {
 	setupTestStore()
 	withHostPlacement(t, inventory.Placement{Zone: "hogan", Region: "bgl-cluster"})
-	req := declaring(t, "/latest/dynamic/instance-identity/document",
-		map[string]string{"zone": "rack-b", "region": "bgl-1"})
+	withHostPlacement(t, inventory.Placement{Zone: "DUS4", Region: "DUS"})
+	req := declaring(t, "/latest/dynamic/instance-identity/document", map[string]string{"name": "x"})
 	rec := httptest.NewRecorder()
 	HandleInstanceIdentityDocument(rec, req)
 	if rec.Code != http.StatusOK {
@@ -113,8 +96,8 @@ func TestTheDocumentAndThePlacementKeysAgree(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc["region"] != "bgl-1" || doc["availabilityZone"] != "rack-b" {
-		t.Fatalf("got region %v, availabilityZone %v; want bgl-1 and rack-b", doc["region"], doc["availabilityZone"])
+	if doc["region"] != "DUS" || doc["availabilityZone"] != "DUS4" {
+		t.Fatalf("got region %v, availabilityZone %v; want DUS and DUS4", doc["region"], doc["availabilityZone"])
 	}
 }
 

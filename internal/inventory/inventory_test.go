@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,51 +133,103 @@ func TestLoadYAMLAcceptsAnAbsentOrEmptyPublicIPv4(t *testing.T) {
 	}
 }
 
-// A declared zone and region reach the record (zone-and-region delta, YAML).
-func TestLoadYAMLZoneAndRegion(t *testing.T) {
+// Declared tags reach the record, trimmed, with their case; an entry without
+// tags carries none.
+func TestLoadYAMLTags(t *testing.T) {
 	m, err := LoadYAML(writeInventory(t, `vms:
   - id: "100"
-    zone: " rack-b "
-    region: bgl-1
+    tags:
+      owner: " team-a "
+      Rack: b.2
   - id: "101"
 `))
 	if err != nil {
 		t.Fatalf("LoadYAML: %v", err)
 	}
-	if got := m["100"].RawConfig["zone"]; got != "rack-b" {
-		t.Errorf("zone: got %q, want rack-b", got)
+	if got := m["100"].Tags; len(got) != 2 || got["owner"] != "team-a" || got["Rack"] != "b.2" {
+		t.Errorf("got tags %v, want owner=team-a and Rack=b.2", got)
 	}
-	if got := m["100"].RawConfig["region"]; got != "bgl-1" {
-		t.Errorf("region: got %q, want bgl-1", got)
+	if m["101"].Tags != nil {
+		t.Errorf("VM 101 declares no tags, got %v", m["101"].Tags)
 	}
-	for _, key := range []string{"zone", "region"} {
-		if _, ok := m["101"].RawConfig[key]; ok {
-			t.Errorf("VM 101 declares no %s, so the key must be absent", key)
+}
+
+// An invalid tag is logged and ignored, and does not stop the load, unlike a
+// malformed public_ipv4.
+func TestLoadYAMLIgnoresAnInvalidTag(t *testing.T) {
+	var buf strings.Builder
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+	m, err := LoadYAML(writeInventory(t, `vms:
+  - id: "100"
+    tags:
+      owner: team-a
+      "bad key": x
+      empty: ""
+      dotted.key: x
+  - id: "101"
+    tags:
+      owner: team-b
+`))
+	if err != nil {
+		t.Fatalf("an invalid tag must not fail the load: %v", err)
+	}
+	if got := m["100"].Tags; len(got) != 1 || got["owner"] != "team-a" {
+		t.Errorf("got tags %v, want only owner=team-a", got)
+	}
+	if m["101"].Tags["owner"] != "team-b" {
+		t.Errorf("another entry was affected: %v", m["101"].Tags)
+	}
+	for _, want := range []string{`"100"`, "bad key"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("the log lacks %s: %q", want, buf.String())
 		}
 	}
 }
 
-// An invalid zone is logged and ignored, and does not stop the load, unlike a
-// malformed public_ipv4.
-func TestLoadYAMLIgnoresAnInvalidZone(t *testing.T) {
+// A zone and a region in an entry no longer place anything: the load succeeds,
+// the record carries neither anywhere, and the log says so.
+func TestLoadYAMLFormerZoneAndRegionPlaceNothing(t *testing.T) {
+	var buf strings.Builder
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
 	m, err := LoadYAML(writeInventory(t, `vms:
   - id: "100"
-    zone: "Rack B!"
+    zone: rack-b
     region: bgl-1
-  - id: "101"
-    zone: rack-c
 `))
 	if err != nil {
-		t.Fatalf("an invalid zone must not fail the load: %v", err)
+		t.Fatalf("LoadYAML: %v", err)
 	}
-	if _, ok := m["100"].RawConfig["zone"]; ok {
-		t.Errorf("the invalid zone was stored: %q", m["100"].RawConfig["zone"])
+	for _, key := range []string{"zone", "region"} {
+		if v, ok := m["100"].RawConfig[key]; ok {
+			t.Errorf("%s reached the record as %q", key, v)
+		}
 	}
-	if m["100"].RawConfig["region"] != "bgl-1" {
-		t.Errorf("the valid region was lost: %v", m["100"].RawConfig)
+	if m["100"].Tags != nil {
+		t.Errorf("got tags %v, want none", m["100"].Tags)
 	}
-	if m["101"].RawConfig["zone"] != "rack-c" {
-		t.Errorf("another entry was affected: %v", m["101"].RawConfig)
+	if !strings.Contains(buf.String(), "legacy zone") || !strings.Contains(buf.String(), "legacy region") {
+		t.Errorf("the log must name both, got %q", buf.String())
+	}
+}
+
+func TestValidTagKeyAndValue(t *testing.T) {
+	for key, want := range map[string]bool{
+		"owner": true, "Rack-B": true, "a_b+c": true, strings.Repeat("k", 63): true,
+		"": false, "a.b": false, "a b": false, "a/b": false, "a:b": false, strings.Repeat("k", 64): false,
+	} {
+		if got := ValidTagKey(key); got != want {
+			t.Errorf("ValidTagKey(%q) = %v, want %v", key, got, want)
+		}
+	}
+	for value, want := range map[string]bool{
+		"team-a": true, "b.2.07": true, "A_b+c": true, strings.Repeat("v", 255): true,
+		"": false, "a b": false, "a/b": false, "a:b": false, "a=b": false, strings.Repeat("v", 256): false,
+	} {
+		if got := ValidTagValue(value); got != want {
+			t.Errorf("ValidTagValue(%q) = %v, want %v", value, got, want)
+		}
 	}
 }
 

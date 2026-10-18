@@ -112,10 +112,10 @@ func HandleMetaDataIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The index is built per request and never cached, because public-ipv4 is
-	// listed only for a caller that has one. It is the one metadata value that
-	// depends on which VM is asking; everything else it lists is listed for
-	// everyone. An index that advertises a key the caller cannot read is
+	// The index is built per request and never cached, because public-ipv4 and
+	// tags/ are listed only for a caller that has one. Those are the metadata
+	// values that depend on which VM is asking; everything else it lists is
+	// listed for everyone. An index that advertises a key the caller cannot read is
 	// indistinguishable, to that caller, from a service that is broken.
 	paths := []string{
 		"instance-id",
@@ -126,6 +126,9 @@ func HandleMetaDataIndex(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, "public-ipv4")
 	}
 	paths = append(paths, "placement/", "services/")
+	if len(InstanceTags(r)) > 0 {
+		paths = append(paths, "tags/")
+	}
 
 	w.Header().Set("Content-Type", "text/plain")
 	for _, path := range paths {
@@ -406,25 +409,15 @@ func PublicIPv4(r *http.Request) string {
 	return ip.To4().String()
 }
 
-// getAvailabilityZone is the zone of the asking caller: the one declared for its
-// bound VM record, otherwise the host's. A caller with no bound record has
-// nothing declared and is served the host's.
+// getAvailabilityZone is the host's zone. Topology belongs to the node, so every
+// caller, bound or not, reads the same value.
 func getAvailabilityZone(r *http.Request) string {
-	return placementOf(r, "zone", inventory.HostPlacement().Zone)
+	return inventory.HostPlacement().Zone
 }
 
-// getRegion is the region of the asking caller, resolved like the zone.
+// getRegion is the host's region, resolved like the zone.
 func getRegion(r *http.Request) string {
-	return placementOf(r, "region", inventory.HostPlacement().Region)
-}
-
-func placementOf(r *http.Request, key, host string) string {
-	if vmConfig := inventory.GetVMConfigFromRequest(r); vmConfig != nil {
-		if declared := vmConfig.RawConfig[key]; inventory.ValidPlacementName(declared) {
-			return declared
-		}
-	}
-	return host
+	return inventory.HostPlacement().Region
 }
 
 func getDomain(r *http.Request) string {
