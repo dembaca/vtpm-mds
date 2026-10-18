@@ -458,15 +458,34 @@ and no trailing newline unless stated otherwise:
 - `GET /latest/meta-data/placement/availability-zone` SHALL return the zone of
   the asking caller, and `GET /latest/meta-data/placement/region` its region,
   as defined below. Neither is ever empty.
+- `GET /latest/meta-data/placement/<key>` SHALL return the value of that key of the
+  host's topology, with no trailing newline, as described below.
 - `GET /latest/meta-data/services/domain` SHALL return the fixed string
   `localdomain`.
-The zone of a caller SHALL be the host's zone and its region the host's region,
-whichever VM is asking: no VM declares a placement of its own. The host's zone
-and region are those of the inventory backend in use, as `vm-inventory` defines
-them. A caller with no bound VM record SHALL be served the same values. The
-values SHALL NOT be derived from the connection or from any request header.
-Before this change a VM could declare its own zone and region; that declaration
-is removed, and a placement finer than the node has no source.
+Every key of the host's topology, as `vm-inventory` defines it, SHALL be served
+under `placement/` to every caller, whichever VM is asking and also to a caller with
+no bound VM record: `availability-zone` and `region` always, `node` and `cluster`
+when the host knows them, and every other key when the node's description declares
+it. A key SHALL be served with the value and the case its source gives it and SHALL
+NOT be derived from the connection or from any request header. A key the topology
+does not have, `rack` on a node whose description declares none for example, SHALL
+be answered `404` with an empty body and `Content-Type: text/plain`, distinct from
+the catch-all handler's `404 page not found`, and SHALL NOT be answered by the
+metadata index; this applies to any path `placement/<key>`. A key of the topology
+MAY be one that EC2 serves under `placement/` with another meaning, such as
+`group-name` or `host-id`: a node's description, which only an administrator with
+`Sys.Modify` on `/` can write, decides what the guests of that node read, and the
+service SHALL NOT keep a list of keys it refuses.
+
+`GET /latest/meta-data/placement` without the trailing slash SHALL be answered with
+a `301` redirect to `/latest/meta-data/placement/`, without a token, as the
+directory is a path of its own. Keys SHALL be case-sensitive: `Region` is not
+`region`.
+
+`GET /latest/meta-data/placement/` SHALL return the keys of the host's topology,
+one per line in ascending byte order, each terminated by a newline. It was answered
+by the metadata index before this requirement, as every unregistered path under
+`/latest/meta-data/` is.
 
 `GET /latest/meta-data/public-ipv4` SHALL return the public IPv4 address
 declared for the caller's bound VM record, when one is declared. The service
@@ -603,6 +622,58 @@ includes the `placement/` and `services/` prefixes that the index advertises.
 - **WHEN** it sends `GET /latest/meta-data/`
 - **THEN** the listing contains `tags/`, and for a caller whose VM carries none it
   does not
+
+#### Scenario: A key of the node description is served
+
+- **GIVEN** a valid session token, a host whose node description declares
+  `topology.vtpm_mds.io/rack: keller01`, and a caller bound to any VM record
+- **WHEN** it reads `placement/rack`
+- **THEN** the service responds `200` with `keller01`, with no trailing newline
+
+#### Scenario: Node and cluster are served by default
+
+- **GIVEN** a host on node `hogan` in cluster `bgl-cluster` whose description
+  declares neither
+- **WHEN** a caller reads `placement/node` and `placement/cluster`
+- **THEN** the service responds `200` with `hogan` and `bgl-cluster`
+
+#### Scenario: A key with no value is not the index
+
+- **GIVEN** a host whose topology has no `rack`
+- **WHEN** a caller reads `placement/rack`
+- **THEN** the service responds `404` with an empty body, and in particular not
+  `200` with the metadata index
+
+#### Scenario: An EC2 key can be overridden by the node
+
+- **GIVEN** a host whose description declares `topology.vtpm_mds.io/host-id: h-01`
+- **WHEN** a caller reads `placement/host-id`
+- **THEN** the service responds `200` with `h-01`
+
+#### Scenario: The placement directory lists the keys
+
+- **GIVEN** a host whose topology has `availability-zone`, `region`, `node`,
+  `cluster` and `rack`
+- **WHEN** a caller reads `placement/`
+- **THEN** the service responds `200` with the five lines `availability-zone`,
+  `cluster`, `node`, `rack` and `region`, each terminated by a newline
+
+#### Scenario: The placement path without a slash redirects
+
+- **WHEN** a guest sends `GET /latest/meta-data/placement`
+- **THEN** the service responds `301` with `Location: /latest/meta-data/placement/`
+
+#### Scenario: Keys are case-sensitive
+
+- **GIVEN** a host whose topology has `region`
+- **WHEN** a caller reads `placement/Region`
+- **THEN** the service responds `404` with an empty body
+
+#### Scenario: An unbound caller reads the same topology
+
+- **GIVEN** a valid session token and a caller with no bound VM record
+- **WHEN** it reads `placement/rack` on a host that declares one
+- **THEN** the service responds `200` with the host's value
 
 ### Requirement: Serve The Instance Identity Document Without A Signature
 

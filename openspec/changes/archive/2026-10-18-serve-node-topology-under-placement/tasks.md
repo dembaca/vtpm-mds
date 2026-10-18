@@ -104,4 +104,7 @@ at the coordinator's assignment, after the maintainer's decision of the same day
 
 ## 4. Archive
 
-- [ ] 4.1 Archive with `openspec archive`, update `AGENTS.md` where it lists topology, and verify `openspec validate --all --strict` is still clean
+- [x] 4.1 Archive with `openspec archive`, update `AGENTS.md` where it lists topology, and verify `openspec validate --all --strict` is still clean
+      **Done, 2026-10-18,** by the coordinator from `main` at `a0952ad`, after
+      #48 was merged: `openspec archive` modified `instance-metadata` and
+      `vm-inventory` (one requirement each). `AGENTS.md` updated.

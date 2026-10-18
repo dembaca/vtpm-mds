@@ -438,7 +438,11 @@ form `vtpm_mds.io.<key>.<value>`, read from the live configuration's `tags` key.
 The tags SHALL be split at `;`, `,` and whitespace. The prefix `vtpm_mds.io.`
 SHALL be matched without regard to case. `<key>` SHALL be the characters after
 the prefix up to the next `.`, and `<value>` everything after that dot, dots
-included. A key SHALL be valid when it is 1 to 63 characters from `a-z`, `A-Z`,
+included. Keys SHALL be case-sensitive, only the exact key `zone` SHALL be the short form of
+`availability-zone`, and so `Zone` SHALL be a key of its own. The prefix
+`topology.vtpm_mds.io/` SHALL be matched as it is spelled, case included.
+
+A key SHALL be valid when it is 1 to 63 characters from `a-z`, `A-Z`,
 `0-9`, `_`, `-` and `+`, and a value SHALL be valid when it is 1 to 255
 characters from the same set and `.`. A key and a value SHALL be served exactly
 as their source spells them: the service SHALL NOT change their case. A VM with
@@ -451,36 +455,50 @@ the prefix SHALL be ignored without a log entry, except that a tag beginning
 VM id, once per load, and ignored. A fault in one VM's tags SHALL NOT
 affect another VM's record or the load.
 
-**Host placement.** The backend SHALL also determine the host's placement, the
-zone and the region each from the first of three sources that gives a valid
-name: first the `topology.vtpm_mds.io/zone` and `topology.vtpm_mds.io/region`
-lines of the description of the node the service runs on; then the node name, the
-target name of the `/etc/pve/local` link, as the zone, and the `cluster_name` of
-`/etc/pve/corosync.conf` as the region; then `proxmox` and `local`. The two are
-resolved independently, so a description that names a zone only leaves the region
-to the cluster name.
+**Host topology.** The backend SHALL also determine the host's topology: keys,
+each with a value, that describe the node the service runs on and that every caller
+this node binds reads alike. Each key SHALL take its value from the first of the
+sources named for it that gives a valid one, and a key with no source that gives
+one SHALL have no value:
+
+- `availability-zone`: the description line `topology.vtpm_mds.io/zone` or
+  `topology.vtpm_mds.io/availability-zone`; then the node name, the target name of
+  the `/etc/pve/local` link; then `proxmox`.
+- `region`: the description line `topology.vtpm_mds.io/region`; then the
+  `cluster_name` of `/etc/pve/corosync.conf`; then `local`.
+- `node`: the description line `topology.vtpm_mds.io/node`; then the node name.
+- `cluster`: the description line `topology.vtpm_mds.io/cluster`; then the
+  `cluster_name`.
+- every other `<key>`: the description line `topology.vtpm_mds.io/<key>`, and no
+  other source.
+
+The keys are resolved independently, so a description that names a zone only
+leaves the region to the cluster name. `zone` is the short form of
+`availability-zone` and the two SHALL count as one key.
 
 The description of a node is stored in `/etc/pve/local/config`, which most nodes
 do not have, as lines that start with `#`, each the URL-encoded text of one line
 of the description, so that `topology.vtpm_mds.io/zone: DUS4` is stored as
 `#topology.vtpm_mds.io/zone%3A DUS4`. The service SHALL decode each such line
-and read a placement from a decoded line of the form
-`topology.vtpm_mds.io/zone: <name>` or `topology.vtpm_mds.io/region: <name>`.
-A line that does not decode or does not have that form SHALL be ignored. A
-missing file SHALL declare nothing and SHALL NOT be logged as a fault. Two or
-more lines of one kind, valid or not, SHALL declare nothing of that kind, and a
-single line whose name is not a valid placement name SHALL be logged and ignored;
-the next source is then used.
+and read a key from a decoded line of the form
+`topology.vtpm_mds.io/<key>: <value>`. A line that does not decode or does not
+have that form SHALL be ignored. A missing file SHALL declare nothing and SHALL
+NOT be logged as a fault. Two or more lines for one key, valid or not, and a
+line for `zone` together with one for `availability-zone`, SHALL declare nothing
+for that key and SHALL be logged with the key; a single line whose key or value is
+not valid SHALL be logged and ignored. The next source is then used, or no value
+when there is none. At most 64 keys SHALL be read; those beyond the 64th in
+ascending byte order SHALL be logged and ignored.
 
-A name from any source SHALL be kept exactly as spelled: the service SHALL NOT
-change its case, so that a zone reads in the metadata service as it reads in the
-description. A placement name SHALL be valid when it is 1 to 63 characters from
-`a-z`, `A-Z`, `0-9`, `_`, `-`, `+` and `.`, starting with a letter or digit. A
-node name or cluster name that is not a valid placement name SHALL be logged and
-the next source used. The host placement SHALL be
-determined whenever the inventory is loaded, so a SIGHUP reload refreshes it.
-Only the guests of this node reach this service, so the placement of this node is
-that of every caller it can bind.
+A key SHALL be valid when it is 1 to 63 characters from `a-z`, `A-Z`, `0-9`, `_`,
+`-` and `+`. A value SHALL be valid when it is 1 to 63 characters from `a-z`,
+`A-Z`, `0-9`, `_`, `-`, `+` and `.`, starting with a letter or digit. Both SHALL be
+kept exactly as spelled: the service SHALL NOT change their case, so that a value
+reads in the metadata service as it reads in the description. A node name or
+cluster name that is not a valid value SHALL be logged and the next source used.
+The host topology SHALL be determined whenever the inventory is loaded, so a
+SIGHUP reload refreshes it. Only the guests of this node reach this service, so the
+topology of this node is that of every caller it can bind.
 
 A MAC address SHALL be taken only from a line matching
 `^net<N>[:=]\s*virtio=<17 characters of hex and colons>`, and SHALL be stored
@@ -624,7 +642,7 @@ the YAML inventory.
   `topology.vtpm_mds.io/zone: DUS4`, each stored as a `#` line with its `:`
   encoded as `%3A`, and the node and cluster have other names
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's zone is `DUS4` and its region is `DUS`
+- **THEN** the host's `availability-zone` is `DUS4` and its `region` is `DUS`
 
 #### Scenario: A description naming one kind leaves the other to the names
 
@@ -662,3 +680,69 @@ the YAML inventory.
 - **WHEN** the inventory cache is loaded
 - **THEN** the record's raw configuration map has no `public-ipv4` key, so
   `instance-metadata` neither lists nor serves a public address for that VM
+
+#### Scenario: A description adds a key of its own
+
+- **GIVEN** a description with `topology.vtpm_mds.io/rack: keller01` and no other
+  topology line
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's topology has `rack` as `keller01`, besides the defaults of
+  `availability-zone`, `region`, `node` and `cluster`
+
+#### Scenario: A description line can use the long form of the zone
+
+- **GIVEN** a description with `topology.vtpm_mds.io/availability-zone: keller`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's `availability-zone` is `keller`
+
+#### Scenario: The short and the long form together declare nothing
+
+- **GIVEN** a description with `topology.vtpm_mds.io/zone: keller` and
+  `topology.vtpm_mds.io/availability-zone: attic`, on node `hogan`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's `availability-zone` is `hogan` and the log names the key
+
+#### Scenario: Node and cluster default from the host
+
+- **GIVEN** `/etc/pve/local` links to `nodes/hogan`, `/etc/pve/corosync.conf` names
+  the cluster `bgl-cluster` and the description names neither
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's `node` is `hogan` and its `cluster` is `bgl-cluster`
+
+#### Scenario: A description overrides node and cluster
+
+- **GIVEN** a description with `topology.vtpm_mds.io/node: hogan-a` and
+  `topology.vtpm_mds.io/cluster: lab`, on node `hogan` in cluster `bgl-cluster`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's `node` is `hogan-a` and its `cluster` is `lab`
+
+#### Scenario: A host without a cluster file has no cluster
+
+- **GIVEN** `/etc/pve/corosync.conf` does not exist and the description names no
+  cluster
+- **WHEN** the inventory cache is loaded
+- **THEN** the host has no `cluster` key, its `region` is `local`, and the load does
+  not fail
+
+#### Scenario: A line with an invalid key or value is ignored
+
+- **GIVEN** a description with `topology.vtpm_mds.io/ra ck: x`,
+  `topology.vtpm_mds.io/row: a/b` and a valid `topology.vtpm_mds.io/rack: keller01`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's topology has `rack` as `keller01` and no `row`, and the log
+  names the ignored lines
+
+#### Scenario: Keys and the prefix are case-sensitive
+
+- **GIVEN** a description with `topology.vtpm_mds.io/Zone: x` and
+  `TOPOLOGY.VTPM_MDS.IO/rack: y`, on node `hogan`
+- **WHEN** the inventory cache is loaded
+- **THEN** the host's topology has `Zone` as `x`, no `rack`, and its
+  `availability-zone` is `hogan`
+
+#### Scenario: Keys beyond the limit are ignored
+
+- **GIVEN** a description with 70 distinct valid `topology.vtpm_mds.io/` keys
+- **WHEN** the inventory cache is loaded
+- **THEN** 64 are read, the six last in ascending byte order are ignored, and the
+  log says so
