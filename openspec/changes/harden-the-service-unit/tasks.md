@@ -30,6 +30,8 @@ pushed and the maintainer has not overruled D-a to D-g; D-f needs his answer.**
 - [ ] 3.2 Verify from VM 399 that the metadata tree, tags and placement still answer, and from the host that an unbound caller still gets its refusals
 - [ ] 3.3 Reload with `systemctl reload vtpm-mds`, and verify the journal shows the cache reloaded with the same VM count
 - [ ] 3.4 Re-enroll VM 399 with `devid-enroll` (with the maintainer's go), and verify a certificate is issued, which proves the CA key is still readable under the new bounding set
+- [ ] 3.6 **Maintainer, needs root** — restart `pve-cluster`, then `systemctl reload vtpm-mds`, and verify the journal shows the cache reloaded with the same VM count and no `ENOTCONN`; if it does not, record that a restart of `vtpm-mds` is needed and add `PartOf=pve-cluster.service` in a follow-up
+- [ ] 3.7 Verify `journalctl -u vtpm-mds` shows no `SIGSYS`, `status=31` or `operation not permitted` after tasks 3.2 to 3.4
 - [ ] 3.5 Say what was not verified
 
 ## 4. Archive

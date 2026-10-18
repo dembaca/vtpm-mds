@@ -46,7 +46,9 @@ UMask=0077
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+# A blocked call fails with EPERM and is logged, instead of killing the daemon.
+SystemCallErrorNumber=EPERM
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 # Guests and the host's own calls are link-local; nothing goes outbound.
 IPAddressDeny=any
 IPAddressAllow=169.254.0.0/16 localhost

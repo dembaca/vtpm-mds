@@ -34,17 +34,23 @@ Evidence read on hogan on 2026-10-18 against `main@407bfca` and the installed
   `ProtectClock`, `ProtectHostname`, `RestrictNamespaces=true`,
   `LockPersonality=true`, `MemoryDenyWriteExecute=true` (Go does not need W+X),
   `RestrictRealtime=true`, `RestrictSUIDSGID=true`, `RemoveIPC=true`,
-  `UMask=0077`. `ProtectProc=invisible` and `ProcSubset=pid` are **not** set:
+  `UMask=0077`. `RemoveIPC` removes IPC objects of the service's user and does
+  nothing for root; it is kept for when D-f lands and is not counted as
+  protection now, although it lowers the offline score. `ProtectProc=invisible` and `ProcSubset=pid` are **not** set:
   the caller binding reads `/proc/net/arp`.
 - **D-d. System calls and families.** `SystemCallArchitectures=native`,
   `SystemCallFilter=@system-service` and `~@privileged @resources`;
-  `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK` (`AF_NETLINK`
-  because Go's interface listing uses rtnetlink; drop it if a run without it shows
-  no error).
+  `SystemCallErrorNumber=EPERM`, so a call the filter blocks fails with an
+  error the daemon logs instead of killing it with `SIGSYS`;
+  `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`. No `AF_NETLINK`: the
+  daemon lists no interfaces (no `net.Interface*` outside tests on `main`), it
+  only listens and reads `/proc/net/arp` (pre-review, 2026-10-18).
 - **D-e. Address filter.** `IPAddressDeny=any`,
-  `IPAddressAllow=169.254.0.0/16 127.0.0.0/8 ::1/128`. Guests reach the service
-  from link-local addresses on `vmbr_imds`, and the host's own calls come from
-  `169.254.169.1`; nothing else needs to.
+  `IPAddressAllow=169.254.0.0/16 localhost` (`localhost` is systemd's token for
+  `127.0.0.0/8` and `::1/128`). Guests reach the service from link-local
+  addresses on `vmbr_imds`, and the host's own calls come from `169.254.169.1`.
+  A guest given any other source address on that bridge times out silently;
+  README.Debian says so.
 - **D-f. A dedicated user, not in this change.** `User=vtpm-mds` with
   `SupplementaryGroups=www-data ssl-cert` would remove root entirely, but
   `www-data` reads the whole cluster file system except `priv/`, and whether
@@ -69,5 +75,10 @@ Evidence read on hogan on 2026-10-18 against `main@407bfca` and the installed
 - **`ProtectSystem=strict` over pmxcfs.** If the FUSE mount is not visible inside
   the namespace, the load fails loudly at start ("failed to read
   /etc/pve/local/qemu-server"), not silently.
+- **`/etc/pve` after a `pve-cluster` restart.** The service's mount namespace
+  holds its own read-only view of the pmxcfs mount; whether a remount by
+  `pve-cluster` stays visible inside it is not known (pre-review, 2026-10-18).
+  Task 3.6 checks it; until then, restart `vtpm-mds` after restarting
+  `pve-cluster`.
 - **A future file the daemon needs** that is not root-owned fails with
   `permission denied`. README.Debian names this.

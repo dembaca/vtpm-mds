@@ -12,7 +12,8 @@ change kernel tunables. It SHALL mount the file system read-only for the daemon
 except for its state directory, deny it devices, new namespaces, set-user-ID
 programs and real-time scheduling, restrict its system calls to the
 `@system-service` set without `@privileged` and `@resources`, and restrict its
-sockets to `AF_INET`, `AF_INET6`, `AF_UNIX` and `AF_NETLINK`. It SHALL deny
+sockets to `AF_INET`, `AF_INET6` and `AF_UNIX`; a system call the filter blocks
+SHALL fail with `EPERM` rather than end the process. It SHALL deny
 traffic to and from every address except link-local IPv4 and loopback.
 
 `systemd-analyze security` SHALL rate the installed unit at **4.0 or lower**.
