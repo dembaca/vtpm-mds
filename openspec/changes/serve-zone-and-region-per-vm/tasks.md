@@ -131,6 +131,11 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
       `proxmox` and `local`, again agreeing with the document.
       **Not shown in the lab:** the Proxmox half (tags, host placement), which only
       hogan can show.
+      **Repeated with capitals, 2026-10-17, `agent-cursor-vtpm-22e0`, against
+      `7918274`:** passed. Layout `swtpm-localca` and `/usr/share/OVMF/`, inventory
+      outside the repository. `zone: DUS4` and `region: DUS` were served as
+      `DUS4` and `DUS` through both keys and the document, case unchanged; after
+      a SIGHUP with neither declared, `proxmox` and `local`.
 
 - [ ] 3.5 **A host whose node has a description, maintainer's go needed** — put `topology.kubernetes.io/zone` and `.../region` lines in a node's description (or run on a data-centre node that has them), restart or SIGHUP the service, and verify a guest without tags reads them through both keys and the document, with their case unchanged
       hogan has no node config, so 3.2 cannot show this step. Without 3.5 the
