@@ -76,15 +76,17 @@ merged with it) before touching `server.go`.
 - [x] 3.5 **Cloud lab** — while one peer floods, a second quiet peer still
       receives `200` for token mint (and health); say how the second peer
       was addressed
-      **Done, 2026-10-18** (`76dc949`): quiet peer = host `169.254.169.50`
-      on `br-imds` (`curl --interface`) while guest100 flooded; token PUT
-      **200** and `/health` **200**; `instance-id` **404** as unbound
-      (expected with `require_vm_identity`).
+      **Done, 2026-10-18** (`76dc949`): quiet peer = **unbound host caller**
+      `169.254.169.50` on `br-imds` (`curl --interface`), not a second bound
+      VM; token PUT **200** and `/health` **200** during guest100 flood;
+      `instance-id` **404** (unbound / `require_vm_identity`).
 - [x] 3.4 Say what was not verified: Hogan/VM 399 under the new package,
-      a second bound guest reading identity keys, and tuning the constants
+      a second *bound* guest reading identity keys, and tuning the constants
       in production
-      **Not verified:** Hogan/VM 399 package install; second *bound* guest
-      for identity keys; constant tuning; full SPIRE enroll under budget.
+      **Not verified:** the **bound** quiet-peer case (identity keys while
+      another peer floods) — hogan measures that with reversed roles (host
+      floods, VM 399 stays quiet) after rebase behind #49/#52; package on
+      Hogan; constant tuning; full SPIRE enroll under budget.
 
 ## 4. Archive
 
