@@ -6,8 +6,8 @@
 
 The shipped systemd unit SHALL confine `vtpm-mds` to the resources it uses. It
 SHALL limit the capability bounding set to `CAP_NET_BIND_SERVICE`, so that the
-daemon, although started as root, cannot read or write files that root does not
-own and are not readable by everyone, cannot load kernel modules, and cannot
+daemon, although started as root, cannot read or write files that neither root
+nor its groups (`root`, `ssl-cert`) may access, cannot load kernel modules, and cannot
 change kernel tunables. It SHALL mount the file system read-only for the daemon
 except for its state directory, deny it devices, new namespaces, set-user-ID
 programs and real-time scheduling, restrict its system calls to the
@@ -16,7 +16,10 @@ sockets to `AF_INET`, `AF_INET6` and `AF_UNIX`; a system call the filter blocks
 SHALL fail with `EPERM` rather than end the process. It SHALL deny
 traffic to and from every address except link-local IPv4 and loopback.
 
-`systemd-analyze security` SHALL rate the installed unit at **4.0 or lower**.
+`systemd-analyze security` of systemd 257 SHALL rate the installed unit at
+**4.0 or lower**. The unit SHALL be part of `pve-cluster.service`, so that a
+restart of the cluster file system restarts the daemon with a fresh read-only
+view of `/etc/pve`.
 
 #### Scenario: The installed unit is rated OK
 
@@ -36,7 +39,15 @@ traffic to and from every address except link-local IPv4 and loopback.
 - **WHEN** the guest reads the metadata tree and enrolls a DevID
 - **THEN** both succeed as before, and a reload rereads the guest configs
 
-#### Scenario: The address filter is in effect
+#### Scenario: The CA key stays readable
+
+- **GIVEN** the confined service on a host whose CA key is readable by root or by
+  the `ssl-cert` group only
+- **WHEN** a bound guest enrolls
+- **THEN** a certificate is issued, and the journal holds no `DevID enrollment
+  disabled` line
+
+#### Scenario: The address filter is configured
 
 - **GIVEN** the running service
 - **WHEN** an operator runs `systemctl show -p IPAddressDeny -p IPAddressAllow vtpm-mds`

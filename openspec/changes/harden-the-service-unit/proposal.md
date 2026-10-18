@@ -45,8 +45,12 @@ nothing but its log. Every file it reads on hogan is owned by root.
 - **Docs:** `debian/README.Debian` gains a short note on what the unit allows,
   for an operator who moves the CA key or the inventory.
 - **Behaviour visible to operators:** a configuration that points the daemon at a
-  key or inventory outside the allowed, root-owned or world-readable paths fails at
-  start with a permission error in the journal instead of being read. The
+  key it cannot read leaves enrollment disabled with the existing warning
+  `DevID enrollment disabled` in the journal, and an unreadable inventory leaves
+  the cache empty with a warning; neither stops the start (unchanged code paths,
+  made fatal only by a separate change). The unit adds the `ssl-cert` group so a
+  group-readable key under `/etc/ssl/private` stays readable, and `PartOf=
+  pve-cluster.service`. The
   `ReadWritePaths=/var/lib/vtpm-mds` line stays until the state directory is
   removed with the dead configuration keys (a later change).
 - **Not in scope:** a dedicated user (D-f, unless the maintainer wants it here),

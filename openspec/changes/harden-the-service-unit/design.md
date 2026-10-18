@@ -72,13 +72,25 @@ Evidence read on hogan on 2026-10-18 against `main@407bfca` and the installed
 - **A directive that breaks a path not exercised by the checks.** Enrollment reads
   the CA key only when a guest enrolls; SIGHUP rereads `/etc/pve`. Both are in the
   verification tasks, with an enrollment of VM 399 under the new unit.
-- **`ProtectSystem=strict` over pmxcfs.** If the FUSE mount is not visible inside
-  the namespace, the load fails loudly at start ("failed to read
-  /etc/pve/local/qemu-server"), not silently.
-- **`/etc/pve` after a `pve-cluster` restart.** The service's mount namespace
-  holds its own read-only view of the pmxcfs mount; whether a remount by
-  `pve-cluster` stays visible inside it is not known (pre-review, 2026-10-18).
-  Task 3.6 checks it; until then, restart `vtpm-mds` after restarting
-  `pve-cluster`.
-- **A future file the daemon needs** that is not root-owned fails with
-  `permission denied`. README.Debian names this.
+- **`ProtectSystem=strict` over pmxcfs.** Already ruled out: the unit had a mount
+  namespace before (`ReadWritePaths`) and `/etc/pve` is visible in it.
+- **`/etc/pve` after a `pve-cluster` restart (Fable pre-review, 2026-10-18).**
+  The namespace receives the new pmxcfs mount by propagation, but systemd's
+  read-only remount runs only at service start, so the remounted `/etc/pve`
+  would arrive writable. **D-h: `PartOf=pve-cluster.service`**, so a restart of
+  `pve-cluster` restarts `vtpm-mds` and rebuilds the read-only view. Task 3.6
+  checks `ro` in the service's mountinfo after such a restart.
+- **An unreadable CA key does not fail the start (Fable pre-review).**
+  `loadDevIDEnroller` failing only logs `Warning: DevID enrollment disabled`;
+  the service starts, `/health` says ok, enrollment answers `404`. Without
+  `CAP_DAC_OVERRIDE`, root reads only files it owns or may read by group, and a
+  sibling file of the same site PKI (`proxmox_imds_ca.crt`) is
+  `ansible:ssl-cert 0640`. **D-i: `SupplementaryGroups=ssl-cert`**, which also
+  lets the process traverse `/etc/ssl/private` (`root:ssl-cert 0710`) by group.
+  Task 3.4 (an enrollment) is a merge blocker, and 3.7 greps for the warning.
+  Making an unreadable configured key fatal is a separate change.
+- **`EPERM` is not logged by itself.** A swallowed system call leaves no line;
+  for the verification run, `SystemCallLog=@privileged @resources` in a drop-in
+  shows any hit in the audit/journal. `~@resources` blocks `setrlimit` but not
+  `prlimit64`, which Go uses, so that part of the filter is cosmetic; Go skips the
+  raise anyway because `LimitNOFILE` sets soft equal to hard.
