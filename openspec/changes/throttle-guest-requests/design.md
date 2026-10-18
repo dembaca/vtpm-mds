@@ -129,6 +129,11 @@ after Mac's log-change merge.
   Mac's `quiet-the-log-and-record-issuance` (and `drop-the-connection-map`
   if it merges in the same PR) is on `main`, so the single `server.go`
   middleware line does not fight their edits.
+- **D-l. Peer map cleanup (coordinator, 2026-10-18).** `guestLimiter.peers`
+  must not grow without bound when a guest spoofs many source IPs. Once a
+  minute (or on access), drop a peer entry when all three time lists are
+  empty after prune, `conns == 0`, and every `logged` timestamp is older
+  than the limit window. Same class of leak as `connectionMap` (#52).
 
 ## Risks / Trade-offs
 

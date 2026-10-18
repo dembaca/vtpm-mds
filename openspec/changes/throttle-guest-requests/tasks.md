@@ -10,9 +10,11 @@ merged with it) before touching `server.go`.
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer, optional** — overrule or accept D-a to D-k in
+- [ ] 1.1 **Maintainer, optional** — overrule or accept D-a to D-l in
       `design.md` (defaults in D-c and "no config keys" in D-f are the ones
       most likely to move), and verify the outcome is recorded there
+- [x] 1.1b **Coordinator** — D-l peer-map cleanup recorded after ACK note
+      **Done, 2026-10-18:** D-l + operability scenario + scrub implementation.
 - [x] 1.2 **Coordinator** — ACK the record and the deltas on the bus before
       any code is written, and verify the ACK names this change
       **Done, 2026-10-18:** ACK on the bus with D-h revised to per-peer
@@ -44,8 +46,9 @@ merged with it) before touching `server.go`.
       `limit_test.go`.
 - [x] 2.4 For each new test, run it against the code before this change or
       mutate the new code, and verify it fails
-      **Done:** mutated `writeTooManyRequests` to `200`; 
-      `TestGuestLimitExemptsHealth` failed; restored.
+      **Done:** mutations RED for HTTP 429→200, token cap removed, enroll
+      cap removed, conn cap noop, no peer-token eviction, no scrub
+      delete; each restored.
 - [x] 2.5 Run `go vet` and `go test` on the packages touched, and
       `openspec validate --all --strict`, and verify all pass
       **Done:** `go vet ./...` clean; `go test ./imds ./internal/server`

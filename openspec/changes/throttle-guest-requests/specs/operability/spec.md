@@ -33,3 +33,18 @@ instance-metadata guest-throttle rules.
 - **WHEN** that peer opens a new connection and sends a limited request under
   its other budgets
 - **THEN** the service serves the request normally
+
+### Requirement: Forget Idle Peer Budgets
+
+The per-peer throttle state SHALL NOT retain a peer entry forever. The service
+SHALL remove a peer's budget when that peer has no open connections, no
+request, token or enroll timestamps inside the current 60 second window, and
+no rate-limit log line newer than that window. Removal SHALL run at least once
+per minute while the service is up.
+
+#### Scenario: Spoofed peer entries disappear after the window
+
+- **GIVEN** many distinct peer IPs have each made one limited request and then
+  gone idle with no open connections
+- **WHEN** more than 60 seconds pass with no further activity from those peers
+- **THEN** the service holds no budget entries for those peers

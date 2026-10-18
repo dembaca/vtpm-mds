@@ -45,7 +45,55 @@ type peerBudget struct {
 }
 
 func newGuestLimiter() *guestLimiter {
-	return &guestLimiter{peers: make(map[string]*peerBudget)}
+	l := &guestLimiter{peers: make(map[string]*peerBudget)}
+	go l.scrubLoop()
+	return l
+}
+
+// scrubLoop removes idle peer budgets once a minute (D-l).
+func (l *guestLimiter) scrubLoop() {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for range t.C {
+		l.scrubIdlePeers(time.Now())
+	}
+}
+
+// scrubIdlePeers deletes peer entries with no open connections, no timestamps
+// inside the limit window, and no rate-limit log newer than the window.
+func (l *guestLimiter) scrubIdlePeers(now time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cut := now.Add(-limitWindow)
+	for key, p := range l.peers {
+		p.requests = prune(p.requests, now)
+		p.tokens = prune(p.tokens, now)
+		p.enrolls = prune(p.enrolls, now)
+		if p.conns > 0 {
+			continue
+		}
+		if len(p.requests) > 0 || len(p.tokens) > 0 || len(p.enrolls) > 0 {
+			continue
+		}
+		freshLog := false
+		for _, t := range p.logged {
+			if t.After(cut) {
+				freshLog = true
+				break
+			}
+		}
+		if freshLog {
+			continue
+		}
+		delete(l.peers, key)
+	}
+}
+
+// peerCount returns the number of peer budget entries (tests).
+func (l *guestLimiter) peerCount() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.peers)
 }
 
 func (l *guestLimiter) peer(key string) *peerBudget {

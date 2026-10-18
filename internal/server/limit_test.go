@@ -2,6 +2,9 @@ package server
 
 import (
 	"io"
+	"net"
+	"strconv"
+	"time"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -80,6 +83,71 @@ func TestGuestLimitTokenPUTBudget(t *testing.T) {
 	h.ServeHTTP(orec, other)
 	if orec.Code != http.StatusOK {
 		t.Fatalf("peer B want 200, got %d", orec.Code)
+	}
+}
+
+func TestGuestLimitConnCap(t *testing.T) {
+	l := newGuestLimiter()
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := guestLimitMiddleware(l, inner)
+	peer := "198.51.100.9:1"
+	// Simulate maxConnsPerPeer+1 accepted connections.
+	for i := 0; i < maxConnsPerPeer+1; i++ {
+		l.trackConnState(&stubConn{addr: peer}, http.StateNew)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/latest/meta-data/", nil)
+	req.RemoteAddr = peer
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("want 429 over conn cap, got %d", rec.Code)
+	}
+	// Close one; under cap again for HTTP (still need request budget).
+	l.trackConnState(&stubConn{addr: peer}, http.StateClosed)
+	// New peer for a clean request budget check of conn alone:
+	l2 := newGuestLimiter()
+	h2 := guestLimitMiddleware(l2, inner)
+	for i := 0; i < maxConnsPerPeer; i++ {
+		l2.trackConnState(&stubConn{addr: peer}, http.StateNew)
+	}
+	req2 := httptest.NewRequest(http.MethodGet, "/latest/meta-data/", nil)
+	req2.RemoteAddr = peer
+	rec2 := httptest.NewRecorder()
+	h2.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("want 200 at exactly %d conns, got %d", maxConnsPerPeer, rec2.Code)
+	}
+}
+
+type stubConn struct {
+	net.Conn
+	addr string
+}
+
+func (c *stubConn) RemoteAddr() net.Addr { return stubAddr(c.addr) }
+
+type stubAddr string
+
+func (a stubAddr) Network() string { return "tcp" }
+func (a stubAddr) String() string  { return string(a) }
+
+func TestScrubIdlePeersRemovesEmptyEntries(t *testing.T) {
+	l := newGuestLimiter()
+	now := time.Now()
+	for i := 0; i < 50; i++ {
+		peer := "203.0.113." + strconv.Itoa(i)
+		if !l.allowRequest(peer, now) {
+			t.Fatalf("seed peer %s", peer)
+		}
+	}
+	if l.peerCount() != 50 {
+		t.Fatalf("want 50 peers, got %d", l.peerCount())
+	}
+	l.scrubIdlePeers(now.Add(limitWindow + time.Second))
+	if l.peerCount() != 0 {
+		t.Fatalf("want 0 peers after scrub, got %d", l.peerCount())
 	}
 }
 
