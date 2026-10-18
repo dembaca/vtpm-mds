@@ -31,6 +31,15 @@ hosts without vmbr_imds). On the lab host:
   systemctl status vtpm-mds
   curl -sS http://169.254.169.1/health
 
+The unit confines the daemon: it runs as root but keeps only
+CAP_NET_BIND_SERVICE, sees the file system read-only (except
+/var/lib/vtpm-mds) and may talk only to link-local and loopback
+addresses. It can therefore read only files that root owns or that are
+world-readable. A CA key, certificate or inventory moved to a file owned
+by another user fails at start with "permission denied" in the journal;
+keep such files root-owned. Check the confinement with
+"systemd-analyze security vtpm-mds".
+
 Build
 -----
 

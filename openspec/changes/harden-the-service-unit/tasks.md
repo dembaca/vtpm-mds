@@ -10,7 +10,12 @@ pushed and the maintainer has not overruled D-a to D-g; D-f needs his answer.**
 
 ## 2. Implement
 
-- [ ] 2.1 Add the directives of D-a to D-e to `debian/vtpm-mds.service`, and verify `systemd-analyze verify` on the file reports nothing new
+- [x] 2.1 Add the directives of D-a to D-e to `debian/vtpm-mds.service`, and verify `systemd-analyze verify` on the file reports nothing new
+      **Done, 2026-10-18,** on hogan (systemd 257): `systemd-analyze verify
+      debian/vtpm-mds.service` printed nothing beyond the absent binary on the
+      build path. `systemd-analyze security --offline=true` on the file: **1.9 OK**
+      (was 9.0); the largest remaining items are running as root (0.4) and
+      `AF_INET`/`AF_INET6` (0.3), both intended. The installed score is task 3.1.
 - [ ] 2.2 Add the operator note to `debian/README.Debian`, and verify the package still passes `lintian --fail-on error,warning`
 - [ ] 2.3 Run `openspec validate --all --strict`, and verify it passes
 
