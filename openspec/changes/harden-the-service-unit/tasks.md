@@ -16,8 +16,13 @@ pushed and the maintainer has not overruled D-a to D-g; D-f needs his answer.**
       build path. `systemd-analyze security --offline=true` on the file: **1.9 OK**
       (was 9.0); the largest remaining items are running as root (0.4) and
       `AF_INET`/`AF_INET6` (0.3), both intended. The installed score is task 3.1.
-- [ ] 2.2 Add the operator note to `debian/README.Debian`, and verify the package still passes `lintian --fail-on error,warning`
-- [ ] 2.3 Run `openspec validate --all --strict`, and verify it passes
+- [x] 2.2 Add the operator note to `debian/README.Debian`, and verify the package still passes `lintian --fail-on error,warning`
+      **Done, 2026-10-18:** `make deb-local` at `c1ba511` built
+      `vtpm-mds_0.2.0+git20261018.c1ba511d7b9c_amd64.deb`; `lintian --fail-on
+      error,warning` exited 0, and the unit in the package carries the new
+      directives (`dpkg-deb --fsys-tarfile`).
+- [x] 2.3 Run `openspec validate --all --strict`, and verify it passes
+      **Done, 2026-10-18:** 6 passed, 0 failed.
 
 ## 3. Verify on hogan
 
