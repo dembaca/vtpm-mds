@@ -31,10 +31,24 @@ record.**
 
 ## 3. Verify on the real systems
 
-- [ ] 3.1 **Hogan** — install the git-stamped package, note the service's resident size from `/proc/<pid>/status`, open a few thousand connections from VM 399 (each bound), and verify the resident size afterwards is flat within the noise of a garbage collection
+- [x] 3.1 **Hogan** — install the git-stamped package, note the service's resident size from `/proc/<pid>/status`, open a few thousand connections from VM 399 (each bound), and verify the resident size afterwards is flat within the noise of a garbage collection
       Needs the maintainer's go in the session of whoever runs it, for the load on
       VM 399.
-- [ ] 3.2 Say what was not verified: the old build under the same load, any other source of growth
+      Done 2026-10-18 on hogan with the maintainer's go, package
+      `0.2.0+git20261018.38bd29d4400c` (clean tree). 14 rounds of 5000 bound
+      connections from VM 399 (`PUT /latest/api/token`, `Connection: close`,
+      all `200`), 70000 in all. `VmRSS` 9668 kB at start, 10100 kB after the
+      first requests, then 15856 → 20448 kB over rounds 1–5 while the heap and
+      buffers grew, and 22452–26068 kB over rounds 6–14 with drops of about
+      3 MB (rounds 7 and 12) where the collector returned memory; `VmHWM`
+      26420 kB, threads 9 → 10. Over the last 45000 connections the size is
+      flat within that band, not growing with the connection count.
+- [x] 3.2 Say what was not verified: the old build under the same load, any other source of growth
+      Not verified: the old build (`493063dcb393`, with the map) under the
+      same load, so there is no measured growth rate to compare against; no
+      heap profile, only `VmRSS`, so caches, threads and config reloads are not
+      separated as sources; only the token path, no metadata reads; one guest,
+      sequential connections, nothing concurrent.
 
 ## 4. Archive
 
