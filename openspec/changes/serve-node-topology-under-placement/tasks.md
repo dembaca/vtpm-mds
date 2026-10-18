@@ -58,6 +58,17 @@ at the coordinator's assignment, after the maintainer's decision of the same day
 ## 3. Verify on the real systems
 
 - [ ] 3.1 **Hogan** — install the git-stamped package, put `topology.vtpm_mds.io/rack: keller01` and `topology.vtpm_mds.io/host-id: h-01` into the node notes, reload, and verify from VM 399 that `placement/rack` and `placement/host-id` answer them, `placement/node` and `placement/cluster` answer the host's names, `placement/` lists the keys, and `placement/nothing` answers `404` with an empty body
+      **Part 1 done, 2026-10-18, hogan (coordinator), against
+      `0.2.0+git20261018.3fcf3317b0d1`, with the maintainer's go in hogan's session:**
+      passed. From VM 399: `placement` answered `301` to `/latest/meta-data/placement/`;
+      `placement/` listed `availability-zone`, `cluster`, `node`, `rack` and `region`;
+      `availability-zone` answered `keller`, `region` `bgl`, `node` the node name,
+      `cluster` the `cluster_name` of `corosync.conf`, and `rack` `keller01` (a line of
+      the node notes); `placement/nothing` and `placement/Zone` each answered `404`
+      with an empty body (keys are case-sensitive); the identity document kept its
+      fixed ten keys with `keller` and `bgl`. **Open:** `placement/host-id`, which
+      needs the line `topology.vtpm_mds.io/host-id: h-01` in the node notes (the
+      maintainer sets it), then a reload.
       Changes a shared resource, the node notes, so it needs the maintainer's go
       in the session of whoever runs it.
 - [ ] 3.2 **Hogan** — verify that a description with `zone` and `availability-zone` both set gives the node name and a log line, that the former prefix `topology.kubernetes.io/` alone changes nothing, and that the identity document still has exactly its fixed keys
