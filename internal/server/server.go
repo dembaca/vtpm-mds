@@ -314,10 +314,14 @@ func (c *vmConnection) extractVMConfigByRouting() {
 	}
 }
 
+// arpTablePath is the ARP table the caller's MAC is read from. It is a variable
+// only so that a test can supply a table of its own.
+var arpTablePath = "/proc/net/arp"
+
 // getMACFromARP reads the ARP table from /proc/net/arp to get MAC address for an IP
 func (c *vmConnection) getMACFromARP(ip string) string {
 	debugf("[DEBUG getMACFromARPFile] Reading /proc/net/arp for IP: %s", ip)
-	data, err := os.ReadFile("/proc/net/arp")
+	data, err := os.ReadFile(arpTablePath)
 	if err != nil {
 		log.Printf("Failed to read /proc/net/arp: %v", err)
 		return ""
