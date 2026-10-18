@@ -2,6 +2,7 @@ package imds
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -90,9 +91,20 @@ func HandleCreateToken(s *TokenStore) http.HandlerFunc {
 		// Parse TTL from request header (optional, IMDSv2 compatible)
 		_ = r.Header.Get("X-aws-ec2-metadata-token-ttl-seconds")
 
-		// Generate token
-		token, err := s.GenerateToken()
+		peer := "unknown"
+		if ip := PeerIP(r.RemoteAddr); ip != nil {
+			peer = ip.String()
+		}
+
+		token, err := s.GenerateToken(peer)
 		if err != nil {
+			if errors.Is(err, ErrTokenStoreEmergency) {
+				w.Header().Set("Content-Type", "text/plain")
+				w.Header().Set("Retry-After", "1")
+				w.WriteHeader(http.StatusTooManyRequests)
+				fmt.Fprint(w, "Too many requests\n")
+				return
+			}
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}

@@ -28,12 +28,14 @@ type Server struct {
 	cfg        *config.Config
 	tokenStore *imds.TokenStore
 	devid      *devid.Enroller
+	limiter    *guestLimiter
 }
 
 func New(cfg *config.Config) (*Server, error) {
 	srv := &Server{
 		cfg:        cfg,
 		tokenStore: imds.NewTokenStore(cfg),
+		limiter:    newGuestLimiter(),
 	}
 
 	activeServerMu.Lock()
@@ -121,12 +123,13 @@ func New(cfg *config.Config) (*Server, error) {
 	})
 
 	srv.httpServer = &http.Server{
-		Addr:         cfg.MDS.ListenAddr,
-		Handler:      vmConfigMiddleware(loggingMiddleware(mux)),
-		ConnContext:  connContext,
-		ReadTimeout:  15 * time.Second,
+		Addr:        cfg.MDS.ListenAddr,
+		Handler:     vmConfigMiddleware(loggingMiddleware(guestLimitMiddleware(srv.limiter, mux))),
+		ConnContext: connContext,
+		ConnState:   srv.limiter.trackConnState,
+		ReadTimeout: 15 * time.Second,
 		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		IdleTimeout: 60 * time.Second,
 	}
 
 	return srv, nil

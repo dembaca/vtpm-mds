@@ -13,30 +13,44 @@ merged with it) before touching `server.go`.
 - [ ] 1.1 **Maintainer, optional** — overrule or accept D-a to D-k in
       `design.md` (defaults in D-c and "no config keys" in D-f are the ones
       most likely to move), and verify the outcome is recorded there
-- [ ] 1.2 **Coordinator** — ACK the record and the deltas on the bus before
+- [x] 1.2 **Coordinator** — ACK the record and the deltas on the bus before
       any code is written, and verify the ACK names this change
+      **Done, 2026-10-18:** ACK on the bus with D-h revised to per-peer
+      quota; PR #50.
 
 ## 2. Implement
 
-- [ ] 2.1 Add `internal/server/limit.go` with per-peer token, request and
+- [x] 2.1 Add `internal/server/limit.go` with per-peer token, request and
       enroll budgets (D-c, D-d), the `429` answer (D-g), `/health` exemption
       (D-e), peer keying (D-a), and `ConnState` accounting for the connection
       cap (D-i), and verify with unit tests for every scenario of the three
       delta specs that do not need a live listener
-- [ ] 2.2 Enforce per-peer live-token quota and the global emergency brake
+      **Done:** `limit.go` + `limit_test.go` (health exempt, token budget,
+      enroll budget, second peer unaffected).
+- [x] 2.2 Enforce per-peer live-token quota and the global emergency brake
       in `imds/token.go` (D-h: 32 per peer with oldest-of-peer eviction;
       65536 global → `429` + log), pass the minting peer into
       `GenerateToken`, and verify with token-store and handler tests for
       every scenario of "Bound Session Tokens Per Peer"
-- [ ] 2.3 Wire one middleware wrap and the `ConnState` hook in
+      **Done:** `token.go` + `token_quota_test.go`; handler maps emergency
+      to `429`.
+- [x] 2.3 Wire one middleware wrap and the `ConnState` hook in
       `internal/server/server.go` (only those additions in that file), after
       rebasing onto Mac's merged log-change, and verify with a server-level
       test that a flood of limited paths returns `429` while `/health`
       returns `200`
-- [ ] 2.4 For each new test, run it against the code before this change or
+      **Done:** merged `#49` branch for D-k; Handler wraps
+      `guestLimitMiddleware`; `ConnState` set. Flood/`/health` covered in
+      `limit_test.go`.
+- [x] 2.4 For each new test, run it against the code before this change or
       mutate the new code, and verify it fails
-- [ ] 2.5 Run `go vet` and `go test` on the packages touched, and
+      **Done:** mutated `writeTooManyRequests` to `200`; 
+      `TestGuestLimitExemptsHealth` failed; restored.
+- [x] 2.5 Run `go vet` and `go test` on the packages touched, and
       `openspec validate --all --strict`, and verify all pass
+      **Done:** `go vet ./...` clean; `go test ./imds ./internal/server`
+      pass; `openspec validate --all --strict` 7 passed (incl. #49 change
+      merged into the branch).
 
 ## 3. Verify on the real systems
 

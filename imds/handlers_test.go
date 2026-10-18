@@ -23,7 +23,7 @@ func TestHandleInstanceID(t *testing.T) {
 	req.RemoteAddr = "192.168.1.100:12345"
 	
 	// Get token first
-	token, _ := store.GenerateToken()
+	token, _ := store.GenerateToken("test")
 	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
 	
 	rec := httptest.NewRecorder()
@@ -45,7 +45,7 @@ func TestHandleHostname(t *testing.T) {
 	req := httptest.NewRequest("GET", "/latest/meta-data/local-hostname", nil)
 	req.RemoteAddr = "192.168.1.100:12345"
 	
-	token, _ := store.GenerateToken()
+	token, _ := store.GenerateToken("test")
 	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
 	
 	rec := httptest.NewRecorder()
@@ -66,7 +66,7 @@ func TestHandleLocalIPv4(t *testing.T) {
 	req := httptest.NewRequest("GET", "/latest/meta-data/local-ipv4", nil)
 	req.RemoteAddr = "10.0.0.5:12345"
 	
-	token, _ := store.GenerateToken()
+	token, _ := store.GenerateToken("test")
 	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
 	
 	rec := httptest.NewRecorder()
@@ -130,7 +130,7 @@ func TestHandleLocalIPv4_IPv6Peer(t *testing.T) {
 	req := httptest.NewRequest("GET", "/latest/meta-data/local-ipv4", nil)
 	req.RemoteAddr = "[fe80::1]:5000"
 
-	token, _ := store.GenerateToken()
+	token, _ := store.GenerateToken("test")
 	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
 
 	rec := httptest.NewRecorder()
@@ -154,7 +154,7 @@ func TestHandleLocalIPv4_IPv4MappedPeer(t *testing.T) {
 	req := httptest.NewRequest("GET", "/latest/meta-data/local-ipv4", nil)
 	req.RemoteAddr = "[::ffff:10.0.0.5]:5000"
 
-	token, _ := store.GenerateToken()
+	token, _ := store.GenerateToken("test")
 	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
 
 	rec := httptest.NewRecorder()
@@ -180,7 +180,7 @@ func TestHandleInstanceIdentityDocument_IPv6Peer(t *testing.T) {
 	req := boundRequest(t, "/latest/dynamic/instance-identity/document", "100")
 	req.RemoteAddr = "[fe80::1]:5000"
 
-	token, _ := store.GenerateToken()
+	token, _ := store.GenerateToken("test")
 	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
 
 	rec := httptest.NewRecorder()
@@ -213,7 +213,7 @@ func TestHandleInstanceIdentityDocument_IPv4MappedPeer(t *testing.T) {
 	req := httptest.NewRequest("GET", "/latest/dynamic/instance-identity/document", nil)
 	req.RemoteAddr = "[::ffff:10.0.0.5]:5000"
 
-	token, _ := store.GenerateToken()
+	token, _ := store.GenerateToken("test")
 	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
 
 	rec := httptest.NewRecorder()
@@ -233,7 +233,7 @@ func TestHandleAvailabilityZone(t *testing.T) {
 	req := httptest.NewRequest("GET", "/latest/meta-data/placement/availability-zone", nil)
 	req.RemoteAddr = "192.168.1.100:12345"
 	
-	token, _ := store.GenerateToken()
+	token, _ := store.GenerateToken("test")
 	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
 	
 	rec := httptest.NewRecorder()
@@ -254,7 +254,7 @@ func TestHandleInstanceIdentityDocument(t *testing.T) {
 	req := httptest.NewRequest("GET", "/latest/dynamic/instance-identity/document", nil)
 	req.RemoteAddr = "192.168.1.100:12345"
 	
-	token, _ := store.GenerateToken()
+	token, _ := store.GenerateToken("test")
 	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
 	
 	rec := httptest.NewRecorder()
@@ -295,7 +295,7 @@ func TestHandleMetaDataIndex(t *testing.T) {
 	setupTestStore()
 	req := httptest.NewRequest("GET", "/latest/meta-data/", nil)
 	
-	token, _ := store.GenerateToken()
+	token, _ := store.GenerateToken("test")
 	req.Header.Set("X-Aws-Ec2-Metadata-Token", token.Token)
 	
 	rec := httptest.NewRecorder()
@@ -717,7 +717,7 @@ func notFoundBody() string {
 
 func newToken(t *testing.T) string {
 	t.Helper()
-	token, err := store.GenerateToken()
+	token, err := store.GenerateToken("test")
 	if err != nil {
 		t.Fatalf("failed to generate a session token: %v", err)
 	}
