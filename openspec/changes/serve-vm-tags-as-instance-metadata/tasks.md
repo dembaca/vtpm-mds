@@ -81,22 +81,28 @@ at the coordinator's assignment, after the maintainer's answers of the same day.
       config until the maintainer removes them (3.3).
       Changes a shared resource, VM 399's config, so it needs the maintainer's go
       in the session of whoever runs it.
-- [ ] 3.2 **Hogan** — put `topology.vtpm_mds.io/zone: TEST_Z` into the node notes, reload, and verify a guest reads `TEST_Z` through the key and the document, with the region from the cluster name, and that the old `topology.kubernetes.io/zone` line alone gives the node name
-      **Partly done, 2026-10-18, hogan, against `eaed1d1`:** the former line
-      `topology.kubernetes.io/zone: TEST_Z` alone no longer counts (zone is the
-      node name). The maintainer put `topology.vtpm_mds.io/region: bgl` into the
-      notes and the service served `bgl` as the region. With two
-      `topology.vtpm_mds.io/zone` lines (`hogan` and `TEST_Z`) the log read `host
-      placement: 2 zone lines in the description of /etc/pve/local/config, none
-      used` and the zone fell back to the node name, as "Two description lines of
-      one kind declare nothing" says; that cannot be told from a zone that really is
-      the node name. **Open:** a single zone line whose value differs from the node
-      name, read as the zone.
-- [ ] 3.3 **Hogan** — verify a VM without tags gets `404` with an empty body on `tags/instance`, and that an unbound caller (the host itself) gets the same
-      **Half done, 2026-10-18, hogan:** the host as an unbound caller got `404`
-      with an empty body on `tags/` and `tags/instance`, and its index had no
-      `tags/`. **Open:** a bound VM without tags, which needs the tags off VM 399
-      (no other VM here reaches the metadata bridge).
+- [x] 3.2 **Hogan** — put `topology.vtpm_mds.io/zone: TEST_Z` into the node notes, reload, and verify a guest reads `TEST_Z` through the key and the document, with the region from the cluster name, and that the old `topology.kubernetes.io/zone` line alone gives the node name
+      **Done, 2026-10-18, hogan (coordinator), against `eaed1d1`, in three
+      rounds:** passed. (1) The former line `topology.kubernetes.io/zone: TEST_Z`
+      alone no longer counts: the zone is the node name. (2) The maintainer put
+      `topology.vtpm_mds.io/region: bgl` into the notes and the service served
+      `bgl`; with two `topology.vtpm_mds.io/zone` lines (`hogan` and `TEST_Z`) the
+      log read `host placement: 2 zone lines in the description of
+      /etc/pve/local/config, none used` and the zone fell back to the node name, as
+      "Two description lines of one kind declare nothing" says. (3) With exactly
+      one zone line, `keller`, a value that is not the node name,
+      `placement/availability-zone` answered `keller` and `placement/region`
+      answered `bgl`, with no host-placement warning in the log: the zone is read
+      from the description and the region too.
+- [x] 3.3 **Hogan** — verify a VM without tags gets `404` with an empty body on `tags/instance`, and that an unbound caller (the host itself) gets the same
+      **Done, 2026-10-18, hogan, in two rounds:** passed. The host as an unbound
+      caller got `404` with an empty body on `tags/` and `tags/instance`, and its
+      index had no `tags/`. After the maintainer removed every tag from VM 399
+      (the `tags:` line is left empty and parses), the index of VM 399 listed
+      `instance-id`, `local-hostname`, `local-ipv4`, `placement/` and `services/`
+      and no `tags/`; `tags/`, `tags/instance` and `tags/instance/no-such-key`
+      each answered `404` with an empty body; `instance-id` stayed `i-399` and the
+      identity document kept its fixed keys.
 - [x] 3.4 **Cloud lab** — declare `tags` for one lab inventory entry, and verify a guest reads the keys and values through `tags/instance` and that an entry without tags gets `404`; say which layout was used
       **Done, 2026-10-18, `agent-cursor-vtpm-22e0`, against `eaed1d1`:** passed.
       Layout `swtpm-localca` and `/usr/share/OVMF/`; the inventory is
@@ -107,7 +113,14 @@ at the coordinator's assignment, after the maintainer's answers of the same day.
       had no `tags/` and every tags path answered `404` with an empty body.
       **Not shown in the lab:** the Proxmox half, which only hogan can show.
       Declare them in the inventory outside the repository.
-- [ ] 3.5 Say what was not verified: a data-centre node's real description, a Kubernetes consumer, EC2's answer for an instance without tags
+- [x] 3.5 Say what was not verified: a data-centre node's real description, a Kubernetes consumer, EC2's answer for an instance without tags
+      **Done, 2026-10-18.** Not verified: a data-centre node's real description
+      (the zone and region lines were read on hogan's own notes only); a
+      Kubernetes consumer of the tags or of the topology; EC2's answer for an
+      instance without tags (the `404` is design decision D-d, not a measured
+      EC2 behaviour); a VM whose tag field holds a value over 255 characters on
+      the live stack (covered by unit tests only); the Proxmox tag format on the
+      installed version beyond the tags that were actually set.
 
 ## 4. Archive
 
