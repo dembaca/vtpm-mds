@@ -137,10 +137,20 @@ empfohlen". **Code only after the coordinator's ACK of this record.**
       `DUS4` and `DUS` through both keys and the document, case unchanged; after
       a SIGHUP with neither declared, `proxmox` and `local`.
 
-- [ ] 3.5 **A host whose node has a description, maintainer's go needed** — put `topology.kubernetes.io/zone` and `.../region` lines in a node's description (or run on a data-centre node that has them), restart or SIGHUP the service, and verify a guest without tags reads them through both keys and the document, with their case unchanged
+- [x] 3.5 **A host whose node has a description, maintainer's go needed** — put `topology.kubernetes.io/zone` and `.../region` lines in a node's description (or run on a data-centre node that has them), restart or SIGHUP the service, and verify a guest without tags reads them through both keys and the document, with their case unchanged
       hogan has no node config, so 3.2 cannot show this step. Without 3.5 the
       description step is verified on constructed trees only, with the format
       taken from Proxmox's source; say so when archiving.
+      **Done, 2026-10-17, hogan (coordinator), against `7918274`:** passed, with
+      the maintainer's go. The maintainer put one line, `topology.kubernetes.io/zone:
+      TEST_Z`, in hogan's node notes (`/etc/pve/local/config`, 39 bytes) and
+      removed the tags from VM 399 (an empty `tags:` line remains; the parser
+      copes). After `systemctl reload`, VM 399 read `TEST_Z` through
+      `placement/availability-zone` (step 2, case kept), the region from the
+      cluster name (step 3, the description names only the zone), and the
+      document agreed; no error in the log. Zone and region resolve one by one,
+      as the delta says. This is the description step on a real node. Whether the
+      test line stays in the notes is the maintainer's choice.
 
 ## 4. Archive
 
