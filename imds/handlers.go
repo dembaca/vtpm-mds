@@ -410,14 +410,14 @@ func PublicIPv4(r *http.Request) string {
 }
 
 // getAvailabilityZone is the host's zone. Topology belongs to the node, so every
-// caller, bound or not, reads the same value.
+// caller, bound or not, reads the same value; availability-zone is never absent.
 func getAvailabilityZone(r *http.Request) string {
-	return inventory.HostPlacement().Zone
+	return inventory.HostTopology()["availability-zone"]
 }
 
 // getRegion is the host's region, resolved like the zone.
 func getRegion(r *http.Request) string {
-	return inventory.HostPlacement().Region
+	return inventory.HostTopology()["region"]
 }
 
 func getDomain(r *http.Request) string {

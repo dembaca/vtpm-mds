@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"reflect"
 	"log"
 	"os"
 	"path/filepath"
@@ -247,14 +248,36 @@ func TestValidPlacementName(t *testing.T) {
 	}
 }
 
-func TestHostPlacementDefaultsUntilSet(t *testing.T) {
-	SetHostPlacement(DefaultPlacement)
-	if got := HostPlacement(); got != DefaultPlacement {
-		t.Fatalf("got %+v, want the default %+v", got, DefaultPlacement)
+func TestHostTopologyDefaultsUntilSet(t *testing.T) {
+	SetHostTopology(DefaultTopology())
+	if got := HostTopology(); !reflect.DeepEqual(got, DefaultTopology()) {
+		t.Fatalf("got %+v, want the default %+v", got, DefaultTopology())
 	}
-	SetHostPlacement(Placement{Zone: "hogan", Region: "bgl"})
-	defer SetHostPlacement(DefaultPlacement)
-	if got := HostPlacement(); got != (Placement{Zone: "hogan", Region: "bgl"}) {
-		t.Fatalf("got %+v after SetHostPlacement", got)
+	SetHostTopology(Topology{"availability-zone": "hogan", "region": "bgl", "rack": "r1"})
+	defer SetHostTopology(DefaultTopology())
+	if got := HostTopology(); got["availability-zone"] != "hogan" || got["rack"] != "r1" || len(got) != 3 {
+		t.Fatalf("got %+v after SetHostTopology", got)
+	}
+}
+
+// What a caller holds is a copy: changing it never changes the host's topology.
+func TestHostTopologyIsACopy(t *testing.T) {
+	SetHostTopology(Topology{"availability-zone": "hogan", "region": "bgl"})
+	defer SetHostTopology(DefaultTopology())
+	got := HostTopology()
+	got["availability-zone"] = "changed"
+	if HostTopology()["availability-zone"] != "hogan" {
+		t.Fatal("the returned topology aliases the host's")
+	}
+}
+
+func TestValidTopologyKey(t *testing.T) {
+	for key, want := range map[string]bool{
+		"rack": true, "availability-zone": true, "Zone": true, "host-id": true, "a_b+c": true,
+		"": false, "a.b": false, "a b": false, "a/b": false, strings.Repeat("k", 64): false,
+	} {
+		if got := ValidTopologyKey(key); got != want {
+			t.Errorf("ValidTopologyKey(%q) = %v, want %v", key, got, want)
+		}
 	}
 }
