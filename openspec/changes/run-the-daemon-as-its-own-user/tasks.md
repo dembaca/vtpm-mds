@@ -50,9 +50,27 @@ answered D-d.**
 
 ## 3. Verify on hogan
 
-- [ ] 3.1 Install the git-stamped package (maintainer's go), and verify the process runs as `vtpm-mds` with groups `vtpm-mds www-data`, the bounding set is `CAP_NET_BIND_SERVICE` only, and `systemd-analyze security` is at most the 1.9 measured for #51
-- [ ] 3.2 Verify the journal says `DevID CA key from systemd credential`, and enroll VM 399 once (maintainer's go) so a `devid issued` line proves the key is used
-- [ ] 3.3 Verify metadata from VM 399 and the host's refusals as before, and that a reload rereads 3 VMs
+- [x] 3.1 Install the git-stamped package (maintainer's go), and verify the process runs as `vtpm-mds` with groups `vtpm-mds www-data`, the bounding set is `CAP_NET_BIND_SERVICE` only, and `systemd-analyze security` is at most the 1.9 measured for #51
+      **Done, 2026-10-18, on hogan,** `0.2.0+git20261018.493063dcb393` (code at
+      `493063d`), installed with the maintainer's go in the session. `postinst`
+      printed `Creating user 'vtpm-mds' … with UID 987 and GID 987`. The process:
+      `Uid 987`, `Gid 987`, `Groups: 33 987` (`www-data`, `vtpm-mds`),
+      `CapEff`/`CapBnd` `0x400`. `/var/lib/vtpm-mds` is now `vtpm-mds:vtpm-mds
+      0750`. `systemd-analyze security vtpm-mds`: **1.5 OK** (1.9 as root).
+- [x] 3.2 Verify the journal says `DevID CA key from systemd credential`, and enroll VM 399 once (maintainer's go) so a `devid issued` line proves the key is used
+      **Done, 2026-10-18:** at start the journal says `DevID CA key from systemd
+      credential` and `DevID enrollment routes registered`. One enrolment of VM
+      399 (maintainer's go; client from the same build; guest scratch directory,
+      guarded, removed afterwards; SPIRE's material unchanged; lockout counter
+      `0x0` before and after) issued `CN=399`, serial `BD43C303…`; journal
+      `devid issued serial=bd43c303… vm=399 ek=19517bd1…`.
+- [x] 3.3 Verify metadata from VM 399 and the host's refusals as before, and that a reload rereads 3 VMs
+      **Done, 2026-10-18:** VM 399 read the placement listing, zone, rack and the
+      identity document as before; the host got `401` without a token and `200`
+      on `/health`; a reload printed `3 VMs, 5 MAC addresses` and `reloaded
+      successfully`. The journal since the install holds no `DevID enrollment
+      disabled`, `Failed to load VM config`, `permission denied`, `operation not
+      permitted` or `SIGSYS`.
 - [ ] 3.4 **Maintainer, needs root** — run `setpriv --reuid=vtpm-mds --regid=vtpm-mds --groups=www-data ls /etc/pve/priv` and verify it is refused while `cat /etc/pve/local/qemu-server/399.conf` under the same identity succeeds
 - [ ] 3.5 Say what was not verified
 
