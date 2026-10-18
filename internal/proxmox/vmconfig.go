@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -167,66 +168,72 @@ func instanceTags(vmid, tags string) map[string]string {
 
 var clusterNamePattern = regexp.MustCompile(`(?m)^\s*cluster_name:\s*(\S+)`)
 
-// descriptionLine matches a line of a node description that declares a placement.
-var descriptionLine = regexp.MustCompile(`^\s*topology\.vtpm_mds\.io/(zone|region):\s*(\S+)\s*$`)
+// descriptionLine matches a line of a node description that declares a topology
+// key: the prefix, a key up to the first colon, and a value. The prefix is matched
+// as it is spelled, case included.
+var descriptionLine = regexp.MustCompile(`^\s*topology\.vtpm_mds\.io/([^:]*):\s*(.*?)\s*$`)
 
-// HostPlacement returns the placement of the node this service runs on, from
-// three sources in this order: the zone and region lines of the node's
-// description (topology.vtpm_mds.io/zone and .../region), then the node name,
-// the target of <pveRoot>/local, as the zone and the cluster_name of
-// <pveRoot>/corosync.conf as the region, then the defaults, "proxmox" and
-// "local". Each of the two is resolved on its own, so a description that names a
-// zone only still takes the region from the cluster. A name is kept as its source
-// spells it, capitals included. One that is not a valid placement name is logged
-// and the next source is used. pveRoot "" means DefaultRoot.
-func HostPlacement(pveRoot string) inventory.Placement {
+// maxTopologyKeys bounds what a hand-edited description can make the service read
+// and list.
+const maxTopologyKeys = 64
+
+// HostTopology returns the topology of the node this service runs on. Each key
+// takes the first value that is valid from its sources: availability-zone from the
+// description line topology.vtpm_mds.io/zone (or .../availability-zone), then the
+// node name, the target of <pveRoot>/local, then "proxmox"; region from the
+// description, then the cluster_name of <pveRoot>/corosync.conf, then "local";
+// node from the description, then the node name; cluster from the description,
+// then the cluster_name; every other key from the description only. Each key is
+// resolved on its own. A value is kept as its source spells it, capitals
+// included; one that is not valid is logged and the next source is used.
+// pveRoot "" means DefaultRoot.
+func HostTopology(pveRoot string) inventory.Topology {
 	if pveRoot == "" {
 		pveRoot = DefaultRoot
 	}
-	placement := inventory.DefaultPlacement
+	topology := inventory.DefaultTopology()
 
 	if target, err := os.Readlink(filepath.Join(pveRoot, "local")); err != nil {
-		log.Printf("host placement: cannot read the %s link: %v", filepath.Join(pveRoot, "local"), err)
+		log.Printf("host topology: cannot read the %s link: %v", filepath.Join(pveRoot, "local"), err)
 	} else if node := filepath.Base(filepath.Clean(target)); inventory.ValidPlacementName(node) {
-		placement.Zone = node
+		topology["availability-zone"] = node
+		topology["node"] = node
 	} else {
-		log.Printf("host placement: node name %q is not a valid placement name, zone stays %q", node, placement.Zone)
+		log.Printf("host topology: node name %q is not a valid value, availability-zone stays %q", node, topology["availability-zone"])
 	}
 
 	if data, err := os.ReadFile(filepath.Join(pveRoot, "corosync.conf")); err == nil {
 		if m := clusterNamePattern.FindSubmatch(data); m != nil {
 			if cluster := string(m[1]); inventory.ValidPlacementName(cluster) {
-				placement.Region = cluster
+				topology["region"] = cluster
+				topology["cluster"] = cluster
 			} else {
-				log.Printf("host placement: cluster name %q is not a valid placement name, region stays %q", cluster, placement.Region)
+				log.Printf("host topology: cluster name %q is not a valid value, region stays %q", cluster, topology["region"])
 			}
 		}
 	}
 
-	zone, region := descriptionPlacement(filepath.Join(pveRoot, "local", "config"))
-	if zone != "" {
-		placement.Zone = zone
+	for key, value := range descriptionTopology(filepath.Join(pveRoot, "local", "config")) {
+		topology[key] = value
 	}
-	if region != "" {
-		placement.Region = region
-	}
-	return placement
+	return topology
 }
 
-// descriptionPlacement reads the zone and region a node declares in its
-// description. Proxmox keeps the description in <node>/config as '#' lines, each
-// URL-encoded, so "topology.vtpm_mds.io/zone: DUS4" is stored as
-// "#topology.vtpm_mds.io/zone%3A DUS4". A kind is declared by exactly one line
-// with a valid name; two or more lines of one kind declare nothing, as two tags
-// do. A missing file declares nothing and is not an error: most nodes have no
-// node config.
-func descriptionPlacement(path string) (zone, region string) {
+// descriptionTopology reads the topology keys a node declares in its description.
+// Proxmox keeps the description in <node>/config as '#' lines, each URL-encoded, so
+// "topology.vtpm_mds.io/zone: DUS4" is stored as "#topology.vtpm_mds.io/zone%3A DUS4".
+// A key is declared by exactly one line with a valid key and value; two or more
+// lines for one key, valid or not, declare nothing, as two tags do, and zone and
+// availability-zone are one key. Keys are case-sensitive and only exactly "zone"
+// is the short form. A missing file declares nothing and is not an error: most
+// nodes have no node config.
+func descriptionTopology(path string) map[string]string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			log.Printf("host placement: cannot read %s: %v", path, err)
+			log.Printf("host topology: cannot read %s: %v", path, err)
 		}
-		return "", ""
+		return nil
 	}
 	found := map[string][]string{}
 	for _, line := range strings.Split(string(data), "\n") {
@@ -238,23 +245,40 @@ func descriptionPlacement(path string) (zone, region string) {
 		if err != nil {
 			continue
 		}
-		if m := descriptionLine.FindStringSubmatch(decoded); m != nil {
-			found[m[1]] = append(found[m[1]], m[2])
+		m := descriptionLine.FindStringSubmatch(decoded)
+		if m == nil {
+			continue
 		}
+		key, value := m[1], m[2]
+		if key == "zone" {
+			key = "availability-zone"
+		}
+		if !inventory.ValidTopologyKey(key) {
+			log.Printf("host topology: description key %q is not valid, line ignored", m[1])
+			continue
+		}
+		found[key] = append(found[key], value)
 	}
-	pick := func(kind string) string {
-		values := found[kind]
+
+	keys := make([]string, 0, len(found))
+	for key := range found {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	out := map[string]string{}
+	for _, key := range keys {
+		values := found[key]
 		switch {
-		case len(values) == 0:
-			return ""
 		case len(values) > 1:
-			log.Printf("host placement: %d %s lines in the description of %s, none used", len(values), kind, path)
-			return ""
+			log.Printf("host topology: %d lines for key %q in the description of %s, none used", len(values), key, path)
 		case !inventory.ValidPlacementName(values[0]):
-			log.Printf("host placement: description %s %q is not a valid placement name, ignored", kind, values[0])
-			return ""
+			log.Printf("host topology: description value %q for key %q is not valid, ignored", values[0], key)
+		case len(out) >= maxTopologyKeys:
+			log.Printf("host topology: more than %d keys in the description of %s, %q and any later key ignored", maxTopologyKeys, path, key)
+		default:
+			out[key] = values[0]
 		}
-		return values[0]
 	}
-	return pick("zone"), pick("region")
+	return out
 }

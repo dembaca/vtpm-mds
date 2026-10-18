@@ -1,9 +1,11 @@
 package proxmox
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -351,59 +353,66 @@ totem {
 }
 `
 
-// The host's placement is this node and this cluster.
-func TestTheHostPlacementIsThisNodeAndThisCluster(t *testing.T) {
-	got := HostPlacement(hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1)))
-	if want := (inventory.Placement{Zone: "hogan", Region: "bgl-cluster"}); got != want {
+// az and region are the two keys that are always present.
+func azRegion(t inventory.Topology) [2]string {
+	return [2]string{t["availability-zone"], t["region"]}
+}
+
+func cluster(name string) string { return strings.Replace(corosyncConf, "%s", name, 1) }
+
+// The host's zone and region are this node and this cluster, and node and cluster
+// are served as keys of their own.
+func TestTheHostTopologyIsThisNodeAndThisCluster(t *testing.T) {
+	got := HostTopology(hostTree(t, "hogan", cluster("bgl-cluster")))
+	want := inventory.Topology{"availability-zone": "hogan", "region": "bgl-cluster", "node": "hogan", "cluster": "bgl-cluster"}
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
 
-// Without a cluster file the region is local, and nothing fails.
-func TestAHostWithoutAClusterFileHasRegionLocal(t *testing.T) {
-	got := HostPlacement(hostTree(t, "hogan", ""))
-	if want := (inventory.Placement{Zone: "hogan", Region: "local"}); got != want {
+// Without a cluster file the region is local, there is no cluster key, and
+// nothing fails.
+func TestAHostWithoutAClusterFileHasRegionLocalAndNoCluster(t *testing.T) {
+	got := HostTopology(hostTree(t, "hogan", ""))
+	want := inventory.Topology{"availability-zone": "hogan", "region": "local", "node": "hogan"}
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
 
-// A cluster file that names no cluster also leaves region local.
+// A cluster file that names no cluster does the same.
 func TestAClusterFileWithoutAClusterNameHasRegionLocal(t *testing.T) {
-	got := HostPlacement(hostTree(t, "hogan", "totem {\n  version: 2\n}\n"))
-	if got.Region != "local" {
-		t.Fatalf("got region %q, want local", got.Region)
+	got := HostTopology(hostTree(t, "hogan", "totem {\n  version: 2\n}\n"))
+	if got["region"] != "local" {
+		t.Fatalf("got region %q, want local", got["region"])
+	}
+	if _, ok := got["cluster"]; ok {
+		t.Fatalf("got a cluster key %q, want none", got["cluster"])
 	}
 }
 
 // A node name and a cluster name are served as spelled, capitals included.
 func TestHostNamesKeepTheirCase(t *testing.T) {
-	got := HostPlacement(hostTree(t, "Hogan", strings.Replace(corosyncConf, "%s", "BGL-Cluster", 1)))
-	if want := (inventory.Placement{Zone: "Hogan", Region: "BGL-Cluster"}); got != want {
-		t.Fatalf("got %+v, want %+v", got, want)
+	got := HostTopology(hostTree(t, "Hogan", cluster("BGL-Cluster")))
+	if got["availability-zone"] != "Hogan" || got["region"] != "BGL-Cluster" || got["node"] != "Hogan" || got["cluster"] != "BGL-Cluster" {
+		t.Fatalf("got %+v", got)
 	}
 }
 
-// The former prefix is not read: a description that carries it alone leaves the
-// host's placement to the names.
-func TestTheFormerDescriptionPrefixIsNotRead(t *testing.T) {
-	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
-	nodeConfig(t, root, "hogan", "topology.kubernetes.io/zone: DUS4", "topology.kubernetes.io/region: DUS")
-	got := HostPlacement(root)
-	if want := (inventory.Placement{Zone: "hogan", Region: "bgl-cluster"}); got != want {
-		t.Fatalf("got %+v, want %+v", got, want)
-	}
-}
-
-// A name that is not valid is replaced by the default.
+// A name that is not valid is replaced by the default, and gives no node or
+// cluster key.
 func TestAnInvalidHostNameFallsBackToTheDefault(t *testing.T) {
-	got := HostPlacement(hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bad!name", 1)))
-	if got.Region != "local" {
-		t.Fatalf("got region %q, want local", got.Region)
+	got := HostTopology(hostTree(t, "hogan", cluster("bad!name")))
+	if got["region"] != "local" {
+		t.Fatalf("got region %q, want local", got["region"])
 	}
-	// A root without a local link keeps the default zone.
+	if _, ok := got["cluster"]; ok {
+		t.Fatalf("got a cluster key %q, want none", got["cluster"])
+	}
+	// A root without a local link keeps the default zone and has no node.
 	noLink := t.TempDir()
-	if got := HostPlacement(noLink); got != inventory.DefaultPlacement {
-		t.Fatalf("got %+v, want %+v", got, inventory.DefaultPlacement)
+	if got := HostTopology(noLink); !reflect.DeepEqual(got, inventory.DefaultTopology()) {
+		t.Fatalf("got %+v, want %+v", got, inventory.DefaultTopology())
 	}
 }
 
@@ -422,51 +431,190 @@ func nodeConfig(t *testing.T, root, node string, lines ...string) {
 	}
 }
 
-// The description of the node gives the host's placement, ahead of the names, and
-// the lines that declare nothing are ignored.
-func TestTheNodeDescriptionGivesTheHostPlacement(t *testing.T) {
-	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
-	nodeConfig(t, root, "hogan", "Location: DUS4.M1.02.03", "topology.vtpm_mds.io/region: DUS", "topology.vtpm_mds.io/zone: DUS4")
-	got := HostPlacement(root)
-	if want := (inventory.Placement{Zone: "DUS4", Region: "DUS"}); got != want {
-		t.Fatalf("got %+v, want %+v", got, want)
+func described(t *testing.T, clusterName string, lines ...string) inventory.Topology {
+	t.Helper()
+	conf := ""
+	if clusterName != "" {
+		conf = cluster(clusterName)
+	}
+	root := hostTree(t, "hogan", conf)
+	nodeConfig(t, root, "hogan", lines...)
+	return HostTopology(root)
+}
+
+// The description of the node gives the host's zone and region ahead of the
+// names, and the lines that declare nothing are ignored.
+func TestTheNodeDescriptionGivesTheHostTopology(t *testing.T) {
+	got := described(t, "bgl-cluster", "Location: DUS4.M1.02.03", "topology.vtpm_mds.io/region: DUS", "topology.vtpm_mds.io/zone: DUS4")
+	if azRegion(got) != [2]string{"DUS4", "DUS"} {
+		t.Fatalf("got %+v", got)
 	}
 }
 
-// A description that names one kind leaves the other to the names.
-func TestADescriptionWithOneKindTakesTheOtherFromTheNames(t *testing.T) {
-	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
-	nodeConfig(t, root, "hogan", "topology.vtpm_mds.io/zone: DUS4")
-	got := HostPlacement(root)
-	if want := (inventory.Placement{Zone: "DUS4", Region: "bgl-cluster"}); got != want {
-		t.Fatalf("got %+v, want %+v", got, want)
+// A description that names one key leaves the others to the names.
+func TestADescriptionWithOneKeyTakesTheOthersFromTheNames(t *testing.T) {
+	got := described(t, "bgl-cluster", "topology.vtpm_mds.io/zone: DUS4")
+	if azRegion(got) != [2]string{"DUS4", "bgl-cluster"} {
+		t.Fatalf("got %+v", got)
 	}
 }
 
 // A node with no config file, which is the usual case, uses the names.
 func TestANodeWithoutAConfigFileUsesTheNames(t *testing.T) {
-	got := HostPlacement(hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1)))
-	if want := (inventory.Placement{Zone: "hogan", Region: "bgl-cluster"}); got != want {
-		t.Fatalf("got %+v, want %+v", got, want)
+	got := HostTopology(hostTree(t, "hogan", cluster("bgl-cluster")))
+	if azRegion(got) != [2]string{"hogan", "bgl-cluster"} {
+		t.Fatalf("got %+v", got)
 	}
 }
 
 // An invalid value in the description is ignored, and the names stand in.
 func TestAnInvalidDescriptionValueFallsBackToTheNames(t *testing.T) {
-	root := hostTree(t, "hogan", strings.Replace(corosyncConf, "%s", "bgl-cluster", 1))
-	nodeConfig(t, root, "hogan", "topology.vtpm_mds.io/zone: bad!zone", "topology.vtpm_mds.io/region: DUS")
-	got := HostPlacement(root)
-	if want := (inventory.Placement{Zone: "hogan", Region: "DUS"}); got != want {
-		t.Fatalf("got %+v, want %+v", got, want)
+	var got inventory.Topology
+	out := logged(t, func() {
+		got = described(t, "bgl-cluster", "topology.vtpm_mds.io/zone: bad!zone", "topology.vtpm_mds.io/region: DUS")
+	})
+	if azRegion(got) != [2]string{"hogan", "DUS"} {
+		t.Fatalf("got %+v", got)
+	}
+	if !strings.Contains(out, "bad!zone") {
+		t.Errorf("the log must name the invalid value, got %q", out)
 	}
 }
 
-// Two lines of one kind declare nothing, as two tags do.
-func TestTwoDescriptionLinesOfOneKindDeclareNothing(t *testing.T) {
-	root := hostTree(t, "hogan", "")
-	nodeConfig(t, root, "hogan", "topology.vtpm_mds.io/zone: DUS3", "topology.vtpm_mds.io/zone: DUS4", "topology.vtpm_mds.io/region: DUS")
-	got := HostPlacement(root)
-	if want := (inventory.Placement{Zone: "hogan", Region: "DUS"}); got != want {
-		t.Fatalf("got %+v, want %+v", got, want)
+// Two lines for one key declare nothing, as two tags do.
+func TestTwoDescriptionLinesForOneKeyDeclareNothing(t *testing.T) {
+	var got inventory.Topology
+	out := logged(t, func() {
+		got = described(t, "", "topology.vtpm_mds.io/zone: DUS3", "topology.vtpm_mds.io/zone: DUS4", "topology.vtpm_mds.io/region: DUS")
+	})
+	if azRegion(got) != [2]string{"hogan", "DUS"} {
+		t.Fatalf("got %+v", got)
+	}
+	if !strings.Contains(out, `"availability-zone"`) {
+		t.Errorf("the log must name the key, got %q", out)
+	}
+}
+
+// A description can add a key of its own, beside the defaults.
+func TestADescriptionAddsAKeyOfItsOwn(t *testing.T) {
+	got := described(t, "bgl-cluster", "topology.vtpm_mds.io/rack: keller01", "topology.vtpm_mds.io/host-id: h-01")
+	if got["rack"] != "keller01" || got["host-id"] != "h-01" {
+		t.Fatalf("got %+v", got)
+	}
+	if got["node"] != "hogan" || got["cluster"] != "bgl-cluster" {
+		t.Fatalf("the defaults were lost: %+v", got)
+	}
+}
+
+// Without a line there is no rack.
+func TestAKeyWithNoLineHasNoValue(t *testing.T) {
+	if _, ok := HostTopology(hostTree(t, "hogan", cluster("c")))["rack"]; ok {
+		t.Fatal("got a rack, want none")
+	}
+}
+
+// The long form of the zone is the zone.
+func TestTheLongFormOfTheZoneIsTheZone(t *testing.T) {
+	got := described(t, "", "topology.vtpm_mds.io/availability-zone: keller")
+	if got["availability-zone"] != "keller" {
+		t.Fatalf("got %+v", got)
+	}
+	if _, ok := got["zone"]; ok {
+		t.Fatalf("zone must not be a key of its own: %+v", got)
+	}
+}
+
+// The short and the long form together are one key twice: nothing is declared.
+func TestTheShortAndTheLongFormTogetherDeclareNothing(t *testing.T) {
+	var got inventory.Topology
+	out := logged(t, func() {
+		got = described(t, "", "topology.vtpm_mds.io/zone: keller", "topology.vtpm_mds.io/availability-zone: attic")
+	})
+	if got["availability-zone"] != "hogan" {
+		t.Fatalf("got %+v, want the node name", got)
+	}
+	if !strings.Contains(out, "availability-zone") {
+		t.Errorf("the log must name the key, got %q", out)
+	}
+}
+
+// A description overrides node and cluster.
+func TestADescriptionOverridesNodeAndCluster(t *testing.T) {
+	got := described(t, "bgl-cluster", "topology.vtpm_mds.io/node: hogan-a", "topology.vtpm_mds.io/cluster: lab")
+	if got["node"] != "hogan-a" || got["cluster"] != "lab" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// Keys are case-sensitive and only exactly zone is the short form: Zone is a key
+// of its own, and the prefix is matched as spelled.
+func TestKeysAreCaseSensitive(t *testing.T) {
+	got := described(t, "", "topology.vtpm_mds.io/Zone: x", "TOPOLOGY.VTPM_MDS.IO/rack: y")
+	if got["Zone"] != "x" {
+		t.Errorf("Zone must be a key of its own: %+v", got)
+	}
+	if got["availability-zone"] != "hogan" {
+		t.Errorf("Zone must not be the zone: %+v", got)
+	}
+	if _, ok := got["rack"]; ok {
+		t.Errorf("the prefix in capitals must not match: %+v", got)
+	}
+}
+
+// A line with an invalid key or value is ignored and logged; a valid one beside
+// it is read.
+func TestALineWithAnInvalidKeyOrValueIsIgnored(t *testing.T) {
+	var got inventory.Topology
+	out := logged(t, func() {
+		got = described(t, "", "topology.vtpm_mds.io/ra ck: x", "topology.vtpm_mds.io/row: a/b", "topology.vtpm_mds.io/rack: keller01")
+	})
+	if got["rack"] != "keller01" {
+		t.Fatalf("got %+v", got)
+	}
+	if _, ok := got["row"]; ok {
+		t.Errorf("row has an invalid value: %+v", got)
+	}
+	for _, want := range []string{"ra ck", "a/b"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the log lacks %q: %q", want, out)
+		}
+	}
+}
+
+// At most 64 keys are read; the later ones in byte order are ignored and the log
+// says so.
+func TestKeysBeyondTheLimitAreIgnored(t *testing.T) {
+	var lines []string
+	for i := 0; i < 70; i++ {
+		lines = append(lines, fmt.Sprintf("topology.vtpm_mds.io/k%02d: v", i))
+	}
+	var got inventory.Topology
+	out := logged(t, func() { got = described(t, "", lines...) })
+	read := 0
+	for key := range got {
+		if strings.HasPrefix(key, "k") {
+			read++
+		}
+	}
+	if read != 64 {
+		t.Fatalf("read %d keys, want 64", read)
+	}
+	if _, ok := got["k63"]; !ok {
+		t.Errorf("k63 is within the first 64 in byte order: %+v", got)
+	}
+	if _, ok := got["k64"]; ok {
+		t.Errorf("k64 is beyond the limit")
+	}
+	if !strings.Contains(out, "64") {
+		t.Errorf("the log must name the limit, got %q", out)
+	}
+}
+
+// The former prefix is not read: a description that carries it alone leaves the
+// host's topology to the names.
+func TestTheFormerDescriptionPrefixIsNotRead(t *testing.T) {
+	got := described(t, "bgl-cluster", "topology.kubernetes.io/zone: DUS4", "topology.kubernetes.io/region: DUS")
+	if azRegion(got) != [2]string{"hogan", "bgl-cluster"} {
+		t.Fatalf("got %+v", got)
 	}
 }

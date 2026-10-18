@@ -77,6 +77,9 @@ func New(cfg *config.Config) (*Server, error) {
 		handle("GET /latest/meta-data/local-ipv4", imds.HandleLocalIPv4)
 		handle("GET /latest/meta-data/placement/availability-zone", imds.HandleAvailabilityZone)
 		handle("GET /latest/meta-data/placement/region", imds.HandleRegion)
+		handle("GET /latest/meta-data/placement/{$}", imds.HandlePlacementKeys)
+		mux.HandleFunc("GET /latest/meta-data/placement", imds.HandlePlacementRedirect)
+		handle("GET /latest/meta-data/placement/{key}", imds.HandlePlacementKey)
 		handle("GET /latest/meta-data/services/domain", imds.HandleDomain)
 		handle("GET /latest/meta-data/tags/{$}", imds.HandleTags)
 		handle("GET /latest/meta-data/tags/instance", imds.HandleInstanceTagKeys)
@@ -339,7 +342,7 @@ func (s *Server) RefreshVMConfigCache() error {
 
 	var (
 		vmConfigMap inventory.VMConfigMap
-		placement   inventory.Placement
+		topology    inventory.Topology
 		err         error
 		source      string
 	)
@@ -348,12 +351,12 @@ func (s *Server) RefreshVMConfigCache() error {
 		source = s.cfg.MDS.InventoryPath
 		log.Printf("[DEBUG RefreshVMConfigCache] Loading YAML inventory from %s", source)
 		vmConfigMap, err = inventory.LoadYAML(s.cfg.MDS.InventoryPath)
-		placement = inventory.DefaultPlacement
+		topology = inventory.DefaultTopology()
 	} else {
 		source = "proxmox:/etc/pve"
 		log.Printf("[DEBUG RefreshVMConfigCache] Loading Proxmox VM configs")
 		vmConfigMap, err = proxmox.ParseVMConfigs("")
-		placement = proxmox.HostPlacement("")
+		topology = proxmox.HostTopology("")
 	}
 	if err != nil {
 		log.Printf("[DEBUG RefreshVMConfigCache] Failed to load VM configs from %s: %v", source, err)
@@ -361,7 +364,7 @@ func (s *Server) RefreshVMConfigCache() error {
 	}
 
 	vmConfigCache = vmConfigMap
-	inventory.SetHostPlacement(placement)
+	inventory.SetHostTopology(topology)
 
 	macCount := 0
 	for _, vmConfig := range vmConfigCache {

@@ -10,12 +10,12 @@ import (
 	"github.com/dembaca/vtpm-mds/internal/inventory"
 )
 
-// withHostPlacement sets the host's placement for one test and restores the
+// withHostTopology sets the host's topology for one test and restores the
 // default afterwards.
-func withHostPlacement(t *testing.T, p inventory.Placement) {
+func withHostTopology(t *testing.T, p inventory.Topology) {
 	t.Helper()
-	inventory.SetHostPlacement(p)
-	t.Cleanup(func() { inventory.SetHostPlacement(inventory.DefaultPlacement) })
+	inventory.SetHostTopology(p)
+	t.Cleanup(func() { inventory.SetHostTopology(inventory.DefaultTopology()) })
 }
 
 // declaring is a tokened request from a connection bound to a VM record whose
@@ -49,7 +49,7 @@ func placementOfRequest(t *testing.T, req *http.Request) (zone, region string) {
 // bound to any VM record.
 func TestTheHostsZoneAndRegionAreServed(t *testing.T) {
 	setupTestStore()
-	withHostPlacement(t, inventory.Placement{Zone: "DUS4", Region: "DUS"})
+	withHostTopology(t, inventory.Topology{"availability-zone": "DUS4", "region": "DUS"})
 	zone, region := placementOfRequest(t, declaring(t, "/latest/meta-data/placement/region", map[string]string{"name": "x"}))
 	if zone != "DUS4" || region != "DUS" {
 		t.Fatalf("got zone %q, region %q; want DUS4 and DUS", zone, region)
@@ -60,7 +60,7 @@ func TestTheHostsZoneAndRegionAreServed(t *testing.T) {
 // configuration and its tags are never read for a placement.
 func TestAVMLevelPlacementIsNotServed(t *testing.T) {
 	setupTestStore()
-	withHostPlacement(t, inventory.Placement{Zone: "hogan", Region: "bgl-cluster"})
+	withHostTopology(t, inventory.Topology{"availability-zone": "hogan", "region": "bgl-cluster"})
 	req := unboundRequest(t, "/latest/meta-data/placement/region")
 	req = req.WithContext(context.WithValue(req.Context(), inventory.VMConfigContextKey,
 		&inventory.VMConfig{VMID: "100", RawConfig: map[string]string{"zone": "rack-b", "region": "bgl-1"},
@@ -74,7 +74,7 @@ func TestAVMLevelPlacementIsNotServed(t *testing.T) {
 // An unbound caller is served the host's placement.
 func TestAnUnboundCallerIsServedTheHostsPlacement(t *testing.T) {
 	setupTestStore()
-	withHostPlacement(t, inventory.Placement{Zone: "hogan", Region: "bgl-cluster"})
+	withHostTopology(t, inventory.Topology{"availability-zone": "hogan", "region": "bgl-cluster"})
 	zone, region := placementOfRequest(t, unboundRequest(t, "/latest/meta-data/placement/region"))
 	if zone != "hogan" || region != "bgl-cluster" {
 		t.Fatalf("got zone %q, region %q; want hogan and bgl-cluster", zone, region)
@@ -84,8 +84,8 @@ func TestAnUnboundCallerIsServedTheHostsPlacement(t *testing.T) {
 // The identity document agrees with the placement keys.
 func TestTheDocumentAndThePlacementKeysAgree(t *testing.T) {
 	setupTestStore()
-	withHostPlacement(t, inventory.Placement{Zone: "hogan", Region: "bgl-cluster"})
-	withHostPlacement(t, inventory.Placement{Zone: "DUS4", Region: "DUS"})
+	withHostTopology(t, inventory.Topology{"availability-zone": "hogan", "region": "bgl-cluster"})
+	withHostTopology(t, inventory.Topology{"availability-zone": "DUS4", "region": "DUS"})
 	req := declaring(t, "/latest/dynamic/instance-identity/document", map[string]string{"name": "x"})
 	rec := httptest.NewRecorder()
 	HandleInstanceIdentityDocument(rec, req)
