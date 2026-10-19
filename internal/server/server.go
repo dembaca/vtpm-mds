@@ -646,11 +646,22 @@ func loadDevIDEnroller(cfg *config.Config) (*devid.Enroller, error) {
 	}
 
 	enroller := devid.NewEnroller(ca, ekRoots, nil)
-	// TOFU EK pins live next to other state under /var/lib/<package>/ek-pins.
-	if cfg.MDS.SigningKeyPath != "" {
-		enroller.PinDir = filepath.Join(filepath.Dir(cfg.MDS.SigningKeyPath), "ek-pins")
-	}
+	// TOFU EK pins: systemd StateDirectory, else the package state dir next to JWKS.
+	enroller.PinDir = ekPinDir()
 	return enroller, nil
+}
+
+// ekPinDir is $STATE_DIRECTORY/ek-pins (first entry if colon-separated), or
+// /var/lib/<package>/ek-pins from DefaultConfig's JWKS path. Not derived from
+// signing_key_path (that path is configurable and may sit under /etc).
+func ekPinDir() string {
+	if state := os.Getenv("STATE_DIRECTORY"); state != "" {
+		if i := strings.IndexByte(state, ':'); i >= 0 {
+			state = state[:i]
+		}
+		return filepath.Join(state, "ek-pins")
+	}
+	return filepath.Join(filepath.Dir(config.DefaultConfig().MDS.JWKSPath), "ek-pins")
 }
 
 // vmConfigMiddleware extracts VM config from request context (already set by connContext)

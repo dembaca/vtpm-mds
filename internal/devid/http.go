@@ -45,14 +45,16 @@ func Register(mux *http.ServeMux, e *Enroller) {
 
 func writeEnrollAuthError(w http.ResponseWriter, err error) {
 	code := http.StatusBadRequest
+	body := err.Error()
 	if isUnauthorized(err) {
 		code = http.StatusUnauthorized
 	}
 	if errors.Is(err, ErrPinStore) {
 		code = http.StatusInternalServerError
+		body = errPinStoreUnavailable
 	}
 	log.Printf("devid enroll auth: %v", err)
-	http.Error(w, err.Error(), code)
+	http.Error(w, body, code)
 }
 
 // HandleStart verifies MAC inventory identity + EK cert header, then the CSR.
@@ -130,19 +132,17 @@ func (e *Enroller) HandleFinish(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("devid enroll/finish: %v", err)
 		status := http.StatusBadRequest
-		if err.Error() == "VM identity does not match enroll session" ||
-			err.Error() == "EK certificate does not match enroll session" ||
-			err.Error() == errStoredPinMismatch ||
-			err.Error() == errInventoryPinMismatch {
+		body := err.Error()
+		if isUnauthorized(err) ||
+			err.Error() == "VM identity does not match enroll session" ||
+			err.Error() == "EK certificate does not match enroll session" {
 			status = http.StatusUnauthorized
 		}
 		if errors.Is(err, ErrPinStore) {
 			status = http.StatusInternalServerError
+			body = errPinStoreUnavailable
 		}
-		if isUnauthorized(err) {
-			status = http.StatusUnauthorized
-		}
-		http.Error(w, err.Error(), status)
+		http.Error(w, body, status)
 		return
 	}
 

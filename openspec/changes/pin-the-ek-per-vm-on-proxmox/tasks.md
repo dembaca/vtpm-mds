@@ -3,8 +3,8 @@
 Written on 2026-10-19 against `main` (contains archived
 `report-readiness-honestly`) by `agent-cursor-vtpm-22e0`, at the
 coordinator's assignment after dembaca's E1 decision. Files: `internal/devid/`
-(+ tests). **Not** `debian/` product logic, **not** `internal/server/server.go`
-(hogan #62), **not** `AGENTS.md` / root `README.md`.
+(+ tests) and `ekPinDir` in `internal/server/server.go`. **Not** `debian/`
+product logic, **not** `AGENTS.md` / root `README.md`.
 
 ## 1. Decide
 
@@ -35,13 +35,13 @@ coordinator's assignment after dembaca's E1 decision. Files: `internal/devid/`
       creates `/var/lib/…/ek-pins/<vmid>`; reset (delete file → new EK
       enrolls).
       `TestFinishWritesPinBeforeIssue`, `TestFinishUnwritablePinDirNoPEM`,
-      `TestEnsurePinResetAllowsNewEK`; HTTP maps `ErrPinStore` → 500.
-      `PinDir` from `filepath.Dir(SigningKeyPath)/ek-pins` in
-      `loadDevIDEnroller` (needed after #62 merged onto main).
+      `TestEnsurePinResetAllowsNewEK`, `TestConcurrentFinishSameEKBothGetCert`;
+      HTTP maps `ErrPinStore` → 500 body `pin store unavailable`.
+      `PinDir` = `$STATE_DIRECTORY/ek-pins` else package state dir (`ekPinDir`).
 - [x] 2.4 Run `go test ./...`, `go vet ./...`, and
       `openspec validate --all --strict`; verify all green.
-      `go vet ./...` clean; `go test -count=1 ./...` all ok;
-      `openspec validate --all --strict` 8 passed.
+      `go vet ./...` clean; `go test -count=1 ./...` (all packages) ok;
+      `openspec validate --all --strict` 8 passed. Re-run after Fable fixes.
 
 ## 3. Verify in the lab
 
@@ -70,15 +70,22 @@ coordinator's assignment after dembaca's E1 decision. Files: `internal/devid/`
 - [ ] 4.1 **Seed path (D-g):** from the host journal, extract
       `devid issued … vm=<id> ek=<sha256>` into
       `/var/lib/<package>/ek-pins/<vmid>` for VM 399 (and any other VMs in
-      scope). Example shape (adjust unit/path to the installed package name):
+      scope). Create the directory as the service user first (a root-owned
+      `ek-pins/` leaves the daemon unable to add pins for new VMs → 500):
       ```
+      sudo install -d -o <service-user> -g <service-group> -m 0750 \
+        /var/lib/<package>/ek-pins
       journalctl -u <package>.service --no-pager \
         | sed -n 's/.*devid issued serial=[^ ]* vm=\([^ ]*\) ek=\([0-9a-f]*\).*/\1 \2/p' \
         | while read -r vmid ek; do
             printf '%s\n' "$ek" | sudo tee "/var/lib/<package>/ek-pins/$vmid" >/dev/null
+            sudo chown <service-user>:<service-group> \
+              "/var/lib/<package>/ek-pins/$vmid"
+            sudo chmod 0640 "/var/lib/<package>/ek-pins/$vmid"
           done
       ```
-      Verify the file for `399` matches the last issued `ek=` for that VM.
+      After `fresh-tpm` the journal may list two EKs for the same VMID; the
+      last `devid issued` line wins — verify `399` matches that last `ek=`.
       **Who:** hogan-d3e6 after dembaca approves host writes.
 - [ ] 4.2 After the new package is installed: enroll from VM 399 succeeds with
       the seeded pin; a wrong pin file content fails with `stored pin`.

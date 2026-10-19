@@ -71,7 +71,6 @@ func TestAuthenticateStoredPin(t *testing.T) {
 	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ekPub, ""); !isUnauthorized(err) || err.Error() != errStoredPinMismatch {
 		t.Fatalf("want stored pin mismatch, got %v", err)
 	}
-	// Inventory pin wins over store.
 	vm.EKSHA256 = EKFingerprint(cert)
 	if _, _, err := enroller.AuthenticateEnrollCaller(req, cert, ekPub, ""); err != nil {
 		t.Fatalf("inventory wins: %v", err)
@@ -123,6 +122,17 @@ func TestReadStoredPinEmptyPresent(t *testing.T) {
 	}
 }
 
+func TestValidateVMIDRejectsPathEscape(t *testing.T) {
+	for _, v := range []string{"", "..", "../x", "a/b", "a\\b", ".hidden", "x/../y"} {
+		if err := validateVMID(v); err == nil || !errors.Is(err, ErrPinStore) {
+			t.Fatalf("vmid %q: want ErrPinStore, got %v", v, err)
+		}
+	}
+	if err := validateVMID("100"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestFinishWritesPinBeforeIssue(t *testing.T) {
 	ca := mustParseTestCA(t)
 	sr := mustMinimalSigningRequest(t, pkix.Name{})
@@ -144,7 +154,6 @@ func TestFinishWritesPinBeforeIssue(t *testing.T) {
 	if err != nil || got != "ekfp" {
 		t.Fatalf("pin=%q err=%v", got, err)
 	}
-	// Inventory pin skips store write.
 	sid2, err := enroller.Sessions.Put([]byte("nonce2"), *sr, "101", "other")
 	if err != nil {
 		t.Fatal(err)
@@ -177,5 +186,80 @@ func TestFinishUnwritablePinDirNoPEM(t *testing.T) {
 	}
 	if pemBytes != nil {
 		t.Fatal("must not return PEM when pin store fails")
+	}
+}
+
+func TestConcurrentFinishSameEKBothGetCert(t *testing.T) {
+	ca := mustParseTestCA(t)
+	dir := t.TempDir()
+	enroller := NewEnroller(ca, x509.NewCertPool(), NewSessionStore(time.Minute))
+	enroller.PinDir = dir
+
+	type result struct {
+		pem []byte
+		err error
+	}
+	out := make(chan result, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sr := mustMinimalSigningRequest(t, pkix.Name{})
+			nonce := []byte{byte('a' + i)}
+			sid, err := enroller.Sessions.Put(nonce, *sr, "100", "same-ek")
+			if err != nil {
+				out <- result{err: err}
+				return
+			}
+			pemBytes, err := enroller.Finish(sid, nonce, "100", "same-ek", "")
+			out <- result{pem: pemBytes, err: err}
+		}(i)
+	}
+	wg.Wait()
+	close(out)
+	var ok int
+	for r := range out {
+		if r.err != nil {
+			t.Fatalf("Finish: %v", r.err)
+		}
+		if block, _ := pem.Decode(r.pem); block == nil {
+			t.Fatal("expected PEM")
+		}
+		ok++
+	}
+	if ok != 2 {
+		t.Fatalf("got %d certs", ok)
+	}
+	got, err := readStoredPin(dir, "100")
+	if err != nil || got != "same-ek" {
+		t.Fatalf("pin=%q err=%v", got, err)
+	}
+}
+
+func TestSecondFinishDoesNotOverwritePin(t *testing.T) {
+	ca := mustParseTestCA(t)
+	dir := t.TempDir()
+	enroller := NewEnroller(ca, x509.NewCertPool(), NewSessionStore(time.Minute))
+	enroller.PinDir = dir
+	sr := mustMinimalSigningRequest(t, pkix.Name{})
+	sid, err := enroller.Sessions.Put([]byte("n1"), *sr, "100", "first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enroller.Finish(sid, []byte("n1"), "100", "first", ""); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(pinPath(dir, "100"))
+	sid2, err := enroller.Sessions.Put([]byte("n2"), *sr, "100", "first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enroller.Finish(sid2, []byte("n2"), "100", "first", ""); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(pinPath(dir, "100"))
+	if string(before) != string(after) {
+		t.Fatalf("pin overwritten: %q -> %q", before, after)
 	}
 }

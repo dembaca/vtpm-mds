@@ -39,21 +39,24 @@ once a readable, stable host-side EK source exists for this deployment.
 
 ## Decided by this record's author, for the maintainer to overrule
 
-- **D-a. Pin store path.** One file per VMID:
-  `/var/lib/<package>/ek-pins/<vmid>` containing a single line: lowercase hex
-  SHA-256 of the EK certificate DER (same algorithm as `EKFingerprint` /
-  inventory `ek_sha256`). Directory mode `0750`, files `0640`, owned by the
-  service user. The package already creates `/var/lib/<package>`; this change
-  ensures `ek-pins/` exists at enroll time (`mkdir` in code is enough).
-- **D-b. Write the pin with `O_EXCL` before signing.** On `enroll/finish`,
+- **D-a. Pin store path.** One file per VMID under
+  `$STATE_DIRECTORY/ek-pins/<vmid>` (systemd), falling back to
+  `/var/lib/<package>/ek-pins/<vmid>` — not derived from `signing_key_path`
+  (configurable; under `/etc` would break under `ProtectSystem=strict`).
+  Content: lowercase hex SHA-256 of the EK certificate DER (same as
+  `EKFingerprint` / inventory `ek_sha256`). Directory mode `0750`, files
+  `0640`, owned by the service user. Create `ek-pins/` at enroll time
+  (`mkdir` in code); operators seeding pins must `install -d` with the
+  service owner first (see tasks 4.1).
+- **D-b. Write the pin atomically before signing.** On `enroll/finish`,
   when neither inventory `ek_sha256` nor a store file pins the VMID yet, the
-  service SHALL create `/var/lib/…/ek-pins/<vmid>` with `O_EXCL` (content =
-  fingerprint) **before** `IssueDevID`. An unusable state directory (or any
-  create error other than "already exists") → HTTP `500`, **no** LDevID PEM.
-  A pin file without a certificate is harmless: the same EK's next finish
-  passes the pin check and signs. Concurrent first finishes: one `O_EXCL`
-  wins; the loser sees the file exist, re-reads the pin, and must match it
-  (then may sign). Start never writes. Failed finish after a successful pin
+  service SHALL create `ek-pins/<vmid>` **before** `IssueDevID` by writing a
+  temp file (`.${vmid}.tmp-<rand>`), `Sync()`, then `os.Link` onto the final
+  name (atomic + exclusive; `EEXIST` = already pinned). An unusable state
+  directory (or any create error other than "already exists") → HTTP `500`
+  with body `pin store unavailable` (details only in the log), **no** LDevID
+  PEM. Concurrent first finishes with the same EK: both may sign once the
+  pin is linked. Start never writes. Failed finish after a successful pin
   create leaves the pin in place.
 - **D-c. Enforcement order.** For both enroll legs, effective pin =
   1. inventory `ek_sha256` if non-empty, else
@@ -90,9 +93,9 @@ once a readable, stable host-side EK source exists for this deployment.
 - **Deriving the pin from swtpm state on the host** — alternative B above.
 - **HTTP or CLI to reset pins** — operator deletes the file.
 - **`debian/` postinst changes, `AGENTS.md`, root `README.md`** —
-  coordinator / other assignees. (`loadDevIDEnroller` in
-  `internal/server/server.go` sets `PinDir` next to `SigningKeyPath` — the
-  only server.go touch; file-split vs #62 no longer applies after #62 merged.)
+  coordinator / other assignees. (`ekPinDir` in `internal/server/server.go`
+  is the only server.go touch: `$STATE_DIRECTORY/ek-pins` or the package
+  state dir.)
 - **CA lifetime, SPIRE eviction, intermediate hierarchy** — E2 explore.
 
 ## Risks
