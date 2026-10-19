@@ -25,8 +25,8 @@ Facts from `hogan` that shape the design:
   `firewall=1`) as ports.
 - `netfilter`'s `bridge` family hooks every bridge, so a rule on
   `iifname "tap300i1"` should see VM 300's frames as they enter `fwbr300i1`,
-  before they reach `vmbr_imds`. **Not yet verified**; task 2.3 checks it in a
-  netns with the same two-bridge layout.
+  before they reach `vmbr_imds`. Verified in a netns with the same two-bridge
+  layout (task 2.3); not yet on `hogan`, where VM 300 is not ours to test.
 - `internal/proxmox` reads `net<n>` lines only for `virtio=`
   (`netPattern`), and keeps neither the index nor the bridge.
 - The daemon runs as `vtpm-mds` with `CAP_NET_BIND_SERVICE` only and
@@ -84,7 +84,9 @@ Facts from `hogan` that shape the design:
   bridge=<name>` for any model, not only `virtio`. A guest with an `e1000`
   NIC on the IMDS bridge is not in the inventory today, but its port must be
   bound all the same, or it could claim another VM's MAC. The inventory parser
-  stays as it is; widening it is its own change.
+  stays as it is; widening it is its own change. A NIC on the bridge whose
+  line carries no valid MAC gets one rule dropping everything from its port:
+  a port that cannot be bound is closed, not left open.
 - **D-f. The IMDS bridge name is an argument of the unit.** `ExecStart=…
   -bridge vmbr_imds`, overridable by a drop-in. Not a `config.yaml` key: the
   daemon decodes that file strictly and has no use for the name. Not derived
