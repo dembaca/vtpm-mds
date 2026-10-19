@@ -25,7 +25,9 @@ If the Ansible role uses a different key suffix (e.g. .pem), edit the
 conffile. Missing CA files disable DevID routes but IMDS still starts.
 
 The unit is enabled on install but not started (so dpkg -i succeeds on
-hosts without vmbr_imds). On the lab host:
+hosts without vmbr_imds). An upgrade restarts the daemon if it was running
+and leaves a stopped one stopped; a failed restart prints a warning but
+does not fail dpkg. After a first install on the lab host:
 
   systemctl start vtpm-mds
   systemctl status vtpm-mds

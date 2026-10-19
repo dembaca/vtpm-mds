@@ -25,4 +25,16 @@ if [ "$1" = "configure" ] && [ -d /run/systemd/system ]; then
     systemctl --system daemon-reload >/dev/null 2>&1 || true
 fi
 
+# An upgrade restarts the daemon if, and only if, it is running, so the node
+# ends up serving the version just installed; a stopped daemon stays stopped
+# and a first install ($2 empty) starts nothing. This follows the reload so
+# the restart uses the installed unit. deb-systemd-invoke honours
+# policy-rc.d and passes try-restart to systemctl. A failed restart is
+# reported but does not fail the upgrade (restart-the-service-on-upgrade D-d).
+if [ "$1" = "configure" ] && [ -n "$2" ] && [ -d /run/systemd/system ]; then
+    if ! deb-systemd-invoke try-restart vtpm-mds.service >/dev/null; then
+        echo "vtpm-mds: restart after upgrade failed; see journalctl -u vtpm-mds" >&2
+    fi
+fi
+
 exit 0
