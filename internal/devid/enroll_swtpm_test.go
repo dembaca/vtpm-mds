@@ -64,7 +64,7 @@ func TestEnrollAgainstSwtpm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("activate: %v", err)
 	}
-	certPEM, err := enroller.Finish(start.SessionID, secret, "100", EKFingerprint(sr.EndorsementCertificate))
+	certPEM, err := enroller.Finish(start.SessionID, secret, "100", EKFingerprint(sr.EndorsementCertificate), "")
 	if err != nil {
 		t.Fatalf("finish: %v", err)
 	}

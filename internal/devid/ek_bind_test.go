@@ -285,7 +285,7 @@ func TestEnrollFinishStillChainOnlyAndSessionBound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("finish auth (chain-only) should accept other trusted EK: %v", err)
 	}
-	if _, err := enroller.Finish(sid, []byte("nonce"), vmid, EKFingerprint(ek)); err == nil ||
+	if _, err := enroller.Finish(sid, []byte("nonce"), vmid, EKFingerprint(ek), ""); err == nil ||
 		err.Error() != "EK certificate does not match enroll session" {
 		t.Fatalf("expected session EK mismatch, got %v", err)
 	}

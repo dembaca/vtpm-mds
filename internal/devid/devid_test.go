@@ -153,8 +153,8 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 	devTPM.RSAParameters.Symmetric = nil
 
 	sr := &SigningRequest{
-		EndorsementKey: &ekTPM,
-		DevIDKey:       &devTPM,
+		EndorsementKey:   &ekTPM,
+		DevIDKey:         &devTPM,
 		PlatformIdentity: pkix.Name{CommonName: "vm-100"}.ToRDNSequence(),
 	}
 
@@ -183,7 +183,7 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := enroller.Finish(sid, []byte("wrong-nonce"), "100", "ekfp"); err == nil {
+	if _, err := enroller.Finish(sid, []byte("wrong-nonce"), "100", "ekfp", ""); err == nil {
 		t.Fatal("expected nonce mismatch error")
 	}
 
@@ -191,7 +191,7 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pemBytes, err := enroller.Finish(sid2, []byte("correct-nonce"), "100", "ekfp")
+	pemBytes, err := enroller.Finish(sid2, []byte("correct-nonce"), "100", "ekfp", "")
 	if err != nil {
 		t.Fatalf("Finish: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestGuestSuppliedCommonNameIsIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pemBytes, err := enroller.Finish(sid, []byte("nonce"), "100", "ekfp")
+	pemBytes, err := enroller.Finish(sid, []byte("nonce"), "100", "ekfp", "")
 	if err != nil {
 		t.Fatalf("Finish: %v", err)
 	}
