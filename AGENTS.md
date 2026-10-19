@@ -311,9 +311,10 @@ bound to no VM (the host) also gets `inventory_loaded`, `vm_count`,
 and, with attestation on, `devid_ca_readable`; a bound guest gets only
 `status` (the record's default; the maintainer did not overrule it). One predicate, `inventory.IsBound`,
 decides "bound" for `/health` and the metadata path. The CA check is cached
-5 s. **Config and YAML inventory are decoded strictly:** an unknown key stops
-the start, or rejects a reload and keeps the previous inventory, which `/health`
-then reports. Before installing on a node, check its
+5 s. **Config and YAML inventory are decoded strictly:** an unknown config key
+stops the start; an unknown inventory key fails that load, so the service starts
+`degraded` with an empty inventory, or on a reload keeps the previous one, and
+`/health` reports it. Before installing on a node, check its
 `/etc/vtpm-mds/config.yaml` decodes strictly (hogan's did, as did
 `debian/config.yaml`). Verified in the lab (YAML half) and on hogan
 (strict decode of the installed config, read-only).
