@@ -622,6 +622,15 @@ func loadDevIDEnroller(cfg *config.Config) (*devid.Enroller, error) {
 	if err != nil {
 		return nil, err
 	}
+	lifetimeStr := cfg.MDS.DevIDLifetime
+	if lifetimeStr == "" {
+		lifetimeStr = config.DefaultConfig().MDS.DevIDLifetime
+	}
+	lifetime, err := time.ParseDuration(lifetimeStr)
+	if err != nil {
+		return nil, fmt.Errorf("devid_lifetime: %w", err)
+	}
+	ca.Lifetime = lifetime
 
 	ekRoots := x509.NewCertPool()
 	if cfg.MDS.EKCAChain != "" {

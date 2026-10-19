@@ -352,3 +352,79 @@ func TestLoadRootExampleConfig(t *testing.T) {
 		t.Fatal("listen_addr empty after load")
 	}
 }
+
+
+func TestLoadOmittedDevIDLifetimeTakesDefault(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	configData := `mds:
+  listen_addr: "127.0.0.1:8080"`
+
+	if _, err := tmpFile.WriteString(configData); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Load should succeed when devid_lifetime is omitted: %v", err)
+	}
+	if cfg.MDS.DevIDLifetime != "2160h" {
+		t.Errorf("Expected omitted devid_lifetime to take default '2160h', got %q", cfg.MDS.DevIDLifetime)
+	}
+}
+
+func TestLoadRejectsBadDevIDLifetime(t *testing.T) {
+	for _, lifetime := range []string{"90", "0s", "9000h", "8761h"} {
+		t.Run(lifetime, func(t *testing.T) {
+			tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+			defer os.Remove(tmpFile.Name())
+
+			configData := "mds:\n  listen_addr: \"127.0.0.1:8080\"\n  devid_lifetime: \"" + lifetime + "\"\n"
+			if _, err := tmpFile.WriteString(configData); err != nil {
+				t.Fatalf("Failed to write config: %v", err)
+			}
+			tmpFile.Close()
+
+			_, err = Load(tmpFile.Name())
+			if err == nil {
+				t.Fatalf("Load should fail for devid_lifetime %q", lifetime)
+			}
+			if !strings.Contains(err.Error(), "devid_lifetime") || !strings.Contains(err.Error(), lifetime) {
+				t.Errorf("Expected error naming devid_lifetime and %q, got %v", lifetime, err)
+			}
+		})
+	}
+}
+
+func TestLoadAcceptsMaxDevIDLifetime(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	configData := `mds:
+  listen_addr: "127.0.0.1:8080"
+  devid_lifetime: "8760h"`
+
+	if _, err := tmpFile.WriteString(configData); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Load should accept devid_lifetime 8760h: %v", err)
+	}
+	if cfg.MDS.DevIDLifetime != "8760h" {
+		t.Errorf("Expected devid_lifetime '8760h', got %q", cfg.MDS.DevIDLifetime)
+	}
+}

@@ -21,10 +21,15 @@ var OIDVerifiedTPMFixed = asn1.ObjectIdentifier{2, 23, 133, 11, 1, 2}
 // NoExpiration is the IEEE 802.1AR / TCG far-future NotAfter.
 var NoExpiration = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
+// DefaultDevIDLifetime is ninety days — the built-in mds.devid_lifetime.
+const DefaultDevIDLifetime = 2160 * time.Hour
+
 // CA issues LDevID certificates.
 type CA struct {
 	cert *x509.Certificate
 	key  crypto.PrivateKey
+	// Lifetime is notAfter - notBefore for IssueDevID. Zero means DefaultDevIDLifetime.
+	Lifetime time.Duration
 }
 
 // LoadCA loads a PEM certificate and PKCS#8 (or PKCS#1) private key from disk.
@@ -124,6 +129,8 @@ func (ca *CA) uniqueSerial(template *x509.Certificate) (*big.Int, error) {
 	h.Write(ca.cert.Raw)
 	h.Write(subjData)
 	h.Write(pubBytes)
+	h.Write([]byte(template.NotBefore.UTC().Format(time.RFC3339Nano)))
+	h.Write([]byte(template.NotAfter.UTC().Format(time.RFC3339Nano)))
 	if template.SerialNumber != nil {
 		h.Write(template.SerialNumber.Bytes())
 	}
@@ -153,12 +160,17 @@ func (ca *CA) IssueDevID(sr *SigningRequest, subjectCN string, notBefore time.Ti
 	if notBefore.IsZero() {
 		notBefore = time.Now().UTC()
 	}
+	lifetime := ca.Lifetime
+	if lifetime <= 0 {
+		lifetime = DefaultDevIDLifetime
+	}
+	notAfter := notBefore.Add(lifetime)
 
 	template := &x509.Certificate{
 		PublicKey:             pub,
 		Subject:               subj,
 		NotBefore:             notBefore,
-		NotAfter:              NoExpiration,
+		NotAfter:              notAfter,
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		BasicConstraintsValid: true,
 		IsCA:                  false,

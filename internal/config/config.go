@@ -22,6 +22,9 @@ type MDSConfig struct {
 	EKCAChain            string `yaml:"ek_ca_chain"`    // pragma: allowlist secret
 	DevIDCACert          string `yaml:"devid_ca_cert"`  // pragma: allowlist secret
 	DevIDCAKey           string `yaml:"devid_ca_key"`   // pragma: allowlist secret
+	// DevIDLifetime is the LDevID certificate lifetime (Go duration string).
+	// Default 2160h (90 days); values greater than 8760h (one year) are refused.
+	DevIDLifetime         string `yaml:"devid_lifetime"`
 	TokenTTL             string `yaml:"token_ttl"`
 	JWTTTL               string `yaml:"jwt_ttl"`
 	EnableEC2Compat      bool   `yaml:"enable_ec2_compat"`
@@ -43,6 +46,9 @@ type MDSConfig struct {
 	RequireVMIdentity bool `yaml:"require_vm_identity"`
 }
 
+// MaxDevIDLifetime is the longest accepted mds.devid_lifetime (one year of hours).
+const MaxDevIDLifetime = 8760 * time.Hour
+
 // DefaultConfig returns a configuration with default values
 func DefaultConfig() *Config {
 	return &Config{
@@ -53,6 +59,7 @@ func DefaultConfig() *Config {
 			EKCAChain:            "/etc/vtpm-mds/ek-chain.pem",       // pragma: allowlist secret
 			DevIDCACert:          "/etc/vtpm-mds/devid-ca.pem",       // pragma: allowlist secret
 			DevIDCAKey:           "/etc/vtpm-mds/devid-ca-key.pem",   // pragma: allowlist secret
+			DevIDLifetime:         "2160h",
 			TokenTTL:             "60s",
 			JWTTTL:               "5m",
 			EnableEC2Compat:      true,
@@ -90,6 +97,17 @@ func Load(path string) (*Config, error) {
 
 	if _, err := time.ParseDuration(cfg.MDS.TokenTTL); err != nil {
 		return nil, fmt.Errorf("invalid token_ttl %q: %w", cfg.MDS.TokenTTL, err)
+	}
+
+	lifetime, err := time.ParseDuration(cfg.MDS.DevIDLifetime)
+	if err != nil {
+		return nil, fmt.Errorf("invalid devid_lifetime %q: %w", cfg.MDS.DevIDLifetime, err)
+	}
+	if lifetime <= 0 {
+		return nil, fmt.Errorf("invalid devid_lifetime %q: must be strictly positive", cfg.MDS.DevIDLifetime)
+	}
+	if lifetime > MaxDevIDLifetime {
+		return nil, fmt.Errorf("invalid devid_lifetime %q: must not exceed %s", cfg.MDS.DevIDLifetime, MaxDevIDLifetime)
 	}
 
 	return cfg, nil

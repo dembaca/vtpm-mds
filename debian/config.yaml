@@ -15,6 +15,8 @@ mds:
   ek_ca_chain: "/etc/ssl/certs/proxmox_tpm_ca.crt"
   devid_ca_cert: "/etc/ssl/certs/proxmox_devid_ca.crt"
   devid_ca_key: "/etc/ssl/private/proxmox_devid_ca.key"
+  # LDevID lifetime (Go duration). Default 2160h (90 days); max 8760h (1y).
+  devid_lifetime: "2160h"
   token_ttl: "60s"
   jwt_ttl: "5m"
   enable_ec2_compat: true
