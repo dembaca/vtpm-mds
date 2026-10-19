@@ -45,13 +45,25 @@ coordinator's assignment after dembaca's E1 decision. Files: `internal/devid/`
 
 ## 3. Verify in the lab
 
-- [ ] 3.1 Fresh enroll creates the pin file; fingerprint matches
+- [x] 3.1 Fresh enroll creates the pin file; fingerprint matches
       `EKFingerprint`.
-- [ ] 3.2 Second enroll with the same TPM succeeds; mismatched store content
+      Cloud lab 2026-10-19 @ `a7239df`, daemon
+      `/var/lib/mds-lab/build-65` PID 208687. Guest100 SSH enroll →
+      `/var/lib/<pkg>/ek-pins/100` =
+      `1ab805b7d10249979f8d2e0758853d10d3e91603cd99f04a2511606aefc911c3`
+      matching `devid issued … ek=`.
+- [x] 3.2 Second enroll with the same TPM succeeds; mismatched store content
       fails with `stored pin` body; after `rm` of the pin file a new EK can
       enroll.
-- [ ] 3.3 Say what was not verified (concurrent finish under load, TOFU race
+      Re-enroll rc=0 pin unchanged; wrong pin → `HTTP 401: EK certificate
+      does not match stored pin`, no PEM; after `rm` and enroll-throttle
+      cooldown, enroll rc=0 recreates the same pin (same TPM/EK).
+- [x] 3.3 Say what was not verified (concurrent finish under load, TOFU race
       with a spoofing guest, hogan unless seeded).
+      Not verified: concurrent finish under load, a spoofing guest racing
+      first enroll, a genuinely new EK (same guest TPM reused), hogan seed
+      (4.x). Lab hit enroll `429` after the mismatch attempt (guest
+      throttle); reset path needed ~45 s cooldown.
 
 ## 4. Hogan (seed + enroll; needs dembaca's go)
 
