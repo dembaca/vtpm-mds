@@ -265,7 +265,7 @@ func CreateSigningRequestWithDevID(rw io.ReadWriter, factory *KeyFactory, platfo
 	if len(pubBlob) > 0 && len(privBlob) > 0 {
 		devID, err = factory.LoadDevID(rw, pubBlob, privBlob)
 		if err != nil {
-			return nil, nil, fmt.Errorf("load existing DevID: %w", err)
+			return nil, nil, err
 		}
 	} else {
 		devID, err = factory.CreateDevID(rw)

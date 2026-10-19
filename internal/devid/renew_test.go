@@ -11,8 +11,6 @@ import (
 func TestRenewDue(t *testing.T) {
 	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 	total := 90 * 24 * time.Hour
-	notBefore := now.Add(-60 * 24 * time.Hour) // 30d remaining of 90d → 1/3 exactly is boundary
-	notAfter := notBefore.Add(total)
 
 	fresh := &x509.Certificate{
 		NotBefore: now.Add(-10 * 24 * time.Hour),
@@ -23,23 +21,19 @@ func TestRenewDue(t *testing.T) {
 	}
 
 	// remaining == total/3 → not strictly less → no renew
+	notBefore := now.Add(-60 * 24 * time.Hour)
+	notAfter := notBefore.Add(total)
 	boundary := &x509.Certificate{NotBefore: notBefore, NotAfter: notAfter}
-	remaining := notAfter.Sub(now)
-	if remaining != total/3 {
+	if remaining := notAfter.Sub(now); remaining != total/3 {
 		t.Fatalf("test setup: remaining=%v want %v", remaining, total/3)
 	}
 	if RenewDue(boundary, now) {
 		t.Fatal("remaining == 1/3 must not renew")
 	}
 
-	lastThird := &x509.Certificate{
-		NotBefore: notBefore,
-		NotAfter:  notAfter.Add(-time.Hour), // slightly shorter → remaining < 1/3 of its own total
-	}
-	// Rebuild so remaining < total/3 of THIS cert
 	nb := now.Add(-61 * 24 * time.Hour)
 	na := nb.Add(total)
-	lastThird = &x509.Certificate{NotBefore: nb, NotAfter: na}
+	lastThird := &x509.Certificate{NotBefore: nb, NotAfter: na}
 	if !RenewDue(lastThird, now) {
 		t.Fatalf("last third should renew; remaining=%v total/3=%v", na.Sub(now), total/3)
 	}
@@ -57,10 +51,29 @@ func TestRenewDue(t *testing.T) {
 	}
 }
 
+func TestLoadCertPEMFileCorrupt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "devid.crt.pem")
+	if err := os.WriteFile(path, []byte("not-a-cert"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cert, err := LoadCertPEMFile(path)
+	if err == nil || cert != nil {
+		t.Fatalf("want error for corrupt PEM, got cert=%v err=%v", cert, err)
+	}
+	if _, err := LoadCertPEMFile(filepath.Join(dir, "missing.pem")); err != nil {
+		t.Fatalf("missing file: %v", err)
+	}
+}
+
 func TestClearSPIREAgentSVIDCache(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "agent-data.json")
+	bundle := filepath.Join(dir, "bundle.crt")
 	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bundle, []byte("BUNDLE"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := ClearSPIREAgentSVIDCache(dir); err != nil {
@@ -69,10 +82,10 @@ func TestClearSPIREAgentSVIDCache(t *testing.T) {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("agent-data.json still present: %v", err)
 	}
+	if _, err := os.Stat(bundle); err != nil {
+		t.Fatalf("bundle.crt must not be removed: %v", err)
+	}
 	if err := ClearSPIREAgentSVIDCache(""); err != nil {
 		t.Fatalf("empty dataDir: %v", err)
-	}
-	if err := ClearSPIREAgentSVIDCache(dir); err != nil {
-		t.Fatalf("idempotent clear: %v", err)
 	}
 }

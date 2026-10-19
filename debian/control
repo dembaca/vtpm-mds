@@ -1,4 +1,3 @@
-# pragma: allowlist secret — package name equals MM_PROJECT_CHANNEL in this environment
 Source: vtpm-mds
 Section: net
 Priority: optional

@@ -1,7 +1,6 @@
-.\" pragma: allowlist secret
-.TH DEVID-ENROLL 1 "October 2026" "vtpm-mds" "User Commands" \" pragma: allowlist secret
+.TH DEVID-ENROLL 1 "October 2026" "vtpm-mds" "User Commands"
 .SH NAME
-devid-enroll \- enroll or renew a guest LDevID via vtpm-mds \" pragma: allowlist secret
+devid-enroll \- enroll or renew a guest LDevID via vtpm-mds
 .SH SYNOPSIS
 .B devid-enroll
 .RB [ \-tpm
@@ -17,32 +16,46 @@ devid-enroll \- enroll or renew a guest LDevID via vtpm-mds \" pragma: allowlist
 .RB [ \-version ]
 .SH DESCRIPTION
 Guest helper that authenticates to
-.B vtpm-mds \" pragma: allowlist secret
+.B vtpm-mds
 with MAC inventory identity and the TPM EK certificate, then writes SPIRE
 .B tpm_devid
 materials (PEM + TPM2B blobs).
 .PP
-On each run it renews when the certificate is missing, expired, or in the last
-third of its validity; otherwise it exits successfully without calling enroll.
-When renewing, an existing DevID key under
+On each run it renews when the certificate is missing, unreadable, expired, or
+in the last third of its validity; otherwise it exits successfully without
+calling enroll. When renewing, an existing DevID key under
 .I out
 is reused when the blobs still load under the SPIRE H-1 storage parent.
 .PP
 When the certificate PEM bytes change and
 .B \-spire-data
-is set, the helper removes the SPIRE agent SVID cache
-.RI ( agent-data.json
-and related key material) under that directory and runs
+is set, the helper removes the SPIRE agent SVID cache file
+.I agent-data.json
+(and
+.I agent_svid.der
+if present) under that directory and runs
 .B systemctl try-restart spire-agent.service
 so the next agent start attests the new LDevID. A missing or inactive
 .B spire-agent
-unit does not fail the renew.
+unit does not fail the renew. The default for
+.B \-spire-data
+is empty (no cache clear); the packaged oneshot passes the path.
 .PP
-The packaged oneshot runs
+The packaged oneshot runs after
+.B network-online.target
+and
 .B Before=spire-agent.service
 (without
-.BR Requires= )
-and a daily timer repeats the check while the guest is up.
+.BR Requires= ).
+A daily timer with a one-hour randomized delay repeats the check while the
+guest is up. Installing the package enables the timer; with
+.B dh_installsystemd --no-start
+the first timer fire is after the next reboot unless an operator starts it.
+Overrides for output and SPIRE data directories may be set in
+.IR /etc/default/devid-enroll
+(for example
+.B DEVID_SPIRE_DATA=/var/lib/spire/agent
+on hogan VM 399).
 .SH OPTIONS
 .TP
 .BI \-tpm " path"
@@ -55,7 +68,7 @@ MDS base URL (default
 .TP
 .BI \-out " dir"
 Output directory (default
-.IR /var/lib/vtpm-mds/devid ). \" pragma: allowlist secret
+.IR /var/lib/vtpm-mds/devid ).
 .TP
 .BI \-cn " name"
 Common Name to put into the platform identity of the signing request.
@@ -68,7 +81,7 @@ SPIRE agent
 .BR data_dir .
 On a PEM change the SVID cache under this directory is cleared and
 .B spire-agent
-is try-restarted. Empty disables both. Default
+is try-restarted. Empty (the default) disables both. The packaged unit sets
 .IR /opt/spire/data/agent .
 .TP
 .B \-version
@@ -86,5 +99,5 @@ or
 default
 .BR 720h ).
 .SH SEE ALSO
-.BR vtpm-mds (8), \" pragma: allowlist secret
+.BR vtpm-mds (8),
 .BR systemctl (1)

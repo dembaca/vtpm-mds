@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,9 +39,10 @@ func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error
 	})
 }
 
-// ClientEnrollOrRenew renews when due (or materials are missing); otherwise
-// leaves files unchanged. On a PEM change it clears the SPIRE agent SVID
-// cache (when SpireDataDir is set) and try-restarts spire-agent.
+// ClientEnrollOrRenew renews when due (or materials are missing/corrupt);
+// otherwise leaves files unchanged. On a PEM change it clears the SPIRE agent
+// SVID cache (when SpireDataDir is set) before writing the new PEM, then
+// try-restarts spire-agent.
 func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 	if opts.MDSBaseURL == "" {
 		return fmt.Errorf("mds base URL required")
@@ -60,7 +62,8 @@ func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 
 	existing, err := LoadCertPEMFile(certPath)
 	if err != nil {
-		return err
+		LogRenewCorruptCert(certPath, err)
+		existing = nil // renew-due
 	}
 	if existing != nil && !RenewDue(existing, now) {
 		return nil
@@ -77,7 +80,6 @@ func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 
 	pubBlob, _ := os.ReadFile(pubPath)
 	privBlob, _ := os.ReadFile(privPath)
-	// Reuse only when both blobs load; otherwise create a new key.
 	reusePub, reusePriv := pubBlob, privBlob
 	if len(reusePub) == 0 || len(reusePriv) == 0 {
 		reusePub, reusePriv = nil, nil
@@ -86,8 +88,7 @@ func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 	factory := DefaultKeyFactory()
 	sr, res, err := CreateSigningRequestWithDevID(rw, factory, opts.PlatformCN, reusePub, reusePriv)
 	if err != nil {
-		// Blobs unusable under the SPIRE H-1 parent — fall back to a new key.
-		if reusePub != nil {
+		if reusePub != nil && errors.Is(err, ErrDevIDLoad) {
 			sr, res, err = CreateSigningRequestWithDevID(rw, factory, opts.PlatformCN, nil, nil)
 		}
 		if err != nil {
@@ -153,24 +154,61 @@ func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 	}
 
 	newPEM := []byte(finish.DevIDCertPEM)
-	if err := os.WriteFile(certPath, newPEM, 0o600); err != nil {
-		return err
-	}
-	if err := os.WriteFile(privPath, res.DevID.PrivateBlob, 0o600); err != nil {
-		return err
-	}
-	if err := os.WriteFile(pubPath, res.DevID.PublicBlob, 0o600); err != nil {
-		return err
-	}
+	pemChanged := !bytes.Equal(oldPEM, newPEM)
 
-	if !bytes.Equal(oldPEM, newPEM) {
+	// Clear SVID cache before writing the new PEM so a crash after clear still
+	// forces re-attest; writing PEM first then failing to clear leaves the old ID.
+	if pemChanged && opts.SpireDataDir != "" {
 		if err := ClearSPIREAgentSVIDCache(opts.SpireDataDir); err != nil {
 			return err
 		}
-		if opts.SpireDataDir != "" {
-			TryRestartSPIREAgent()
-		}
 	}
+
+	// Blobs before cert so a crash cannot leave a new cert with old/missing key.
+	if err := writeFileAtomic(privPath, res.DevID.PrivateBlob, 0o600); err != nil {
+		return err
+	}
+	if err := writeFileAtomic(pubPath, res.DevID.PublicBlob, 0o600); err != nil {
+		return err
+	}
+	if err := writeFileAtomic(certPath, newPEM, 0o600); err != nil {
+		return err
+	}
+
+	if pemChanged && opts.SpireDataDir != "" {
+		TryRestartSPIREAgent()
+	}
+	return nil
+}
+
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	ok := false
+	defer func() {
+		if !ok {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	ok = true
 	return nil
 }
 

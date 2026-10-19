@@ -5,6 +5,7 @@ Documentation=man:devid-enroll(1)
 [Timer]
 OnCalendar=daily
 Persistent=true
+RandomizedDelaySec=1h
 Unit=devid-enroll.service
 
 [Install]

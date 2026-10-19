@@ -129,8 +129,8 @@ func (ca *CA) uniqueSerial(template *x509.Certificate) (*big.Int, error) {
 	h.Write(ca.cert.Raw)
 	h.Write(subjData)
 	h.Write(pubBytes)
-	h.Write([]byte(template.NotBefore.UTC().Format(time.RFC3339Nano)))
-	h.Write([]byte(template.NotAfter.UTC().Format(time.RFC3339Nano)))
+	h.Write([]byte(template.NotBefore.UTC().Format(time.RFC3339)))
+	h.Write([]byte(template.NotAfter.UTC().Format(time.RFC3339)))
 	if template.SerialNumber != nil {
 		h.Write(template.SerialNumber.Bytes())
 	}
@@ -160,6 +160,7 @@ func (ca *CA) IssueDevID(sr *SigningRequest, subjectCN string, notBefore time.Ti
 	if notBefore.IsZero() {
 		notBefore = time.Now().UTC()
 	}
+	notBefore = notBefore.UTC().Truncate(time.Second)
 	lifetime := ca.Lifetime
 	if lifetime <= 0 {
 		lifetime = DefaultDevIDLifetime

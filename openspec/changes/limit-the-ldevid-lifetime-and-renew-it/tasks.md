@@ -31,3 +31,15 @@ the config key.
 
 - [ ] 4.1 Clock-skewed “LDevID expired while agent keeps running” was **inferred** from the cached-SVID path (lab A: swapped LDevID ignored) rather than by forging an expired PEM under a live agent; verify explicitly in 2.2 if reviewers require it.
 - [ ] 4.2 Hogan end-to-end renew against the **live** SPIRE agent paths (399) is deferred until code-go; verify only the scratch-directory check in 2.3 was planned in this record.
+
+## Verification notes (Code-Go)
+
+- **1.1** `go test ./internal/config/...` — PASS (default 2160h; reject `90`/`0s`/`9000h`/`8761h`; accept `8760h`).
+- **1.2** `go test ./internal/devid/...` — PASS (`TestIssueDevIDConfiguredLifetime`, `TestIssueDevIDRenewalSameKeyNewSerial`).
+- **1.3** `go test ./internal/devid/ -run 'TestRenewDue|TestClearSPIRE|TestLoadCert'` — PASS.
+- **1.4** units present; `systemd-analyze verify debian/devid-enroll.service debian/devid-enroll.timer` — only warning is missing `/usr/bin/devid-enroll` on the build host (binary not installed). `dpkg-deb`/`lintian` not run here (agent cannot build `.deb`).
+- **1.5** `go test ./internal/config/ -run TestLoadShippedDebianConfig` — PASS.
+- **2.1** lab guest100 @ `8715182` tree: `openssl` → lifetime_hours 2160.0 (re-run after Fable fix commit for reconfirm if needed).
+- **2.2** lab: 3h lifetime, blob checksums identical across renew, serial/fp/PEM changed, `agent-data.json` cleared, fresh skip.
+- **2.4** SPIRE 1.14.0 `/opt/spire/bin/spire-server agent evict|purge -help` — flags match D-e.
+- **3.2** `openspec validate --all --strict` — 7 passed, 0 failed.

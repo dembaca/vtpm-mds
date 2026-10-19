@@ -7,7 +7,12 @@ issuance requirement. E2.3 replaces far-future `notAfter` with a configurable
 lifetime, changes serial derivation so renewals are unique, and adds guest
 renewal. The scenario `Certificate shape` that required
 `9999-12-31T23:59:59Z` and the serial sentence that promised the same serial
-for the same key cannot be carried forward.
+for the same key cannot be carried forward. The scenario `Platform identity
+does not change the serial` is also dropped here: with validity in the serial
+hash, two enrollments at different times get different serials even with the
+same key and subject; same-instant enrollments with differing platform
+identity still match (covered by unit tests). Replaced by the scenario
+`Renewal with the same key yields a new serial`.
 
 **Migration**: Apply only after #70 has been archived into the living spec.
 Already-issued non-expiring certificates remain valid until re-issued (no
@@ -27,7 +32,10 @@ containing:
 - the DevID public key from the signing request as the certificate public key;
 - a subject consisting of exactly one attribute, the common name, set to the
   authenticated VM ID bound to the enroll session. Nothing from the signing
-  request's platform identity SHALL be carried into the subject;
+  request's platform identity SHALL be carried into the subject; the guest
+  SHALL NOT be able to influence any attribute of the subject of the
+  certificate it receives, because every attribute is signed by the same CA
+  and a relying party cannot tell which ones the service checked;
 - `notBefore` set to the time of the finish call and `notAfter` set to
   `notBefore` plus the configured LDevID lifetime (`mds.devid_lifetime`;
   default ninety days when the key is omitted);

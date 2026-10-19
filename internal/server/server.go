@@ -630,6 +630,9 @@ func loadDevIDEnroller(cfg *config.Config) (*devid.Enroller, error) {
 	if err != nil {
 		return nil, fmt.Errorf("devid_lifetime: %w", err)
 	}
+	if lifetime <= 0 || lifetime > config.MaxDevIDLifetime {
+		return nil, fmt.Errorf("invalid devid_lifetime %q", lifetimeStr)
+	}
 	ca.Lifetime = lifetime
 
 	ekRoots := x509.NewCertPool()

@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,6 +31,8 @@ func RenewDue(cert *x509.Certificate, now time.Time) bool {
 
 // LoadCertPEMFile parses the first CERTIFICATE PEM from path.
 // Returns (nil, nil) when the file does not exist.
+// An unreadable or corrupt certificate returns (nil, err) so the caller can
+// treat it as renew-due after logging.
 func LoadCertPEMFile(path string) (*x509.Certificate, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -38,29 +41,31 @@ func LoadCertPEMFile(path string) (*x509.Certificate, error) {
 		}
 		return nil, err
 	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("%s: empty certificate file", path)
+	}
 	block, _ := pem.Decode(data)
 	if block == nil || block.Type != "CERTIFICATE" {
 		return nil, fmt.Errorf("%s: no certificate PEM", path)
 	}
-	return x509.ParseCertificate(block.Bytes)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return cert, nil
 }
 
-// ClearSPIREAgentSVIDCache removes the agent SVID cache under dataDir so the
-// next agent start performs node attestation. Unknown paths are ignored.
-// dataDir empty is a no-op.
+// ClearSPIREAgentSVIDCache removes the SPIRE 1.14 agent SVID cache under
+// dataDir so the next agent start performs node attestation. Only
+// agent-data.json and the legacy agent_svid.der are removed — never the
+// bootstrap trust bundle. dataDir empty is a no-op.
 func ClearSPIREAgentSVIDCache(dataDir string) error {
 	if dataDir == "" {
 		return nil
 	}
-	// SPIRE agent persists the attested SVID in agent-data.json (and related
-	// key material). Removing the JSON is enough for a re-attest on start;
-	// also drop common sibling key files if present.
 	names := []string{
 		"agent-data.json",
-		"svid.key",
-		"svid.pem",
-		"bundle.crt",
-		"agent-key.pem",
+		"agent_svid.der",
 	}
 	for _, name := range names {
 		path := filepath.Join(dataDir, name)
@@ -76,4 +81,9 @@ func ClearSPIREAgentSVIDCache(dataDir string) error {
 func TryRestartSPIREAgent() {
 	cmd := exec.Command("systemctl", "try-restart", "spire-agent.service")
 	_ = cmd.Run()
+}
+
+// LogRenewCorruptCert records that an unreadable cert triggered renew.
+func LogRenewCorruptCert(path string, err error) {
+	log.Printf("devid-enroll: treating %s as renew-due: %v", path, err)
 }

@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/dembaca/vtpm-mds/internal/devid" // pragma: allowlist secret
+	"github.com/dembaca/vtpm-mds/internal/devid"
 	"github.com/google/go-tpm/legacy/tpm2"
 )
 
@@ -16,9 +16,9 @@ var Version = "dev"
 func main() {
 	tpmPath := flag.String("tpm", "/dev/tpm0", "TPM device path")
 	mdsURL := flag.String("mds", "http://169.254.169.254", "MDS base URL")
-	outDir := flag.String("out", "/var/lib/vtpm-mds/devid", "output directory for DevID materials") // pragma: allowlist secret
+	outDir := flag.String("out", "/var/lib/vtpm-mds/devid", "output directory for DevID materials")
 	cn := flag.String("cn", "", "platform identity Common Name (ignored by the service; subject is always CN=<vmid>)")
-	spireData := flag.String("spire-data", "/opt/spire/data/agent", "SPIRE agent data_dir; on PEM change, clear SVID cache here and try-restart spire-agent (empty skips)")
+	spireData := flag.String("spire-data", "", "SPIRE agent data_dir; on PEM change, clear SVID cache here and try-restart spire-agent (empty skips)")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 
