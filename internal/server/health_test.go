@@ -7,9 +7,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/dembaca/vtpm-mds/internal/config"    // pragma: allowlist secret
+	"github.com/dembaca/vtpm-mds/internal/devid"     // pragma: allowlist secret
 	"github.com/dembaca/vtpm-mds/internal/inventory" // pragma: allowlist secret
 )
 
@@ -96,6 +99,74 @@ func TestHealthFailedReloadKeepsCount(t *testing.T) {
 	}
 	if int(body["vm_count"].(float64)) != before {
 		t.Fatalf("vm_count=%v want %d", body["vm_count"], before)
+	}
+}
+
+func TestHealthAttestationOnMissingCAAndCache(t *testing.T) {
+	dir := t.TempDir()
+	inv := filepath.Join(dir, "inv.yaml")
+	cert := filepath.Join(dir, "ca.pem")
+	key := filepath.Join(dir, "ca.key")
+	if err := os.WriteFile(inv, []byte("vms:\n  - id: \"100\"\n    name: g\n    macs: [\"52:54:00:00:00:01\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultConfig()
+	cfg.MDS.EnableTPMAttestation = true
+	cfg.MDS.InventoryPath = inv
+	cfg.MDS.DevIDCACert = cert
+	cfg.MDS.DevIDCAKey = key
+	cfg.MDS.ListenAddr = "127.0.0.1:0"
+	srv, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// New leaves devid nil when CA files are missing; force a non-nil enroller
+	// so the check exercises open/close rather than the nil short-circuit alone.
+	srv.devid = &devid.Enroller{}
+
+	var now atomic.Int64
+	base := time.Now()
+	srv.now = func() time.Time { return base.Add(time.Duration(now.Load())) }
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+	srv.handleHealth(rec, req)
+	var body map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if body["status"] != "degraded" {
+		t.Fatalf("missing CA want degraded, got %v", body)
+	}
+	if body["devid_ca_readable"] != false {
+		t.Fatalf("devid_ca_readable=%v", body["devid_ca_readable"])
+	}
+	if body["last_error"] != errClassDevIDCAUnreadable {
+		t.Fatalf("last_error=%v", body["last_error"])
+	}
+
+	if err := os.WriteFile(cert, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(key, []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Still within 5s cache of false
+	now.Store(int64(2 * time.Second))
+	rec = httptest.NewRecorder()
+	srv.handleHealth(rec, req)
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if body["devid_ca_readable"] != false {
+		t.Fatalf("cached false should hold at +2s: %v", body)
+	}
+
+	now.Store(int64(6 * time.Second))
+	rec = httptest.NewRecorder()
+	srv.handleHealth(rec, req)
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if body["devid_ca_readable"] != true {
+		t.Fatalf("after cache expiry want true: %v", body)
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("after cache expiry want ok: %v", body)
 	}
 }
 

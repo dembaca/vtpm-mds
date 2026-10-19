@@ -37,6 +37,8 @@ type Server struct {
 	lastErrorClass  string
 	caReadable      bool
 	caCheckedAt     time.Time
+	// now is time.Now in production; tests inject a clock for the CA cache.
+	now func() time.Time
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -44,6 +46,7 @@ func New(cfg *config.Config) (*Server, error) {
 		cfg:        cfg,
 		tokenStore: imds.NewTokenStore(cfg),
 		limiter:    newGuestLimiter(),
+		now:        time.Now,
 	}
 
 	activeServerMu.Lock()
@@ -433,12 +436,19 @@ const (
 	caReadableCacheTTL          = 5 * time.Second
 )
 
+func (s *Server) clock() time.Time {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now()
+}
+
 func (s *Server) recordInventoryLoadSuccess(n int) {
 	s.readyMu.Lock()
 	defer s.readyMu.Unlock()
 	s.inventoryLoaded = true
 	s.vmCount = n
-	s.lastReload = time.Now().UTC()
+	s.lastReload = s.clock().UTC()
 	s.lastErrorClass = ""
 }
 
@@ -461,7 +471,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	status, detail := s.readiness()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if inventory.GetVMConfigFromRequest(r) != nil {
+	if inventory.IsBound(inventory.GetVMConfigFromRequest(r)) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": status})
 		return
 	}
@@ -486,11 +496,11 @@ func (s *Server) readiness() (status string, detail healthDetail) {
 		}
 	}
 
-	status = "degraded"
-	if loaded && (!attestation || (caOK != nil && *caOK)) && lastErr == "" {
-		status = "ok"
+	status = "ok"
+	if !loaded {
+		status = "degraded"
 	}
-	if loaded && attestation && caOK != nil && !*caOK {
+	if attestation && (caOK == nil || !*caOK) {
 		status = "degraded"
 	}
 	if lastErr != "" {
@@ -513,8 +523,9 @@ func (s *Server) readiness() (status string, detail healthDetail) {
 }
 
 func (s *Server) devIDCAReadableCached() bool {
+	now := s.clock()
 	s.readyMu.Lock()
-	if !s.caCheckedAt.IsZero() && time.Since(s.caCheckedAt) < caReadableCacheTTL {
+	if !s.caCheckedAt.IsZero() && now.Sub(s.caCheckedAt) < caReadableCacheTTL {
 		ok := s.caReadable
 		s.readyMu.Unlock()
 		return ok
@@ -524,12 +535,17 @@ func (s *Server) devIDCAReadableCached() bool {
 	ok := s.checkDevIDCAReadable()
 	s.readyMu.Lock()
 	s.caReadable = ok
-	s.caCheckedAt = time.Now()
+	s.caCheckedAt = now
 	s.readyMu.Unlock()
 	return ok
 }
 
 func (s *Server) checkDevIDCAReadable() bool {
+	// Enrollment must actually be loaded; a failed start leaves devid nil
+	// while enable_tpm_attestation is still true.
+	if s.devid == nil {
+		return false
+	}
 	certPath := s.cfg.MDS.DevIDCACert
 	keyPath := s.cfg.MDS.DevIDCAKey
 	if cred := credentialCAKeyPath(); cred != "" {
@@ -538,12 +554,15 @@ func (s *Server) checkDevIDCAReadable() bool {
 	if certPath == "" || keyPath == "" {
 		return false
 	}
-	if _, err := os.Stat(certPath); err != nil {
+	return readableFile(certPath) && readableFile(keyPath)
+}
+
+func readableFile(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
 		return false
 	}
-	if _, err := os.Stat(keyPath); err != nil {
-		return false
-	}
+	_ = f.Close()
 	return true
 }
 

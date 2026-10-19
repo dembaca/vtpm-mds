@@ -50,8 +50,8 @@ caching, and strict-YAML upgrade interplay with #60 — incorporated below.
   - `last_error` (short class from a closed set, or `""`)
   It MUST NOT contain filesystem paths, MAC addresses, VM ids/names, peer
   addresses, certificate subjects, or free-form `error.Error()` text.
-- **D-d. `last_error` classes (closed set).** At least:
-  `inventory_load_failed`, `config_invalid`, `devid_ca_unreadable`, `""`.
+- **D-d. `last_error` classes (closed set).** Emitted values:
+  `inventory_load_failed`, `devid_ca_unreadable`, or `""`.
   The journal still gets the full error.
 - **D-e. Strict YAML via `yaml.Decoder` + `KnownFields(true)`** for
   `config.Load` and `inventory.LoadYAML`. Unknown keys fail decode. Start

@@ -150,3 +150,18 @@ func GetVMConfigFromRequest(r *http.Request) *VMConfig {
 	}
 	return nil
 }
+
+// IsBound reports whether vm is a usable bound VM record (non-nil with a VMID).
+// Health, identity refusal and instance-id synthesis share this predicate.
+func IsBound(vm *VMConfig) bool {
+	return vm != nil && vm.VMID != ""
+}
+
+// BoundVMFromRequest returns the caller's bound VM record, or nil when unbound.
+func BoundVMFromRequest(r *http.Request) *VMConfig {
+	vm := GetVMConfigFromRequest(r)
+	if !IsBound(vm) {
+		return nil
+	}
+	return vm
+}
