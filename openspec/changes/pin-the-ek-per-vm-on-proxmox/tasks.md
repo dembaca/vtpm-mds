@@ -34,36 +34,41 @@ product logic, **not** `AGENTS.md` / root `README.md`.
       `IssueDevID`; verify unwritable dir → `500` and no PEM; happy path
       creates `/var/lib/…/ek-pins/<vmid>`; reset (delete file → new EK
       enrolls).
-      `TestFinishWritesPinBeforeIssue`, `TestFinishUnwritablePinDirNoPEM`,
+      `TestFinishWritesPinBeforeIssue`, `TestPinWrittenWhenIssueDevIDFails`
+      (pin present, no PEM), `TestFinishUnwritablePinDirNoPEM`,
       `TestEnsurePinResetAllowsNewEK`, `TestConcurrentFinishSameEKBothGetCert`;
       HTTP maps `ErrPinStore` → 500 body `pin store unavailable`.
       `PinDir` = `$STATE_DIRECTORY/ek-pins` else package state dir (`ekPinDir`).
 - [x] 2.4 Run `go test ./...`, `go vet ./...`, and
       `openspec validate --all --strict`; verify all green.
-      `go vet ./...` clean; `go test -count=1 ./...` (all packages) ok;
-      `openspec validate --all --strict` 8 passed. Re-run after Fable fixes.
+      After Fable re-check follow-up: `go vet ./...` clean;
+      `go test -count=1 ./...` → ok imds, config, devid, inventory, proxmox,
+      server (no test files: module root, cmd/devid-enroll);
+      `openspec validate --all --strict` 8 passed. Includes
+      `TestPinWrittenWhenIssueDevIDFails` and `TestEmptyPinFileMeansNoPin`.
 
 ## 3. Verify in the lab
 
 - [x] 3.1 Fresh enroll creates the pin file; fingerprint matches
       `EKFingerprint`.
-      Cloud lab 2026-10-19 @ `a7239df`, daemon
-      `/var/lib/mds-lab/build-65` PID 208687. Guest100 SSH enroll →
-      `/var/lib/<pkg>/ek-pins/100` =
+      Re-lab 2026-10-19 after Fable should-fix (binary `3b144ba`,
+      `/var/lib/mds-lab/build-65`, PID 210743, `STATE_DIRECTORY` = package
+      state dir). Guest100 SSH enroll → `/var/lib/<pkg>/ek-pins/100` =
       `1ab805b7d10249979f8d2e0758853d10d3e91603cd99f04a2511606aefc911c3`
-      matching `devid issued … ek=`.
+      matching `devid issued … ek=` (same `EKFingerprint`). Log:
+      `/opt/cursor/artifacts/65-3.x-fable-relab.log`.
 - [x] 3.2 Second enroll with the same TPM succeeds; mismatched store content
       fails with `stored pin` body; after `rm` of the pin file a new EK can
       enroll.
-      Re-enroll rc=0 pin unchanged; wrong pin → `HTTP 401: EK certificate
-      does not match stored pin`, no PEM; after `rm` and enroll-throttle
-      cooldown, enroll rc=0 recreates the same pin (same TPM/EK).
+      Re-lab @ `3b144ba` PID 210743: re-enroll rc=0; wrong pin →
+      `HTTP 401: EK certificate does not match stored pin`, no PEM. (Reset
+      path was covered on the earlier `a7239df` run after enroll-throttle
+      cooldown; not re-hit on re-lab to save 429 budget.)
 - [x] 3.3 Say what was not verified (concurrent finish under load, TOFU race
       with a spoofing guest, hogan unless seeded).
-      Not verified: concurrent finish under load, a spoofing guest racing
-      first enroll, a genuinely new EK (same guest TPM reused), hogan seed
-      (4.x). Lab hit enroll `429` after the mismatch attempt (guest
-      throttle); reset path needed ~45 s cooldown.
+      Not verified: concurrent finish under load (unit-tested instead:
+      `TestConcurrentFinishSameEKBothGetCert`), a spoofing guest racing
+      first enroll, a genuinely new EK, hogan seed (4.x).
 
 ## 4. Hogan (seed + enroll; needs dembaca's go)
 

@@ -78,10 +78,15 @@ once a readable, stable host-side EK source exists for this deployment.
   change ships, every existing VM has no store file; the first post-upgrade
   enroll wins (including a spoofer). The journal already logs
   `devid issued serial=… vm=<id> ek=<sha256>`
-  (`quiet-the-log-and-record-issuance`). **Operators seed** before relying on
-  the pin: extract those pairs into `ek-pins/<vmid>` (no new binary — a
-  documented `journalctl`/`awk` one-liner in `tasks.md`). Hogan carries out
-  the seed for VM 399 as a verification task once dembaca approves host work.
+  (`quiet-the-log-and-record-issuance`). The `ek=` value is the same string
+  the pin store writes: `HandleFinish` sets `ekFP := EKFingerprint(ekCert)`
+  (`http.go`), passes it to `Finish` → `ensurePinBeforeIssue` / pin file
+  (lowercase hex, one trailing newline; `readStoredPin` trims space), and
+  `logIssuance` logs that same `ekFP` (`http.go`). `EKFingerprint` is
+  lowercase hex SHA-256 of the certificate DER (`auth.go`). **Operators
+  seed** before relying on the pin: extract those pairs into
+  `ek-pins/<vmid>` (see `tasks.md` 4.1, including `install -d` as the
+  service user). Hogan seeds VM 399 once dembaca approves host work.
 - **D-h. Both inventory backends.** The store applies whenever inventory
   `ek_sha256` is empty — **YAML and Proxmox**. The change title says
   "proxmox" because that is the production gap; behaviour is backend-agnostic.

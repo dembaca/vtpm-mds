@@ -2,6 +2,8 @@ package devid
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -261,5 +263,61 @@ func TestSecondFinishDoesNotOverwritePin(t *testing.T) {
 	after, _ := os.ReadFile(pinPath(dir, "100"))
 	if string(before) != string(after) {
 		t.Fatalf("pin overwritten: %q -> %q", before, after)
+	}
+}
+
+func TestPinWrittenWhenIssueDevIDFails(t *testing.T) {
+	caCert, _ := mustTestCA(t)
+	wrongKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})
+	keyDER, err := x509.MarshalPKCS8PrivateKey(wrongKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	badCA, err := ParseCA(caPEM, keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	enroller := NewEnroller(badCA, x509.NewCertPool(), NewSessionStore(time.Minute))
+	enroller.PinDir = dir
+	sr := mustMinimalSigningRequest(t, pkix.Name{})
+	sid, err := enroller.Sessions.Put([]byte("nonce"), *sr, "100", "ekfp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemBytes, err := enroller.Finish(sid, []byte("nonce"), "100", "ekfp", "")
+	if err == nil {
+		t.Fatal("expected IssueDevID failure")
+	}
+	if pemBytes != nil {
+		t.Fatal("must not return PEM")
+	}
+	got, rerr := readStoredPin(dir, "100")
+	if rerr != nil || got != "ekfp" {
+		t.Fatalf("pin should exist before sign: got %q err=%v", got, rerr)
+	}
+}
+
+func TestEmptyPinFileMeansNoPin(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(pinPath(dir, "100"), []byte("\n\t  "), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readStoredPin(dir, "100")
+	if err != nil || got != "" {
+		t.Fatalf("empty/whitespace pin must mean no pin: %q err=%v", got, err)
+	}
+	e := &Enroller{PinDir: dir}
+	if err := e.ensurePinBeforeIssue("100", "newfp"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = readStoredPin(dir, "100")
+	if got != "newfp" {
+		t.Fatalf("got %q", got)
 	}
 }

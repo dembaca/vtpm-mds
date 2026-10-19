@@ -140,7 +140,12 @@ func (e *Enroller) ensurePinBeforeIssue(vmid, fp string) error {
 		if rerr != nil {
 			return rerr
 		}
-		if existing == "" || !strings.EqualFold(existing, fp) {
+		// A whitespace-only or empty file is "no pin" (D-c step 2): replace it.
+		if existing == "" {
+			_ = os.Remove(pinPath(e.PinDir, vmid))
+			return createStoredPinExclusive(e.PinDir, vmid, fp)
+		}
+		if !strings.EqualFold(existing, fp) {
 			return errUnauthorized(errStoredPinMismatch)
 		}
 		return nil
