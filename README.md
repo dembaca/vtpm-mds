@@ -14,6 +14,7 @@ Binary: `vtpm-mds` (aliases: `qemu-mds`, `prox-mds`). Module path: `github.com/d
 | **Cloud-compatible metadata API** — EC2-IMDSv2-compatible endpoints | implemented |
 | **TPM DevID enrollment** — LDevID certs + TPM2B blobs for SPIRE `tpm_devid` | implemented |
 | **Dual enroll auth** — MAC → inventory **and** TPM EK certificate header | implemented |
+| **EK pin per VM** — the first enrolment of a VM pins its EK under `/var/lib/vtpm-mds/ek-pins/<vmid>`; a different EK is refused until an operator deletes the pin | implemented |
 | **Inventory backends** — YAML inventory (plain QEMU lab) or Proxmox `/etc/pve` | implemented |
 | **Instance tags and node topology** — Proxmox tags `vtpm_mds.io.<key>.<value>` under `tags/instance/`, zone and region from the node description | implemented |
 | **Host-anchored trust** — EK CA chain + optional DevID CA | implemented |
