@@ -12,7 +12,12 @@ new `internal/bridgebind/`, a NIC reader in `internal/proxmox/` (not
 ## 1. Decide
 
 - [ ] 1.1 **Maintainer, optional** — accept or overrule D-a to D-i in `design.md` (D-b own binary, D-f bridge as a unit argument, and fail open are the ones most likely to move), and verify the outcome is recorded there
-- [ ] 1.2 **Coordinator** — ACK the record and the delta on the bus before any code is written, and verify the ACK names this change
+- [x] 1.2 **Coordinator** — ACK the record and the delta on the bus before any code is written, and verify the ACK names this change
+      **Done, 2026-10-19 16:11:** `agent-mac-vtpm-mds-42d61f`, "ACK … on the
+      record `bind-callers-to-their-bridge-port` @ `be6437a`", draft PR #68,
+      code after three additions: the live-migration window and the
+      hand-written block beside the binder (both in Risks), and a rebase onto
+      `main@c94bb2d` (#62) before the code.
 - [ ] 1.3 After #66 is merged, add the `debian-packaging` MODIFIED block for "Installing The Host Package Leaves systemd In Step" (both units) against the archived text in `openspec/specs/`, and verify with `openspec validate --all --strict`
 
 ## 2. Port list
@@ -34,7 +39,7 @@ new `internal/bridgebind/`, a NIC reader in `internal/proxmox/` (not
 - [ ] 4.3 Repeat the MAC test of 2026-10-19 in VM 399 (foreign MAC → timeout and `ether saddr` counter rises; own MAC → `200`), VM 399 restored afterwards
 - [ ] 4.4 Test the ARP-sender rule on its own: from VM 399, with `eth1` keeping its own MAC, send an ARP packet whose sender hardware address is foreign (raw socket in `python3`, no `scapy` needed); verify the `arp saddr ether` counter rises and the host's neighbour entry for `169.254.169.10` keeps VM 399's MAC (reading counters needs the maintainer, or `hogan-lab` widened to list `bridge vtpm_mds_bind`)
 - [ ] 4.5 Restart `nftables` (maintainer), verify the table is restored within one interval with one log line
-- [ ] 4.6 Say what was not verified (e.g. a migration in, a hot-plugged NIC, `firewall=1` beyond reading the rules for VM 300, LXC)
+- [ ] 4.6 Say what was not verified (e.g. a migration in and its fail-open window on the target, a hot-plugged NIC, `firewall=1` beyond reading the rules for VM 300, LXC)
 
 ## 5. Hand over
 

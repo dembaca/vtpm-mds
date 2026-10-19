@@ -127,10 +127,31 @@ Facts from `hogan` that shape the design:
   so the guest is not bound to its own record before that either; a spoofed
   MAC in that window would still be answered. A new VM is covered before it
   starts, because its config exists before its tap.
-- **Hand-written block left in place.** If the Ansible role keeps the VM 399
-  block, every `nftables` restart reloads it and the binder replaces it within
-  one interval (D-g), logging once each time. Harmless, but the role should
-  drop the block (task 5.2).
+- **Live migration: up to one interval fail open on the target.** During a
+  live migration the guest's tap exists on the target, and the guest resumes
+  there, before its config is moved into `nodes/<target>/qemu-server`. Until
+  the move and the next tick, the target has no rule for that port (≤ 5 s
+  after the move). On the source, the rule stays until its next tick, on a
+  tap that no longer exists, which is harmless. VM 399 cannot migrate, so the
+  window is not measured on `hogan` (task 4.6 names it); the lab cannot
+  migrate either.
+- **Hand-written block and binder side by side.** Until task 5.2 removes the
+  VM 399 block, two writers own `bridge vtpm_mds_bind`, and each replaces the
+  whole table, so the last one wins:
+  - Binder last: the table holds every bound port on the node, including the
+    VM 399 rules the block has. Nothing the block protected is lost.
+  - `nftables.service` last (a `systemctl restart nftables`, a reboot before
+    the binder starts): `flush ruleset` removes everything, then the file
+    restores only the VM 399 pair. VM 399 stays protected; every other port
+    is open until the binder's next tick restores the full table (D-g, one
+    log line). If the binder is not running at all, they stay open, which is
+    today's state for them.
+  - The block names only `tap399i1`. VM IDs are unique in the cluster, so on
+    another node it either matches nothing or matches VM 399 after a
+    migration, with the same MAC. A node never keeps another node's rules:
+    each binder reads only `/etc/pve/local`, and `flush ruleset` empties the
+    node's own ruleset before the file is read.
+  Harmless, but the role should drop the block (task 5.2).
 - **ARP-sender rule unproven.** The test of 2026-10-19 never reached it
   (rule 1 catches frames with a foreign source first). It needs its own test
   with a correct frame MAC and a forged ARP sender (task 4.4).
