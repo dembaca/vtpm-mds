@@ -1,0 +1,12 @@
+[Unit]
+Description=Renew guest LDevID before SPIRE
+Documentation=man:devid-enroll(1)
+Before=spire-agent.service
+# Wants= only — do not Require spire-agent; guests without SPIRE must still renew.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/devid-enroll -out /var/lib/vtpm-mds/devid -spire-data /opt/spire/data/agent  # pragma: allowlist secret
+
+[Install]
+WantedBy=multi-user.target

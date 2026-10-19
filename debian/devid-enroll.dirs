@@ -1,0 +1,1 @@
+var/lib/vtpm-mds/devid  # pragma: allowlist secret

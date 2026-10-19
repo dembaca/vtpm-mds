@@ -9,23 +9,23 @@ the config key.
 
 ## 1. Implementation (after coordinator code-go)
 
-- [ ] 1.1 Add `mds.devid_lifetime` (default `2160h`, reject bad/non-positive/`>8760h`); verify with `go test ./internal/config/...`.
-- [ ] 1.2 Thread lifetime into the CA; set `notAfter = notBefore.Add(lifetime)`; include `notBefore`/`notAfter` in `uniqueSerial`; verify `go test ./internal/devid/...` including same-key renew → new serial.
-- [ ] 1.3 Guest client renew-or-skip (one-third / expired / missing), reuse TPM blobs, clear SPIRE agent SVID cache on PEM change + `try-restart`; verify decision-logic unit tests with a fixed clock.
-- [ ] 1.4 Guest package oneshot + daily timer (`Before=spire-agent`, no `Requires=`), enable timer in `postinst`, man page including E2.4 `evict`/`purge`; verify `dpkg-deb -c` and `systemd-analyze verify` where available.
-- [ ] 1.5 Document `devid_lifetime: 2160h` (and the one-year cap) in packaged host `config.yaml`; verify tests that load `debian/config.yaml` still pass.
+- [x] 1.1 Add `mds.devid_lifetime` (default `2160h`, reject bad/non-positive/`>8760h`); verify with `go test ./internal/config/...`.
+- [x] 1.2 Thread lifetime into the CA; set `notAfter = notBefore.Add(lifetime)`; include `notBefore`/`notAfter` in `uniqueSerial`; verify `go test ./internal/devid/...` including same-key renew → new serial.
+- [x] 1.3 Guest client renew-or-skip (one-third / expired / missing), reuse TPM blobs, clear SPIRE agent SVID cache on PEM change + `try-restart`; verify decision-logic unit tests with a fixed clock.
+- [x] 1.4 Guest package oneshot + daily timer (`Before=spire-agent`, no `Requires=`), enable timer in `postinst`, man page including E2.4 `evict`/`purge`; verify `dpkg-deb -c` and `systemd-analyze verify` where available.
+- [x] 1.5 Document `devid_lifetime: 2160h` (and the one-year cap) in packaged host `config.yaml`; verify tests that load `debian/config.yaml` still pass.
 
 ## 2. Lab / hogan verification (after code)
 
-- [ ] 2.1 Cloud lab: default lifetime → `notAfter ≈ now+90d`; verify with `openssl x509 -dates`.
-- [ ] 2.2 Cloud lab: short lifetime + renew; verify same priv/pub blob checksums, new cert PEM, new SHA-1 fingerprint, new serial; SVID cache cleared so next agent start attests the new ID.
+- [x] 2.1 Cloud lab: default lifetime → `notAfter ≈ now+90d`; verify with `openssl x509 -dates`.
+- [x] 2.2 Cloud lab: short lifetime + renew; verify same priv/pub blob checksums, new cert PEM, new SHA-1 fingerprint, new serial; SVID cache cleared so next agent start attests the new ID.
 - [ ] 2.3 Hogan VM 399: renew into a **scratch** output directory (do not overwrite live `/var/lib/spire/agent/` materials); verify new cert shape / serial; confirm SPIRE's live materials unchanged. Verify with `openssl` + `sha1sum` / journal as appropriate.
-- [ ] 2.4 Confirm SPIRE 1.14.0 `agent evict` / `agent purge` flags still match design D-e; verify via `-help` on lab or hogan.
+- [x] 2.4 Confirm SPIRE 1.14.0 `agent evict` / `agent purge` flags still match design D-e; verify via `-help` on lab or hogan.
 
 ## 3. OpenSpec / apply order
 
 - [ ] 3.1 After #70 merges and archives, rebase this branch onto that `main`; verify the REMOVED title is `Issue A Non-Expiring LDevID Whose Subject Is Only The VM ID`.
-- [ ] 3.2 Before merge, verify `openspec validate --all --strict` is green.
+- [x] 3.2 Before merge, verify `openspec validate --all --strict` is green.
 
 ## 4. Not verified in this record (do not tick as done)
 

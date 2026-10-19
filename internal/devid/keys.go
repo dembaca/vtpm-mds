@@ -149,3 +149,34 @@ func FlushTransient(rw io.ReadWriter, h tpmutil.Handle) {
 	}
 	_ = tpm2.FlushContext(rw, h)
 }
+
+// LoadDevID loads an existing DevID key under a freshly derived SRK parent.
+func (f *KeyFactory) LoadDevID(rw io.ReadWriter, pubBlob, privBlob []byte) (*KeyInfo, error) {
+	if len(pubBlob) == 0 || len(privBlob) == 0 {
+		return nil, fmt.Errorf("missing DevID blobs")
+	}
+	srk, err := f.CreateSRK(rw)
+	if err != nil {
+		return nil, err
+	}
+	defer tpm2.FlushContext(rw, srk.Handle)
+	auth := tpm2.AuthCommand{
+		Session:    tpm2.HandlePasswordSession,
+		Attributes: tpm2.AttrContinueSession,
+	}
+	pub, err := tpm2.DecodePublic(pubBlob)
+	if err != nil {
+		return nil, fmt.Errorf("decode DevID public: %w", err)
+	}
+	handle, _, err := tpm2.LoadUsingAuth(rw, srk.Handle, auth, pubBlob, privBlob)
+	if err != nil {
+		return nil, fmt.Errorf("Load DevID: %w", err)
+	}
+	return &KeyInfo{
+		Handle:      handle,
+		Template:    f.DevIDTemplate,
+		Public:      pub,
+		PublicBlob:  pubBlob,
+		PrivateBlob: privBlob,
+	}, nil
+}

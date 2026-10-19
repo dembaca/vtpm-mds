@@ -218,6 +218,12 @@ func (r *RequestResources) Activate(credentialBlob, secret []byte) ([]byte, erro
 
 // CreateSigningRequest builds a DevID signing request using the TPM.
 func CreateSigningRequest(rw io.ReadWriter, factory *KeyFactory, platformCN string) (*SigningRequest, *RequestResources, error) {
+	return CreateSigningRequestWithDevID(rw, factory, platformCN, nil, nil)
+}
+
+// CreateSigningRequestWithDevID is CreateSigningRequest, but when pubBlob and
+// privBlob are both non-empty it loads that DevID key instead of creating one.
+func CreateSigningRequestWithDevID(rw io.ReadWriter, factory *KeyFactory, platformCN string, pubBlob, privBlob []byte) (*SigningRequest, *RequestResources, error) {
 	if factory == nil {
 		factory = DefaultKeyFactory()
 	}
@@ -255,9 +261,17 @@ func CreateSigningRequest(rw io.ReadWriter, factory *KeyFactory, platformCN stri
 	}
 	res.Attestation = ak
 
-	devID, err := factory.CreateDevID(rw)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create DevID: %w", err)
+	var devID *KeyInfo
+	if len(pubBlob) > 0 && len(privBlob) > 0 {
+		devID, err = factory.LoadDevID(rw, pubBlob, privBlob)
+		if err != nil {
+			return nil, nil, fmt.Errorf("load existing DevID: %w", err)
+		}
+	} else {
+		devID, err = factory.CreateDevID(rw)
+		if err != nil {
+			return nil, nil, fmt.Errorf("create DevID: %w", err)
+		}
 	}
 	res.DevID = devID
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily guest LDevID renewal check
+Documentation=man:devid-enroll(1)
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=devid-enroll.service
+
+[Install]
+WantedBy=timers.target
