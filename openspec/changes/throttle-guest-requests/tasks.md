@@ -87,10 +87,19 @@ merged with it) before touching `server.go`.
 - [x] 3.4 Say what was not verified: Hogan/VM 399 under the new package,
       a second *bound* guest reading identity keys, and tuning the constants
       in production
-      **Not verified:** the **bound** quiet-peer case (identity keys while
-      another peer floods) — hogan measures that with reversed roles (host
-      floods, VM 399 stays quiet) after rebase behind #49/#52; package on
-      Hogan; constant tuning; full SPIRE enroll under budget.
+      **Hogan RESULT, 2026-10-19** (thread `499bsdni8pbbpjgfgkabkdq1gw`,
+      package `0.2.0+git20261018.02dadca5c027`, Head `02dadca`): host
+      `169.254.169.1` floods `169.254.169.1:80`, **bound** quiet peer VM 399
+      (`169.254.169.10`) stays served — token PUT **200** + `instance-id`
+      **200** `i-399` during host token flood (30×200 then 429,
+      `Retry-After: 60`); during GET/`/health`/20-conn floods VM 399 stays
+      200/200; conn over-cap 16×200 + 4×`CLOSED_EMPTY`. Journal one line
+      each `kind=token|request|conn`.
+      **Not verified (hogan-d3e6):** a *bound* flooding peer (VM 399 floods,
+      host quiet); enrol under budget on hogan; long-running load/memory;
+      tuning the constants. **Note (out of #50 scope):** after `dpkg -i`
+      the unit stayed stopped until manual `systemctl start` (~43 s IMDS
+      down) — postinst restart is a separate packaging decision.
 
 ## 4. Archive
 
