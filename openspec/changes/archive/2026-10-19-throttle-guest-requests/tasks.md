@@ -10,9 +10,11 @@ merged with it) before touching `server.go`.
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer, optional** — overrule or accept D-a to D-l in
+- [x] 1.1 **Maintainer, optional** — overrule or accept D-a to D-l in
       `design.md` (defaults in D-c and "no config keys" in D-f are the ones
       most likely to move), and verify the outcome is recorded there
+      **Not overruled:** the maintainer merged #50 on 2026-10-19 (`acd2d27`)
+      without a change to D-a to D-l, so they stand as recorded.
 - [x] 1.1b **Coordinator** — D-l peer-map cleanup recorded after ACK note
       **Done, 2026-10-18:** D-l + operability scenario + scrub implementation.
 - [x] 1.2 **Coordinator** — ACK the record and the deltas on the bus before
@@ -103,10 +105,13 @@ merged with it) before touching `server.go`.
 
 ## 4. Archive
 
-- [ ] 4.1 Archive with `openspec archive`, mention the throttle defaults in
+- [x] 4.1 Archive with `openspec archive`, mention the throttle defaults in
       `AGENTS.md` or `README.md` only if the Impact of a packaging/docs
       touch is already accepted, and verify
       `openspec validate --all --strict` is still clean
+      Done 2026-10-19 from `main` at `acd2d27`: see the archive commit for
+      the delta counts and the validation result. `AGENTS.md` records the
+      archive; `README.md` is untouched.
 
 ## 5. Pre-review fixes (Fable, 2026-10-18)
 
