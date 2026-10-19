@@ -32,13 +32,18 @@ probes which only check the status code keep working. Requests to `/health`
 with any other method SHALL fall through to the catch-all handler and receive
 `404`.
 
-#### Scenario: Unauthenticated health check when ready
+#### Scenario: Unauthenticated health check
 
 - **GIVEN** the service has loaded an inventory and DevID CA material is
   readable (or attestation is disabled)
 - **WHEN** a caller sends `GET /health` with no session token
 - **THEN** the service responds `200` with `Content-Type: application/json`
   and a body whose `status` is `ok` and whose `inventory_loaded` is true
+
+#### Scenario: Health check with the wrong method
+
+- **WHEN** a caller sends `POST /health`
+- **THEN** the service responds `404`
 
 #### Scenario: Health reports degraded after a failed reload
 
@@ -47,11 +52,6 @@ with any other method SHALL fall through to the catch-all handler and receive
 - **THEN** the service responds `200` with `status` `degraded`,
   `inventory_loaded` still true, `vm_count` unchanged from before the failed
   reload, and `last_error` set to a short class string with no path in it
-
-#### Scenario: Health check with the wrong method
-
-- **WHEN** a caller sends `POST /health`
-- **THEN** the service responds `404`
 
 #### Scenario: Health body does not leak paths
 
