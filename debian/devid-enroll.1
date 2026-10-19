@@ -33,7 +33,10 @@ Output directory (default
 .IR /var/lib/vtpm-mds/devid ).
 .TP
 .BI \-cn " name"
-Optional certificate Common Name.
+Common Name to put into the platform identity of the signing request.
+The service ignores it: the issued certificate's subject is always
+.BI CN= vmid
+and nothing else.
 .TP
 .B \-version
 Print the package/build version and exit.

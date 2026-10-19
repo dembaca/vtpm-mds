@@ -201,11 +201,11 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 	}
 }
 
-// TestGuestSuppliedCommonNameIsIgnored: platform identity CN other-name is
-// ignored; the authenticated VM ID becomes the certificate CN.
+// TestGuestSuppliedCommonNameIsIgnored: platform identity CN other-name and
+// organization are ignored; the authenticated VM ID is the whole subject.
 func TestGuestSuppliedCommonNameIsIgnored(t *testing.T) {
 	ca := mustParseTestCA(t)
-	sr := mustMinimalSigningRequest(t, pkix.Name{CommonName: "other-name"})
+	sr := mustMinimalSigningRequest(t, pkix.Name{CommonName: "other-name", Organization: []string{"Example GmbH"}})
 
 	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
 	if err != nil {
@@ -259,26 +259,44 @@ func TestIssueDevIDVMIDWhenNoPlatformIdentity(t *testing.T) {
 	}
 }
 
-func TestIssueDevIDPreservesOrganizationAndOU(t *testing.T) {
+func TestIssueDevIDDropsPlatformIdentityAttributes(t *testing.T) {
 	ca := mustParseTestCA(t)
 	sr := mustMinimalSigningRequest(t, pkix.Name{
 		CommonName:         "other-name",
 		Organization:       []string{"Example GmbH"},
 		OrganizationalUnit: []string{"lab"},
+		Country:            []string{"DE"},
 	})
 
 	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("IssueDevID: %v", err)
 	}
-	if cert.Subject.CommonName != "100" {
-		t.Fatalf("CN=%q want 100", cert.Subject.CommonName)
+	rdns := cert.Subject.ToRDNSequence()
+	if len(rdns) != 1 || len(rdns[0]) != 1 || cert.Subject.String() != "CN=100" {
+		t.Fatalf("subject=%q rdns=%v want exactly CN=100", cert.Subject.String(), rdns)
 	}
-	if len(cert.Subject.Organization) != 1 || cert.Subject.Organization[0] != "Example GmbH" {
-		t.Fatalf("Organization=%v", cert.Subject.Organization)
+	if len(cert.Subject.Names) != 1 {
+		t.Fatalf("raw subject attributes=%v want only CN", cert.Subject.Names)
 	}
-	if len(cert.Subject.OrganizationalUnit) != 1 || cert.Subject.OrganizationalUnit[0] != "lab" {
-		t.Fatalf("OrganizationalUnit=%v", cert.Subject.OrganizationalUnit)
+}
+
+func TestIssueDevIDSerialIgnoresPlatformIdentity(t *testing.T) {
+	ca := mustParseTestCA(t)
+	sr := mustMinimalSigningRequest(t, pkix.Name{Organization: []string{"Example GmbH"}})
+	now := time.Now().UTC()
+
+	withOrg, err := ca.IssueDevID(sr, "100", now)
+	if err != nil {
+		t.Fatalf("IssueDevID: %v", err)
+	}
+	sr.PlatformIdentity = nil
+	without, err := ca.IssueDevID(sr, "100", now)
+	if err != nil {
+		t.Fatalf("IssueDevID: %v", err)
+	}
+	if withOrg.SerialNumber.Cmp(without.SerialNumber) != 0 {
+		t.Fatalf("serial %x with platform identity, %x without", withOrg.SerialNumber, without.SerialNumber)
 	}
 }
 
