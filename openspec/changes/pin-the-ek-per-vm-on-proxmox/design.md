@@ -89,8 +89,10 @@ once a readable, stable host-side EK source exists for this deployment.
 - **Proxmox `macfilter` / firewall on VM 399** — E1(a), hogan read-only plan.
 - **Deriving the pin from swtpm state on the host** — alternative B above.
 - **HTTP or CLI to reset pins** — operator deletes the file.
-- **`debian/` postinst changes, `internal/server/server.go`, `AGENTS.md`,
-  root `README.md`** — coordinator / other assignees.
+- **`debian/` postinst changes, `AGENTS.md`, root `README.md`** —
+  coordinator / other assignees. (`loadDevIDEnroller` in
+  `internal/server/server.go` sets `PinDir` next to `SigningKeyPath` — the
+  only server.go touch; file-split vs #62 no longer applies after #62 merged.)
 - **CA lifetime, SPIRE eviction, intermediate hierarchy** — E2 explore.
 
 ## Risks

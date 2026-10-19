@@ -19,19 +19,29 @@ coordinator's assignment after dembaca's E1 decision. Files: `internal/devid/`
 
 ## 2. Implement
 
-- [ ] 2.1 Add pin store helpers (path, `O_EXCL` create, read) under
+- [x] 2.1 Add pin store helpers (path, `O_EXCL` create, read) under
       `internal/devid/`; verify unit tests: empty / present / bad perms /
       exclusive create race (exactly one pin).
-- [ ] 2.2 Enforce stored pin in `AuthenticateEnrollCaller` when inventory pin
+      `pin.go` + `TestReadStoredPinEmptyPresent`,
+      `TestCreateStoredPinExclusiveRace`,
+      `TestEnsurePinBeforeIssueUnwritable`.
+- [x] 2.2 Enforce stored pin in `AuthenticateEnrollCaller` when inventory pin
       is empty; verify `401` body `EK certificate does not match stored pin`
       vs inventory body when inventory pin is set; inventory wins over a
       conflicting store file.
-- [ ] 2.3 On `enroll/finish`, when no pin exists, `O_EXCL` write **before**
+      `TestAuthenticateStoredPin`.
+- [x] 2.3 On `enroll/finish`, when no pin exists, `O_EXCL` write **before**
       `IssueDevID`; verify unwritable dir → `500` and no PEM; happy path
       creates `/var/lib/…/ek-pins/<vmid>`; reset (delete file → new EK
       enrolls).
-- [ ] 2.4 Run `go test ./...`, `go vet ./...`, and
+      `TestFinishWritesPinBeforeIssue`, `TestFinishUnwritablePinDirNoPEM`,
+      `TestEnsurePinResetAllowsNewEK`; HTTP maps `ErrPinStore` → 500.
+      `PinDir` from `filepath.Dir(SigningKeyPath)/ek-pins` in
+      `loadDevIDEnroller` (needed after #62 merged onto main).
+- [x] 2.4 Run `go test ./...`, `go vet ./...`, and
       `openspec validate --all --strict`; verify all green.
+      `go vet ./...` clean; `go test -count=1 ./...` all ok;
+      `openspec validate --all --strict` 8 passed.
 
 ## 3. Verify in the lab
 

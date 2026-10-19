@@ -5,9 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"log"
 	"net/http"
+
+	"github.com/dembaca/vtpm-mds/internal/inventory" // pragma: allowlist secret
 )
 
 // EnrollStartRequest is the JSON body for POST /latest/devid/enroll/start.
@@ -44,6 +47,9 @@ func writeEnrollAuthError(w http.ResponseWriter, err error) {
 	code := http.StatusBadRequest
 	if isUnauthorized(err) {
 		code = http.StatusUnauthorized
+	}
+	if errors.Is(err, ErrPinStore) {
+		code = http.StatusInternalServerError
 	}
 	log.Printf("devid enroll auth: %v", err)
 	http.Error(w, err.Error(), code)
@@ -115,13 +121,25 @@ func (e *Enroller) HandleFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ekFP := EKFingerprint(ekCert)
+	inventoryPin := ""
+	if vm := inventory.GetVMConfigFromRequest(r); vm != nil {
+		inventoryPin = vm.EKSHA256
+	}
 
-	pemBytes, err := e.Finish(req.SessionID, resp, vmid, ekFP)
+	pemBytes, err := e.Finish(req.SessionID, resp, vmid, ekFP, inventoryPin)
 	if err != nil {
 		log.Printf("devid enroll/finish: %v", err)
 		status := http.StatusBadRequest
 		if err.Error() == "VM identity does not match enroll session" ||
-			err.Error() == "EK certificate does not match enroll session" {
+			err.Error() == "EK certificate does not match enroll session" ||
+			err.Error() == errStoredPinMismatch ||
+			err.Error() == errInventoryPinMismatch {
+			status = http.StatusUnauthorized
+		}
+		if errors.Is(err, ErrPinStore) {
+			status = http.StatusInternalServerError
+		}
+		if isUnauthorized(err) {
 			status = http.StatusUnauthorized
 		}
 		http.Error(w, err.Error(), status)

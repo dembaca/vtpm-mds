@@ -645,7 +645,12 @@ func loadDevIDEnroller(cfg *config.Config) (*devid.Enroller, error) {
 		log.Printf("Warning: ek_ca_chain empty; DevID EK verification will fail")
 	}
 
-	return devid.NewEnroller(ca, ekRoots, nil), nil
+	enroller := devid.NewEnroller(ca, ekRoots, nil)
+	// TOFU EK pins live next to other state under /var/lib/<package>/ek-pins.
+	if cfg.MDS.SigningKeyPath != "" {
+		enroller.PinDir = filepath.Join(filepath.Dir(cfg.MDS.SigningKeyPath), "ek-pins")
+	}
+	return enroller, nil
 }
 
 // vmConfigMiddleware extracts VM config from request context (already set by connContext)
