@@ -11,15 +11,12 @@ ignored, so a mistyped field looks like a healthy default.
 
 ## What Changes
 
-- **`GET /health` reports readiness detail** that is safe for any caller on the
-  IMDS bridge: whether inventory is loaded, how many VMs it holds, whether the
-  DevID CA material is readable when attestation is enabled, when the inventory
-  last reloaded successfully, and a short last-error class when the last load
-  or reload failed. It does not expose paths, MACs, VM names, peer addresses,
-  or raw error strings.
-- **A non-ready service still answers `200`**, with `"status":"degraded"` (or
-  `"ok"` when ready), so existing probes that only check the status code keep
-  working while the body tells the truth.
+- **`GET /health` reports readiness.** Every caller gets HTTP `200` and a
+  `"status"` of `"ok"` or `"degraded"`. **Detail** (inventory loaded, VM count,
+  DevID CA readable when attestation is on, last reload, last-error class) is
+  only for callers **bound to no VM** (host/unbound). A bound guest gets only
+  `{"status":…}`. Bodies never expose paths, MACs, VM names, peers, or raw
+  errors.
 - **BREAKING** Service config YAML and YAML inventory are decoded with unknown
   fields rejected. A typo or unknown key fails start (config) or fails the load
   / reload (inventory); a failed reload keeps the previously loaded inventory.

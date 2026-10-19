@@ -8,6 +8,10 @@
 - [ ] 1.2 `inventory.LoadYAML` decodes with unknown fields rejected
       **Verify:** unit test: VM entry with unknown key → error; existing
       fixtures still load. `go test ./internal/inventory`
+- [ ] 1.3 Strict-decode the config **shipped** in `debian/config.yaml` (and
+      root `config.yaml` if present as the example operators copy)
+      **Verify:** unit test in `internal/config` that `Load`s those files
+      successfully under KnownFields
 
 ## 2. Readiness on `/health`
 
@@ -15,13 +19,11 @@
       last error class on the server; update on `RefreshVMConfigCache`
       success/failure (failed refresh MUST NOT clear the cache)
       **Verify:** unit test around refresh success then failing reload
-- [ ] 2.2 `GET /health` returns the JSON object from the instance-metadata
-      delta (`status`, `inventory_loaded`, `vm_count`, `devid_ca_readable`,
-      `last_reload`, `last_error`); no paths in the body; HTTP 200 for both
-      `ok` and `degraded`
-      **Verify:** `go test ./internal/server` (and/or `./imds`) covering ready,
-      degraded-after-failed-reload, and attestation-disabled →
-      `devid_ca_readable` true
+- [ ] 2.2 `GET /health`: bound guest → only `{"status":…}`; unbound → full
+      detail per delta; omit `devid_ca_readable` when attestation is off;
+      cache CA readability ~5 s (D-f); HTTP 200 for ok and degraded; no paths
+      **Verify:** `go test ./internal/server` covering bound vs unbound, ready,
+      degraded-after-failed-reload, attestation-off omits field
 - [ ] 2.3 Update any tests that asserted the exact body `{"status":"ok"}`
       **Verify:** `go test ./...`
 
@@ -32,17 +34,26 @@
 
 ## 4. Lab (YAML half)
 
-- [ ] 4.1 Cloud lab with `inventory_path`: start on a good lab YAML →
-      `GET /health` shows `status=ok`, `inventory_loaded=true`, `vm_count` ≥ 1
-      **Verify:** paste the JSON body and commit SHA in the RESULT
+- [ ] 4.1 Cloud lab with `inventory_path`: unbound `GET /health` shows
+      `status=ok`, `inventory_loaded=true`, `vm_count` ≥ 1; bound guest
+      (guest100) gets only `status`
+      **Verify:** paste both JSON bodies and commit SHA in the RESULT
 - [ ] 4.2 Replace inventory with a file that has an unknown key; SIGHUP →
-      reload fails; previous `vm_count` retained; `status=degraded`;
-      `last_error` set; bound guest still gets `instance-id`
+      reload fails; previous `vm_count` retained; unbound `status=degraded`;
+      bound guest still gets `instance-id`
       **Verify:** health JSON + one guest `instance-id` 200
-- [ ] 4.3 Say what was not verified: Proxmox inventory path, hogan, path-unit
-      reload, postinst restart
+- [ ] 4.3 Say what was not verified: Proxmox inventory path, path-unit reload,
+      postinst restart, removing dead config keys
 
-## 5. Archive
+## 5. Hogan (strict config before upgrade)
 
-- [ ] 5.1 After merge, archive with the coordinator (no `AGENTS.md` / root
+- [ ] 5.1 On hogan, **before** installing the new package: confirm the live
+      `/etc/…/config.yaml` strict-decodes with this change's `config.Load`
+      (or an equivalent decode of the same schema). If it fails, stop and
+      report — do not install.
+      **Verify:** command output + path; then install only if green
+
+## 6. Archive
+
+- [ ] 6.1 After merge, archive with the coordinator (no `AGENTS.md` / root
       `README.md` edits from this agent)
