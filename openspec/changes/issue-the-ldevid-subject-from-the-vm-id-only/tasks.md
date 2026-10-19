@@ -40,16 +40,19 @@ change directory. **Not** `cmd/devid-enroll` code, other `debian/` files,
 
 ## 3. Verify
 
-- [ ] 3.1 Lab: enrol a guest whose request carries `O`/`OU` (a test client or a
+- [x] 3.1 Lab: enrol a guest whose request carries `O`/`OU` (a test client or a
       patched request) and show with `openssl x509 -noout -subject` that the
       certificate reads `subject=CN=<vmid>`; SPIRE `1.14.0` still attests.
       **Subject half done, 2026-10-19 20:05, cloud lab (`agent-cursor-vtpm-22e0`)
       against `3e102c3`:** a request carrying `O=Example GmbH`, `OU=lab`,
       `CN=other-name` got a certificate whose
       `openssl x509 -noout -subject -nameopt RFC2253` is `CN=100` and nothing
-      else (`/mnt/shared/devid-out-70-oo/devid.crt.pem` on guest100). SPIRE
-      attestation with that certificate was not run in this pass; the box stays
-      open until it is.
+      else (`/mnt/shared/devid-out-70-oo/devid.crt.pem` on guest100). At 20:07
+      the same PEM and blobs were installed under `/opt/spire/conf/agent/`,
+      `agent-data.json` cleared and the agent restarted: SPIRE `1.14.0` logged
+      `Node attestation was successful`, `reattestable=true`, agent ID
+      `…/tpm_devid/6c5253955e5386ca87bd53d9b4e3f794d980a85f` (the SHA-1 of that
+      PEM's DER).
 - [ ] 3.2 hogan: after the install, enrol VM 399 into a scratch directory and
       show the subject is `CN=399`; SPIRE's material under
       `/var/lib/spire/agent/` unchanged.
