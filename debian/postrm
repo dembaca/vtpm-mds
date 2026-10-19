@@ -5,8 +5,8 @@ case "$1" in
     remove)
         # Without the binder its table would stay, frozen at the guests of
         # the moment (bind-callers-to-their-bridge-port D-h).
-        if [ -x /usr/sbin/nft ]; then
-            /usr/sbin/nft delete table bridge vtpm_mds_bind >/dev/null 2>&1 || true
+        if command -v nft >/dev/null 2>&1; then
+            nft delete table bridge vtpm_mds_bind >/dev/null 2>&1 || true
         fi
         ;;
     purge)
