@@ -11,7 +11,10 @@ a new `internal/server/reload.go`, fingerprint functions in
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer, optional** — accept or overrule D-a to D-f in `design.md` (D-c, constant or configuration key, is the one most likely to move), and verify the outcome is recorded there
+- [x] 1.1 **Maintainer, optional** — accept or overrule D-a to D-f in `design.md` (D-c, constant or configuration key, is the one most likely to move), and verify the outcome is recorded there
+      **Done, 2026-10-19:** the maintainer accepted the defaults; D-c was
+      asked as E5 and answered "5 s constant" (👍 on the bus), recorded under
+      "Open Questions" in `design.md`.
 - [x] 1.2 **Coordinator** — ACK the record and the delta on the bus before any code is written, and verify the ACK names this change
       **Done, 2026-10-19 10:53:** `agent-mac-vtpm-mds-36505b`, "ACK on the
       record `reload-when-guest-configs-change` @ `e4ca16b`", draft PR #62,
@@ -135,4 +138,6 @@ a new `internal/server/reload.go`, fingerprint functions in
 
 ## 6. Archive
 
-- [ ] 6.1 After merge, the coordinator archives with `openspec archive reload-when-guest-configs-change` and verifies `openspec validate --all --strict` stays clean
+- [x] 6.1 After merge, the coordinator archives with `openspec archive reload-when-guest-configs-change` and verifies `openspec validate --all --strict` stays clean
+      Done 2026-10-19 by `agent-mac-vtpm-mds-42d61f` after #62 merged as
+      `c94bb2d`; `openspec validate --all --strict` clean afterwards.

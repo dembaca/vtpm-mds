@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-19
 
-None. Five were archived on 2026-10-17, seven on 2026-10-18 and three on 2026-10-19; the first two in this order:
+None. Five were archived on 2026-10-17, seven on 2026-10-18 and four on 2026-10-19; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -318,6 +318,27 @@ upgrade while stopped stays `inactive`; first install in a lab guest `enabled`
 and `inactive`. hogan runs `0.2.0+git20261019.27d0db6e0a7c`. Not verified: a
 refused restart, the `DPKG_ROOT` guard.
 
+Reload on new VMs followed as the fourth archive of 2026-10-19:
+`openspec/changes/archive/2026-10-19-reload-when-guest-configs-change/`
+(PR #62). The daemon checks its inventory source every **5 s** (a constant,
+the maintainer's E5) and reloads through the `SIGHUP` path when a SHA-256 over
+the `local` link target and the names and contents of exactly the files the
+loader reads has changed; an
+unchanged source logs nothing, a failing load logs once per change and keeps
+the previous inventory, and `SIGHUP` stays for an immediate reload. **A
+`.path` unit cannot do this on a cluster:** inotify on `/etc/pve/nodes/*`
+saw no event for writes that arrived from another node (measured on
+`lrm_status`), and a migration or HA recovery writes a guest config the same
+way. Verified on hogan against
+`0.2.0+git20261019.90a2a368116a`: a tag set with `qm set` reached VM 399
+within the interval and a write made **on holger** into
+`nodes/hogan/qemu-server/399.conf` was picked up, both with the same PID; and
+in the lab for the YAML backend (new VM in ~1.5 s, an unknown key gives
+`degraded` with the old inventory kept). **Rebase onto current `main` before
+every install on hogan.** A build of this change cut from a base without
+`restart-the-service-on-upgrade` brought the old `preinst` stop back and took
+the IMDS down for 16.6 s; rebased, the longest gap was 0.201 s.
+
 Honest readiness followed as the second archive of 2026-10-19:
 `openspec/changes/archive/2026-10-19-report-readiness-honestly/` (PR #61).
 `GET /health` still always answers `200`, but `status` is `ok` only when the
@@ -358,7 +379,7 @@ readable SPIFFE ID comes from a SPIRE node alias on
 certificate). Found on the way: one typo in the YAML inventory empties the
 whole inventory while the service reports healthy; it is on the
 production-readiness list of 2026-10-18, which the maintainer wants worked off
-before production (debug logging, unit hardening, restart on upgrade (done), reload on new VMs, issuance
+before production (debug logging, unit hardening, restart on upgrade (done), reload on new VMs (done), issuance
 log, health detail (done), the connection-map leak (done), CA operation, throttling (done), and MAC
 binding on `vmbr_imds` with an EK pin per VM on Proxmox).
 
