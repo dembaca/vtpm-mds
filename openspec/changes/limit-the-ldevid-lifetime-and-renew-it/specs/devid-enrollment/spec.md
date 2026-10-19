@@ -2,12 +2,12 @@
 
 ### Requirement: Issue A Non-Expiring LDevID Bound To The Authenticated VM
 
-**Reason:** E2.3 (2026-10-19) replaces far-future `notAfter`
+**Reason**: E2.3 (2026-10-19) replaces far-future `notAfter`
 (`9999-12-31T23:59:59Z`) with a configurable lifetime and guest renewal. The
 scenario `Certificate shape` that required that far-future date cannot be
 carried forward.
 
-**Migration:** Already-issued non-expiring certificates remain valid until an
+**Migration**: Already-issued non-expiring certificates remain valid until an
 operator rotates them (the service still publishes no CRL). After this change
 ships, the next successful enroll or guest renew writes a time-limited
 certificate. SPIRE registration entries keyed on
