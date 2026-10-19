@@ -1,35 +1,33 @@
 ## REMOVED Requirements
 
-### Requirement: Issue A Non-Expiring LDevID Bound To The Authenticated VM
+### Requirement: Issue A Non-Expiring LDevID Whose Subject Is Only The VM ID
 
-**Reason**: E2.3 (2026-10-19) replaces far-future `notAfter`
-(`9999-12-31T23:59:59Z`) with a configurable lifetime and guest renewal. The
-scenario `Certificate shape` that required that far-future date cannot be
-carried forward.
+**Reason**: This is the post-#70 (`issue-the-ldevid-subject-from-the-vm-id-only`)
+issuance requirement. E2.3 replaces far-future `notAfter` with a configurable
+lifetime, changes serial derivation so renewals are unique, and adds guest
+renewal. The scenario `Certificate shape` that required
+`9999-12-31T23:59:59Z` and the serial sentence that promised the same serial
+for the same key cannot be carried forward.
 
-**Migration**: Already-issued non-expiring certificates remain valid until an
-operator rotates them (the service still publishes no CRL). After this change
-ships, the next successful enroll or guest renew writes a time-limited
-certificate. SPIRE registration entries keyed on
-`…/tpm_devid/<fingerprint>` must be re-keyed to `tpm_devid:subject:cn:<vmid>`
-(or the previous agent evicted) because each new certificate gets a new
-fingerprint. Replaced by `Issue A Time-Limited LDevID Bound To The
-Authenticated VM`.
+**Migration**: Apply only after #70 has been archived into the living spec.
+Already-issued non-expiring certificates remain valid until re-issued (no
+CRL). Replaced by `Issue A Time-Limited LDevID Whose Subject Is Only The VM
+ID`. SPIRE entries keyed on `…/tpm_devid/<fingerprint>` must move to
+`tpm_devid:subject:cn:<vmid>` (or the old agent must be evicted) because each
+new certificate gets a new fingerprint. Operators clearing a renewed guest's
+SPIRE agent SVID cache is required for the new LDevID to be attested.
 
 ## ADDED Requirements
 
-### Requirement: Issue A Time-Limited LDevID Bound To The Authenticated VM
+### Requirement: Issue A Time-Limited LDevID Whose Subject Is Only The VM ID
 
 On a successful finish the service SHALL sign a certificate with the DevID CA
 containing:
 
 - the DevID public key from the signing request as the certificate public key;
-- a subject whose common name is the authenticated VM ID bound to the enroll
-  session. A common name carried in the signing request's platform identity
-  SHALL be ignored; the guest SHALL NOT be able to influence the common name of
-  the certificate it receives. The remaining relative distinguished names of
-  the platform identity SHALL be carried into the subject unchanged, because
-  they assert no identity the service has established;
+- a subject consisting of exactly one attribute, the common name, set to the
+  authenticated VM ID bound to the enroll session. Nothing from the signing
+  request's platform identity SHALL be carried into the subject;
 - `notBefore` set to the time of the finish call and `notAfter` set to
   `notBefore` plus the configured LDevID lifetime (`mds.devid_lifetime`;
   default ninety days when the key is omitted);
@@ -43,8 +41,9 @@ containing:
   is always the common name, the subject is never empty, so this extension
   SHALL NOT be marked critical;
 - a serial number derived deterministically from the CA certificate, the
-  subject and the public key, so re-enrolling the same key with the same
-  subject yields the same serial.
+  subject, the public key, and the certificate's `notBefore` and `notAfter`,
+  so two issuances that differ in validity receive different serials even when
+  the DevID key and subject are unchanged.
 
 The certificate SHALL be returned PEM-encoded in `devid_cert_pem`. The service
 SHALL NOT publish a revocation list or offer any other way to withdraw an
@@ -64,13 +63,13 @@ issued LDevID.
 - **WHEN** its signing request carries no platform identity
 - **THEN** the issued certificate's subject is `CN=100`
 
-#### Scenario: Other platform identity attributes survive
+#### Scenario: Other platform identity attributes are dropped
 
 - **GIVEN** an authenticated caller identified as VM `100`
 - **WHEN** its signing request carries a platform identity with organization
-  `Example GmbH` and organizational unit `lab`
-- **THEN** the issued certificate's subject carries that organization and
-  organizational unit, and its common name is `100`
+  `Example GmbH`, organizational unit `lab` and common name `other-name`
+- **THEN** the enrolment succeeds and the issued certificate's subject is
+  exactly `CN=100`, with no organization and no organizational unit
 
 #### Scenario: Certificate shape under the default lifetime
 
@@ -86,6 +85,15 @@ issued LDevID.
 - **WHEN** a certificate is issued at time `T`
 - **THEN** its `notAfter` is `T` plus forty-eight hours
 
+#### Scenario: Renewal with the same key yields a new serial
+
+- **GIVEN** an authenticated caller identified as VM `100` that already holds
+  an LDevID for a DevID key
+- **WHEN** it successfully enrols again with that same DevID key at a later
+  `notBefore`
+- **THEN** the new certificate's serial number differs from the previous
+  certificate's serial
+
 #### Scenario: The TCG SAN is never critical
 
 - **WHEN** a certificate is issued to any authenticated caller
@@ -98,9 +106,10 @@ The service SHALL take the LDevID certificate lifetime from
 `mds.devid_lifetime`, parsed as a Go duration string. A configuration file that
 omits `devid_lifetime` SHALL take the built-in default of ninety days
 (`2160h`). A `mds.devid_lifetime` that is present but does not parse as a Go
-duration, or that parses to a duration that is not strictly positive, SHALL
-cause configuration load to fail with an error naming `devid_lifetime` and the
-offending value; the process SHALL exit non-zero and SHALL NOT start serving.
+duration, that parses to a duration that is not strictly positive, or that is
+greater than one year (`8760h`), SHALL cause configuration load to fail with
+an error naming `devid_lifetime` and the offending value; the process SHALL
+exit non-zero and SHALL NOT start serving.
 
 #### Scenario: Default when omitted
 
@@ -108,10 +117,10 @@ offending value; the process SHALL exit non-zero and SHALL NOT start serving.
 - **WHEN** the configuration is loaded
 - **THEN** the LDevID lifetime is ninety days
 
-#### Scenario: Unparseable lifetime is refused
+#### Scenario: Unparseable or oversized lifetime is refused
 
 - **GIVEN** a configuration file whose `mds.devid_lifetime` is a value such as
-  `90` (no unit) or `0s`
+  `90` (no unit), `0s`, or `9000h`
 - **WHEN** the configuration is loaded
 - **THEN** it exits non-zero with an error naming `devid_lifetime` and the
   offending value
@@ -136,9 +145,13 @@ are missing or cannot be loaded, the client SHALL create a new DevID key as in
 a first enrollment.
 
 The guest package SHALL arrange that this check runs on every boot before the
-SPIRE agent starts, and at least once per day while the guest is up. A
-successful renew that replaced the certificate SHALL cause the SPIRE agent to
-re-attest with the new materials (for example by restarting the agent unit).
+SPIRE agent starts when that agent is installed, and at least once per day
+while the guest is up. It SHALL NOT require the SPIRE agent unit to be
+installed. When a renew replaces the certificate PEM, the guest SHALL clear
+the SPIRE agent's cached SVID under the agent data directory and then
+`try-restart` the SPIRE agent unit so the next start performs node attestation
+with the new LDevID; if the unit is absent or inactive, clearing and
+`try-restart` SHALL NOT fail the renew.
 
 #### Scenario: Fresh certificate is left alone
 
@@ -155,15 +168,23 @@ re-attest with the new materials (for example by restarting the agent unit).
 - **THEN** enroll runs using the existing DevID public key and writes a new
   certificate PEM while keeping the same private and public blobs
 
+#### Scenario: Renew clears the SPIRE agent SVID cache
+
+- **GIVEN** a successful renew that changed the certificate PEM and a SPIRE
+  agent data directory with a cached agent SVID
+- **WHEN** the renew finishes
+- **THEN** that cached agent SVID is removed and `try-restart` is attempted on
+  the SPIRE agent unit
+
 #### Scenario: Missing certificate enrolls
 
 - **GIVEN** no certificate at the output path
 - **WHEN** the guest renewal check runs on boot
 - **THEN** a full enrollment runs and materials are written before the SPIRE
-  agent starts
+  agent starts if that unit is enabled
 
-#### Scenario: Boot order
+#### Scenario: Guest without SPIRE still renews
 
-- **GIVEN** the guest package's renewal oneshot and a SPIRE agent unit
-- **WHEN** the guest boots
-- **THEN** the renewal oneshot finishes before the SPIRE agent starts
+- **GIVEN** a guest with no `spire-agent` unit installed
+- **WHEN** the renewal oneshot runs and a renew is due
+- **THEN** enrollment succeeds and the oneshot exits successfully

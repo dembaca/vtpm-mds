@@ -3,141 +3,142 @@
 ## Context
 
 Today `CA.IssueDevID` always sets `NotAfter: NoExpiration`
-(`9999-12-31T23:59:59Z`). The living requirement "Issue A Non-Expiring LDevID
-Bound To The Authenticated VM" records that. E2.3 replaces it with a finite,
-configurable lifetime and a guest-side renew path.
+(`9999-12-31T23:59:59Z`). After #70 archives, the living issuance requirement
+is `Issue A Non-Expiring LDevID Whose Subject Is Only The VM ID` (CN-only).
+E2.3 replaces the far-future validity with a finite, configurable lifetime and
+a guest-side renew path.
 
-SPIRE `tpm_devid` (documented at tag `v1.14.0`) builds the agent SPIFFE ID as:
+SPIRE `tpm_devid` (tag `v1.14.0`) builds the agent SPIFFE ID as:
 
 ```text
 spiffe://<trust_domain>/spire/agent/tpm_devid/<fingerprint>
 ```
 
 where `<fingerprint>` is the **SHA-1 of the ASN.1 DER of the LDevID
-certificate** — not of the public key. Any new certificate therefore yields a
-new agent ID.
+certificate** — not of the public key. Server plugin sets `CanReattest: true`.
 
 ## Decisions
 
-### D-a. Lifetime config key and default
+### D-a. Lifetime config key, default, and upper bound
 
 - Key: `mds.devid_lifetime` (string).
 - Parse with `time.ParseDuration` (same family as `token_ttl`).
 - Default when omitted: `2160h` (90 × 24 hours).
-- Reject ≤ 0 and parse errors at `config.Load`.
-- Pass the duration into the CA (constructor or field); `IssueDevID` computes
+- Reject ≤ 0, unparseable values, and values **greater than `8760h` (one
+  calendar year of hours)** at `config.Load`. A year is already long for a
+  guest LDevID in this deployment; unbounded lifetimes recreate the defect
+  this change removes.
+- Pass the duration into the CA; `IssueDevID` computes
   `notAfter = notBefore.Add(lifetime)`.
 
 `time.ParseDuration` has no `d` unit; 90 days is spelled `2160h` in YAML. The
 packaged config comment states that.
 
-### D-b. SPIRE agent ID on renewal (lab + docs)
+### D-b. SPIRE agent ID and whether renew is visible (lab, SPIRE 1.14.0)
 
-**Finding (SPIRE 1.14.0 docs):** agent ID tracks the **certificate**
-fingerprint. Same TPM key + new cert ⇒ new ID. New key + new cert ⇒ new ID.
+**Docs:** agent ID = SHA-1(cert DER). Same TPM key + new cert ⇒ new ID.
 
-**Lab evidence (cloud lab, guest100 shared outputs, 2026-10-19):** four
-enrollments for `CN=100` produced four distinct SHA-1 cert fingerprints, e.g.
-`4307f45a…`, `bce76c54…`, `4e5306bf…`, `385a8974…`. Those runs also used
-different public keys because today's client always creates a new DevID key;
-the docs alone already settle the same-key case.
+**Lab evidence (guest100, 2026-10-19):**
 
-**Implication for registration:** prefer selectors
-`tpm_devid:subject:cn:<vmid>` (and issuer CN as needed). Do not bind workload
-entries to `…/tpm_devid/<fingerprint>` if renewals are expected.
+| Step | Result |
+|---|---|
+| Four prior enroll PEMs for `CN=100` | Distinct SHA-1 fingerprints (`4307f45a…`, `bce76c54…`, …) |
+| Clear `agent-data.json`, start agent | `Node attestation was successful` → `…/tpm_devid/4307f45a…`, `reattestable=true` |
+| Restart, **keep** SVID cache, same LDevID | `SVID loaded` for `…/4307f45a…` — **no** node attestation |
+| Swap LDevID files to `devid-out-65` (`bce76c54…`), keep SVID cache, restart | Still `SVID loaded` for **`…/4307f45a…`** (old ID); agent healthy — **LDevID not consulted** |
+| Clear SVID cache, restart with new LDevID | Attests as `…/tpm_devid/bce76c54…`; server `agent list` shows both IDs, `Can re-attest: true` |
+
+**Answers for the coordinator:**
+
+1. After a restart with a cached agent SVID, the agent **reuses the old agent
+   ID** and does not re-attest; the on-disk LDevID is ignored until attestation
+   runs.
+2. An expired LDevID therefore does **not** stop a running agent that already
+   holds an SVID (same code path as (1); not separately clock-skewed in the
+   lab). Lifetime only bites at **node attestation** time.
+3. Renew must **delete the agent SVID cache** (`agent-data.json` and key
+   material under the agent `data_dir`) before `try-restart`, so the next start
+   attests with the new certificate. `tpm_devid` is already reattestable
+   (`CanReattest: true` in server plugin and in lab `agent list`).
+
+**Risk for dembaca:** if a guest runs without clearing the SVID cache after
+renew, SPIRE keeps the old agent identity and never learns the new LDevID —
+finite lifetime would not enforce anything for that agent until the SVID is
+gone. The unit in this change clears the cache on cert change; operators who
+renew by hand must do the same.
+
+Registration should use `tpm_devid:subject:cn:<vmid>`, not the fingerprint
+path.
 
 ### D-c. Keep the DevID TPM key across renewals
 
 Because the agent ID changes whenever the certificate changes, regenerating
-the TPM key does **not** preserve SPIRE identity. Keeping the key:
+the TPM key does **not** preserve SPIRE identity. Keeping the key avoids extra
+TPM creates and still requires E2.4 cleanup for the previous agent SPIFFE ID.
+Generate a new key only when blobs are missing or cannot load under the SPIRE
+H-1 parent.
 
-- avoids an extra create under the SRK on every renew (less TPM traffic / DA
-  surface);
-- keeps proof-of-residency material continuous for the same key;
-- still requires the E2.4 cleanup for the previous agent SPIFFE ID.
+### D-d. When the guest renews, and SPIRE restart
 
-Generate a new key only when `devid.priv.blob` / `devid.pub.blob` are missing
-or fail to load under the SPIRE H-1 parent (existing enroll path).
-
-Renewal enroll: client presents the existing DevID public key in the signing
-request (same wire protocol as today). Server serial stays deterministic from
-CA + subject + public key; validity dates change, so the DER and fingerprint
-change.
-
-### D-d. When the guest renews
-
-Renew (call enroll, replace `devid.crt.pem`, leave blobs if key kept) when any
-of:
-
-1. no certificate file at the configured out path;
-2. certificate `notAfter` ≤ now (expired);
-3. `notAfter - now` < `(notAfter - notBefore) / 3` (less than one third of the
-   **certificate's own** lifetime remains).
-
-Using the cert's own validity interval (not the current config default) means
-a guest that was issued under a longer lifetime still renews on the one-third
-rule of that cert after a config shortening.
+Renew when any of: no cert; `notAfter` ≤ now; remaining lifetime `<` one third
+of `(notAfter - notBefore)` of **that** certificate.
 
 Order:
 
-1. `devid-enroll.service` oneshot (renew-or-skip) **before** `spire-agent.service`
-   (`Before=` / `Wants=` as appropriate; fail the oneshot only on enroll
-   errors, not on "still fresh").
-2. `devid-enroll.timer` daily (and `OnBootSec` covered by the oneshot).
-3. After a successful renew that changed the cert, restart `spire-agent` so it
-   re-attests with the new materials (document in unit; avoid restart loops if
-   unchanged).
+1. Oneshot **before** `spire-agent.service` (`Before=` / `Wants=` only — **not**
+   `Requires=` / `Requisite=`, so a guest without SPIRE still succeeds).
+2. Daily timer.
+3. If and only if the certificate PEM bytes changed: remove the SPIRE agent
+   SVID cache under the configured agent `data_dir`, then
+   `systemctl try-restart spire-agent.service` (no failure if the unit is
+   absent or inactive).
 
-Default out path remains the path SPIRE is configured to read (today's
-package/docs: under `/var/lib/spire/agent/` or the packaged default — align
-the unit's `-out` with the agent conf shipped or documented for the lab).
+### D-e. Stale SPIRE agents (E2.4) — man page
 
-### D-e. Stale SPIRE agents (E2.4) — document only
+Verified on SPIRE **1.14.0** (`/opt/spire/bin/spire-server`):
 
-Verified on this host's SPIRE **1.14.0** binary (`/opt/spire/bin/spire-server`):
-
-| Command | Flags (1.14.0) |
+| Command | Flags |
 |---|---|
-| `agent evict` | `-spiffeID` (required), `-socketPath`, `-output` |
+| `agent evict` | `-spiffeID`, `-socketPath`, `-output` |
 | `agent purge` | `-expiredFor` (default `720h`), `-dryRun`, `-socketPath`, `-output` |
 
-Beta playbook (non-goal to automate):
-
-- On VM delete or EK-pin delete: `spire-server agent evict -spiffeID
-  spiffe://<td>/spire/agent/tpm_devid/<old-fingerprint>`.
-- Periodic garbage collection of agents whose SVID expired:
-  `spire-server agent purge -expiredFor 720h` (optionally `-dryRun` first).
-
-No reconciler in this change.
+Document the beta playbook in the **`devid-enroll` man page** (this change's
+packaging task). The coordinator adds a short pointer in the root README when
+archiving. No reconciler.
 
 ### D-f. Packaging surface
 
-**BREAKING relative to today's packaging claim:** `debian-packaging` currently
-requires that `devid-enroll` install only the binary and man page. This change
-adds:
+`devid-enroll` gains `devid-enroll.service` (oneshot), `devid-enroll.timer`,
+timer enable in `postinst`, man page updates. Host package: config key only.
 
-- `devid-enroll.service` (oneshot),
-- `devid-enroll.timer`,
-- enable the timer in the guest package `postinst` (or equivalent),
+### D-g. Serial includes validity (RFC 5280 §4.1.2.2)
 
-and updates the man page for renew flags / behaviour. Host package untouched
-except `mds.devid_lifetime` in the example config.
+`uniqueSerial` today hashes CA DER + subject + public key only. With D-c, a
+renew would mint a **different** certificate with the **same** serial under
+the same CA — forbidden by RFC 5280 §4.1.2.2, and `devid issued serial=` would
+stop identifying a single issuance.
+
+**Decision:** include `notBefore` and `notAfter` (UTC, encoded stably) in the
+serial hash. Same key + same subject + same validity window still collide
+(acceptable); a renew with a new `notBefore` gets a new serial. Spec scenario:
+"renewal with the same key yields a new serial".
+
+(Alternative considered: 128-bit random serial. Rejected for this record so
+logs stay correlatable for a single issuance without a side store; revisit if
+hashing validity proves awkward.)
 
 ## Non-goals
 
 - Intermediate CA hierarchy / per-cluster CA.
-- Stripping guest subject attributes (E2.5).
 - Automatic eviction/purge reconciler.
 - Changing enroll HTTP paths or JSON fields.
-- Making LDevID lifetime visible through IMDS metadata keys.
+- Making LDevID lifetime an IMDS metadata key.
+- Editing root `README.md` in this PR (coordinator at archive).
 
 ## Risks
 
-- **Registration entries keyed by fingerprint** break on first renew — call
-  out in Impact and operator notes; prefer CN selectors before enabling
-  renew in production.
-- **Agent ID churn** leaves stale agents until evict/purge — acceptable for
-  beta per E2.4; monitor `agent list` after renew tests.
-- **Daily timer + boot oneshot** must not stampede the enroll rate limit
-  (throttle change): one renew per guest when due is enough; "still fresh"
-  is a no-op without an enroll call.
+- Fingerprint-keyed registration entries break on renew — use CN selectors.
+- Forgetting to clear the agent SVID cache leaves SPIRE on the old identity
+  (lab A); the unit must clear it; call out for dembaca if operators renew
+  manually.
+- Apply-order clash with #70 if both REMOVED the pre-#70 title — see proposal.
