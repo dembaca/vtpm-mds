@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-19
 
-None. Five were archived on 2026-10-17, seven on 2026-10-18 and six on 2026-10-19; the first two in this order:
+None. Five were archived on 2026-10-17, seven on 2026-10-18 and seven on 2026-10-19; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -382,6 +382,23 @@ forged ARP sender dropped with counters, VM 399 still `200`; the table back
 hand-made VM 399 block into the same table, so two writers own it until that
 block is removed. Not verified: live migration, hot-plug, LXC, the StartLimit
 path, `postrm remove`.
+
+The LDevID subject from the VM ID alone followed as the seventh archive of
+2026-10-19:
+`openspec/changes/archive/2026-10-19-issue-the-ldevid-subject-from-the-vm-id-only/`
+(PR #70, the maintainer's E2.5). `IssueDevID` builds the subject as
+`CN=<vmid>` and nothing else; `O`, `OU`, `C` or any other attribute in the
+request's platform identity is dropped silently, and the serial no longer
+depends on it. The requirement is now **Issue A Non-Expiring LDevID Whose
+Subject Is Only The VM ID**, so a later delta on issuance (the lifetime
+change, PR #71) targets that name. Verified in the lab (a request with
+`O`/`OU`/a foreign `CN` got `CN=100`, SPIRE `1.14.0` attested) and on hogan
+against `0.2.0+git20261019.e487c6bf62a6` (VM 399 got `CN=399`, SPIRE's
+material untouched). Certificates issued earlier keep their old subject until
+the guest enrols again. **`make deb-local` on a long branch name** fails
+lintian with `debian-changelog-line-too-long`, because `scripts/deb-local.sh`
+stamps the branch into the changelog line; that is a packaging defect of its
+own, not of the change being built.
 
 Honest readiness followed as the second archive of 2026-10-19:
 `openspec/changes/archive/2026-10-19-report-readiness-honestly/` (PR #61).

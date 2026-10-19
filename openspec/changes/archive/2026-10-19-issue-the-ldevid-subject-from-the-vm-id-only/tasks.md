@@ -75,5 +75,8 @@ change directory. **Not** `cmd/devid-enroll` code, other `debian/` files,
 
 ## 4. Archive
 
-- [ ] 4.1 After merge, the coordinator archives and checks the order against
+- [x] 4.1 After merge, the coordinator archives and checks the order against
       `limit-the-ldevid-lifetime-and-renew-it` (proposal, "Apply order").
+      Archived 2026-10-19 on `main@5653949` first; strict 6 passed.
+      `limit-the-ldevid-lifetime-and-renew-it` (PR #71) archives second and
+      rebuilds its `MODIFIED` block against the new requirement name and text.
