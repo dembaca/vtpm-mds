@@ -94,6 +94,21 @@ new `internal/bridgebind/`, a NIC reader in `internal/proxmox/` (not
       **1.3 OK**. `git diff c94bb2d -- debian/vtpm-mds.service main.go imds
       internal/server` is empty. Extracted binary: `vtpm-mds-bind
       0.2.0+git20261019.47eb89f59df6` on the first build.
+      **After the Fable pre-review** (`6f82f86`): `Depends: …, nftables`;
+      `postinst` starts `vtpm-mds-bind` when `vtpm-mds` is active; each
+      bound port gets a third rule dropping 802.1Q/802.1ad frames; a failed
+      apply is retried every tick and logged when its error changes, and a
+      failed first apply exits non-zero; VM ids ≤ 9 digits and `net0`–`net99`
+      so tap names fit IFNAMSIZ; `nft` calls time out after 10 s. New tests
+      `TestAFailedApplyIsRetriedEveryTickAndLoggedOnce`,
+      `TestRunFailsWhenTheFirstApplyFails`,
+      `TestGuestNICsSkipsIDsThatCannotNameATap`, render with the tag rule;
+      six more mutants (no tag rule, no retry, log every tick, `Run` ignoring
+      the failure, unbounded id, unbounded index) all red. In the netns a
+      tagged ARP with own frame MAC and forged sender is dropped by the tag
+      rule (counter 1); **control without that rule: it reached the observer
+      port**, so the finding was real. Package
+      `0.2.0+git20261019.6f82f86cabb3`: `lintian` exit 0.
 - [ ] 4.2 Install on `hogan` (rebased onto current `main`, needs the maintainer's go); verify that the binder started by `postinst` (`vtpm-mds` is active) applied its table **under the unit's sandbox** — `nft` as `vtpm-mds` with ambient `CAP_NET_ADMIN`, `SystemCallFilter=~@privileged @resources`, `MemoryDenyWriteExecute`, `ProtectKernelModules`, which the netns runs did not have — by its `Applied table` journal line and `systemctl is-active vtpm-mds-bind`; verify the generated table equals the hand-written one for VM 399 plus a pair for VM 300's `tap300i1`, and nothing for VM 106
 - [ ] 4.3 Repeat the MAC test of 2026-10-19 in VM 399 (foreign MAC → timeout and `ether saddr` counter rises; own MAC → `200`), VM 399 restored afterwards
 - [ ] 4.4 Test the ARP-sender rule on its own: from VM 399, with `eth1` keeping its own MAC, send an ARP packet whose sender hardware address is foreign (raw socket in `python3`, no `scapy` needed); verify the `arp saddr ether` counter rises and the host's neighbour entry for `169.254.169.10` keeps VM 399's MAC (reading counters needs the maintainer, or `hogan-lab` widened to list `bridge vtpm_mds_bind`)
