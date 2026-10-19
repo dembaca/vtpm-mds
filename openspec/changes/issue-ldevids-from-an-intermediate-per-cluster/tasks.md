@@ -29,13 +29,12 @@ coordinator says code-go. Prefer applying after #70 and #71 are archived
 
 - [x] 2.1 `openspec validate --all --strict` clean for this change
       **Verify:** CLI: Totals 6 passed, 0 failed (2026-10-19)
-- [ ] 2.2 Draft PR from `cursor/issue-ldevids-from-an-intermediate-per-cluster-1e7e`
+- [x] 2.2 Draft PR from `cursor/issue-ldevids-from-an-intermediate-per-cluster-1e7e`
       (base `main` @ `da0083a`); edits only under this change directory
-      **Verify:** PR URL; `git diff --name-only` stays under
-      `openspec/changes/issue-ldevids-from-an-intermediate-per-cluster/`
-- [ ] 2.3 Bus RESULT on the ASSIGN thread with PR link and that Q1–Q5 are
+      **Verify:** PR #72; diff only under that directory (`d65bb08`)
+- [x] 2.3 Bus RESULT on the ASSIGN thread with PR link and that Q1–Q5 are
       ready for dembaca (coordinator asks singly)
-      **Verify:** RESULT post id in that thread
+      **Verify:** RESULT on ASSIGN root `pw96c7k1tpb8mpxjc56gboiqoc`
 
 ## 3. After dembaca answers (not this ASSIGN)
 
