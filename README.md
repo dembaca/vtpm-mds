@@ -134,7 +134,7 @@ sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.yaml
 | `/latest/dynamic/instance-identity/document` | GET | EC2-style instance identity document |
 | `/latest/devid/enroll/start` | POST | Verify CSR, return EK credential challenge |
 | `/latest/devid/enroll/finish` | POST | Verify challenge, issue LDevID PEM |
-| `/health` | GET | Liveness probe (no token required) |
+| `/health` | GET | Readiness: `ok` or `degraded`, always `200`; detail (inventory, VM count, DevID CA, last reload, error class) only for a caller not bound to a VM (no token required) |
 
 `GET /latest/attest/nonce`, `POST /latest/attest`, `GET /latest/identity` and
 `GET /.well-known/jwks.json` were removed: they reported results they had not

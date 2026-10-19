@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-19
 
-None. Five were archived on 2026-10-17, seven on 2026-10-18 and one on 2026-10-19; the first two in this order:
+None. Five were archived on 2026-10-17, seven on 2026-10-18 and two on 2026-10-19; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -301,6 +301,23 @@ flooder, enrolment under budget on hogan, long-running load. **After `dpkg -i`
 the unit stayed stopped** (IMDS down 43 s until a manual start); whether
 postinst should restart it is open for the maintainer and a separate change.
 
+Honest readiness followed as the second archive of 2026-10-19:
+`openspec/changes/archive/2026-10-19-report-readiness-honestly/` (PR #61).
+`GET /health` still always answers `200`, but `status` is `ok` only when the
+inventory is loaded and, with attestation on, the DevID CA cert and key can be
+opened **and** enrollment actually loaded; otherwise `degraded`. A caller
+bound to no VM (the host) also gets `inventory_loaded`, `vm_count`,
+`last_reload`, `last_error` (`inventory_load_failed`, `devid_ca_unreadable`)
+and, with attestation on, `devid_ca_readable`; a bound guest gets only
+`status` (the record's default; the maintainer did not overrule it). One predicate, `inventory.IsBound`,
+decides "bound" for `/health` and the metadata path. The CA check is cached
+5 s. **Config and YAML inventory are decoded strictly:** an unknown key stops
+the start, or rejects a reload and keeps the previous inventory, which `/health`
+then reports. Before installing on a node, check its
+`/etc/vtpm-mds/config.yaml` decodes strictly (hogan's did, as did
+`debian/config.yaml`). Verified in the lab (YAML half) and on hogan
+(strict decode of the installed config, read-only).
+
 **Pre-review rule (maintainer, 2026-10-18):** before the coordinator calls a PR
 ready to merge, an agent on a **stronger** model than the author reviews it
 read-only (Sonnet → Opus, Opus → Fable, Cursor/Composer → Fable); findings are
@@ -324,7 +341,7 @@ certificate). Found on the way: one typo in the YAML inventory empties the
 whole inventory while the service reports healthy; it is on the
 production-readiness list of 2026-10-18, which the maintainer wants worked off
 before production (debug logging, unit hardening, reload on new VMs, issuance
-log, health detail, the connection-map leak (done), CA operation, throttling (done), and MAC
+log, health detail (done), the connection-map leak (done), CA operation, throttling (done), and MAC
 binding on `vmbr_imds` with an EK pin per VM on Proxmox).
 
 Those first two both carry a `MODIFIED` block on `Refuse An Instance Identity

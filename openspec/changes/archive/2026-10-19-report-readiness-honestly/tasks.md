@@ -70,5 +70,7 @@
 
 ## 6. Archive
 
-- [ ] 6.1 After merge, archive with the coordinator (no `AGENTS.md` / root
+- [x] 6.1 After merge, archive with the coordinator (no `AGENTS.md` / root
       `README.md` edits from this agent)
+      Done 2026-10-19 by the coordinator from `main` at `d510a44` (#61 merged);
+      see the archive commit for the delta counts and validation.
