@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-19
 
-None. Five were archived on 2026-10-17, seven on 2026-10-18 and five on 2026-10-19; the first two in this order:
+None. Five were archived on 2026-10-17, seven on 2026-10-18 and six on 2026-10-19; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -359,6 +359,30 @@ enrols with the seeded pin, a wrong pin is refused with `401` and no
 Not verified on hogan: a first enrolment without a pin, the concurrent finish
 (unit test only).
 
+MAC binding on the IMDS bridge followed as the sixth archive of 2026-10-19:
+`openspec/changes/archive/2026-10-19-bind-callers-to-their-bridge-port/`
+(PR #68, E1's second half). The host package ships a second binary and unit,
+`vtpm-mds-bind`, which renders the whole nftables table `bridge
+vtpm_mds_bind` and applies it with `nft -f -`: per guest NIC on `vmbr_imds`,
+by tap name, it drops VLAN-tagged frames, frames whose source is not the
+configured MAC, and ARP whose sender is not that MAC; a NIC without a MAC
+is dropped entirely. It reads `/etc/pve/local` on the inventory's 5 s
+fingerprint, re-applies when the table is missing or differs (so `systemctl
+restart nftables` is repaired within a tick), retries a failed apply every
+tick, and exits non-zero when the first check leaves no table. It runs as
+`vtpm-mds` with `CAP_NET_ADMIN` only; `postinst` starts it whenever
+`vtpm-mds` is active. **It fails open:** a stopped binder leaves the last
+table, a binder that never ran leaves none, and the daemon does not check;
+a VM migrated in has no rule for up to one interval after its config moves.
+Removing the package deletes the table. Verified on hogan against
+`0.2.0+git20261019.4b547320d1c7` (restart gap 0.27 s; a foreign MAC and a
+forged ARP sender dropped with counters, VM 399 still `200`; the table back
+0.68 s after `restart nftables`) and, for the VLAN rule, in a netns.
+**Open, the maintainer's (task 5.2):** the Ansible role still writes a
+hand-made VM 399 block into the same table, so two writers own it until that
+block is removed. Not verified: live migration, hot-plug, LXC, the StartLimit
+path, `postrm remove`.
+
 Honest readiness followed as the second archive of 2026-10-19:
 `openspec/changes/archive/2026-10-19-report-readiness-honestly/` (PR #61).
 `GET /health` still always answers `200`, but `status` is `ok` only when the
@@ -401,7 +425,7 @@ whole inventory while the service reports healthy; it is on the
 production-readiness list of 2026-10-18, which the maintainer wants worked off
 before production (debug logging, unit hardening, restart on upgrade (done), reload on new VMs (done), issuance
 log, health detail (done), the connection-map leak (done), CA operation, throttling (done), and MAC
-binding on `vmbr_imds` with an EK pin per VM on Proxmox (pin done)).
+binding on `vmbr_imds` (done) with an EK pin per VM on Proxmox (done)).
 
 Those first two both carry a `MODIFIED` block on `Refuse An Instance Identity
 To Callers With No VM Record`, so the signature change's block **was rebuilt

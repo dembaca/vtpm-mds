@@ -15,6 +15,7 @@ Binary: `vtpm-mds` (aliases: `qemu-mds`, `prox-mds`). Module path: `github.com/d
 | **TPM DevID enrollment** — LDevID certs + TPM2B blobs for SPIRE `tpm_devid` | implemented |
 | **Dual enroll auth** — MAC → inventory **and** TPM EK certificate header | implemented |
 | **EK pin per VM** — the first enrolment of a VM pins its EK under `/var/lib/vtpm-mds/ek-pins/<vmid>`; a different EK is refused until an operator deletes the pin | implemented |
+| **MAC binding on the IMDS bridge** — `vtpm-mds-bind` (in the host package, own unit with `CAP_NET_ADMIN` only) keeps nftables `bridge vtpm_mds_bind` so every guest port on `vmbr_imds` admits only its configured MAC, as frame source and ARP sender; it checks `/etc/pve/local` every 5 s and restores the table after `systemctl restart nftables` | implemented |
 | **Inventory backends** — YAML inventory (plain QEMU lab) or Proxmox `/etc/pve` | implemented |
 | **Instance tags and node topology** — Proxmox tags `vtpm_mds.io.<key>.<value>` under `tags/instance/`, zone and region from the node description | implemented |
 | **Host-anchored trust** — EK CA chain + optional DevID CA | implemented |
