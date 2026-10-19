@@ -88,4 +88,7 @@ func TestClearSPIREAgentSVIDCache(t *testing.T) {
 	if err := ClearSPIREAgentSVIDCache(""); err != nil {
 		t.Fatalf("empty dataDir: %v", err)
 	}
+	if err := ClearSPIREAgentSVIDCache(dir); err != nil {
+		t.Fatalf("idempotent clear: %v", err)
+	}
 }

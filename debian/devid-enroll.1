@@ -48,9 +48,14 @@ and
 (without
 .BR Requires= ).
 A daily timer with a one-hour randomized delay repeats the check while the
-guest is up. Installing the package enables the timer; with
-.B dh_installsystemd --no-start
-the first timer fire is after the next reboot unless an operator starts it.
+guest is up. Installing the package enables the timer and the
+.B postinst
+reloads systemd and starts
+.B devid-enroll.timer
+(not the oneshot service), so the daily renew is armed without waiting for a
+reboot. An immediate boot-time renew still runs via
+.B WantedBy=multi-user.target
+on the oneshot after the next boot.
 Overrides for output and SPIRE data directories may be set in
 .IR /etc/default/devid-enroll
 (for example

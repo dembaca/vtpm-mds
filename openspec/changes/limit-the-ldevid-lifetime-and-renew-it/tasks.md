@@ -37,7 +37,7 @@ the config key.
 - **1.1** `go test ./internal/config/...` — PASS (default 2160h; reject `90`/`0s`/`9000h`/`8761h`; accept `8760h`).
 - **1.2** `go test ./internal/devid/...` — PASS (`TestIssueDevIDConfiguredLifetime`, `TestIssueDevIDRenewalSameKeyNewSerial`).
 - **1.3** `go test ./internal/devid/ -run 'TestRenewDue|TestClearSPIRE|TestLoadCert'` — PASS.
-- **1.4** units present; `systemd-analyze verify debian/devid-enroll.service debian/devid-enroll.timer` — only warning is missing `/usr/bin/devid-enroll` on the build host (binary not installed). `dpkg-deb`/`lintian` not run here (agent cannot build `.deb`).
+- **1.4** `make deb-local` → `dpkg-deb -I/-c` shows binary, oneshot, timer, postinst (daemon-reload + `start devid-enroll.timer`). `lintian` only W: debian-changelog-line-too-long. `systemd-analyze verify` on extracted units: missing `/usr/bin/devid-enroll` on host only.
 - **1.5** `go test ./internal/config/ -run TestLoadShippedDebianConfig` — PASS.
 - **2.1** lab guest100 @ `8715182` tree: `openssl` → lifetime_hours 2160.0 (re-run after Fable fix commit for reconfirm if needed).
 - **2.2** lab: 3h lifetime, blob checksums identical across renew, serial/fp/PEM changed, `agent-data.json` cleared, fresh skip.

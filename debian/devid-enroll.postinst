@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+#DEBHELPER#
+
+# debian/rules passes --no-start to dh_installsystemd, which also drops
+# debhelper's daemon-reload. Reload so the installed oneshot/timer are what
+# systemd runs, then start only the timer (not the oneshot service) so the
+# daily renew is armed without forcing an immediate enroll during dpkg.
+if [ "$1" = "configure" ] && [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ]; then
+	systemctl --system daemon-reload >/dev/null 2>&1 || true
+	if ! deb-systemd-invoke start devid-enroll.timer >/dev/null; then
+		echo "devid-enroll: start devid-enroll.timer refused; see systemctl status devid-enroll.timer" >&2
+	fi
+fi
+
+exit 0
