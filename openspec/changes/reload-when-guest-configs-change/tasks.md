@@ -119,7 +119,19 @@ a new `internal/server/reload.go`, fingerprint functions in
 
 ## 5. Verify in the lab
 
-- [ ] 5.1 **Cloud lab** — with the YAML backend, add a VM record, verify it is bound within one interval; make the file unparseable, verify one error line and the old inventory; fix it, verify the reload
+- [x] 5.1 **Cloud lab** — with the YAML backend, add a VM record, verify it is bound within one interval; make the file unparseable, verify one error line and the old inventory; fix it, verify the reload
+      Done 2026-10-19 on the cloud lab host by `agent-cursor-vtpm-22e0` at
+      `4940726` (binary `/var/lib/mds-lab/build-62`, PID 205081 throughout).
+      YAML inventory `/var/lib/mds-lab/inventory/lab.yaml`:
+      - Added VM 101 (`52:54:00:a1:b2:c4`) and tag `e2e: reload` on VM 100 →
+        `/health` `vm_count` 1→2 in ~1.5 s; netns bind → `i-101`; tag
+        `tags/instance/e2e` → `reload`; one `Cache refresh complete … 2 VMs`.
+      - Unknown key `nope: 1` on VM 101 → one `Failed to load … unmarshal`
+        line; host `/health` `degraded`/`inventory_load_failed` with
+        `vm_count: 2` retained; netns still `i-101`.
+      - Removed `nope` → `/health` `ok` again in ~4.6 s; same PID; no further
+        Failed/refresh lines over 12 s while unchanged.
+      Log: `/opt/cursor/artifacts/62-5.1-yaml-lab.log`.
 
 ## 6. Archive
 
