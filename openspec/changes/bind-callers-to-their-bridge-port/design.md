@@ -123,7 +123,10 @@ Facts from `hogan` that shape the design:
   is not running (a first install, a build host) starts neither. The package
   depends on `nftables`, so `nft` is there. A failed first apply exits the
   binder non-zero, so the unit shows `failed` and `Restart=on-failure`
-  retries it, instead of an active unit without a table. The
+  retries it, instead of an active unit without a table. A failure that
+  lasts beyond `StartLimitBurst=12` in 60 s leaves the unit `failed`, and it
+  stays so after the cause is fixed until someone runs `systemctl
+  reset-failed` or `start`: visible, and on purpose. The
   `debian-packaging` requirement that says so ("Installing The Host Package
   Leaves systemd In Step") is being archived by #66; its MODIFIED block is
   added to this record against the archived text once #66 is merged (task

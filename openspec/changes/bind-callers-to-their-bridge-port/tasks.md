@@ -19,7 +19,17 @@ new `internal/bridgebind/`, a NIC reader in `internal/proxmox/` (not
       code after three additions: the live-migration window and the
       hand-written block beside the binder (both in Risks), and a rebase onto
       `main@c94bb2d` (#62) before the code.
-- [ ] 1.3 After #66 is merged, add the `debian-packaging` MODIFIED block for "Installing The Host Package Leaves systemd In Step" (both units) against the archived text in `openspec/specs/`, and verify with `openspec validate --all --strict`
+- [x] 1.3 After #66 is merged, add the `debian-packaging` MODIFIED block for "Installing The Host Package Leaves systemd In Step" (both units) against the archived text in `openspec/specs/`, and verify with `openspec validate --all --strict`
+      Written on 2026-10-19 before #66 merged, on the coordinator's request:
+      the text is the one #66 archives, verified identical between
+      `openspec/changes/restart-the-service-on-upgrade/specs/debian-packaging/spec.md`
+      and `openspec/specs/debian-packaging/spec.md` on
+      `origin/archive-restart-the-service-on-upgrade`. Added: both units
+      restart alike, and configuring starts `vtpm-mds-bind` when `vtpm-mds`
+      is active (also on `dpkg-reconfigure`), with two scenarios.
+      `openspec validate --all --strict` passes. **#66 must merge before
+      this change is archived**; if #66's text changes before it merges, this
+      block is rebuilt against the archived text.
 
 ## 2. Port list
 

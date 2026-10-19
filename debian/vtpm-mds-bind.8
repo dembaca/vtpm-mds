@@ -33,6 +33,16 @@ change, and restores the table when it is missing or was changed by anything
 else, for example after
 .BR "systemctl restart nftables" .
 When it stops, the table stays as it was; removing the package deletes it.
+.PP
+If the first apply fails, it exits non-zero and systemd restarts it. Twelve
+failures within a minute leave the unit
+.BR failed ,
+and it stays failed after the cause is fixed until
+.B systemctl reset-failed vtpm-mds-bind
+or
+.B systemctl start vtpm-mds-bind
+is run. A failure after a successful start does not stop it: it retries every
+five seconds and logs when the error changes.
 .SH OPTIONS
 .TP
 .BI \-bridge " name"
