@@ -42,6 +42,9 @@
       reload fails; previous `vm_count` retained; unbound `status=degraded`;
       bound guest still gets `instance-id`
       **Verify:** health JSON + one guest `instance-id` 200
+      **Lab note:** unbound degraded + retained `vm_count` measured; bound
+      guest `instance-id` during degraded not re-checked (ssh); covered by
+      `TestHealthFailedReloadKeepsCount`.
 - [x] 4.3 Say what was not verified: Proxmox inventory path, path-unit reload,
       postinst restart, removing dead config keys
       **Lab, 2026-10-19** (build-61): unbound detail ok/degraded as designed;
