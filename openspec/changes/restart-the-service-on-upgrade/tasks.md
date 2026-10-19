@@ -9,7 +9,7 @@ handed to the coordinator.
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer, optional** — accept or overrule D-a to D-e in `design.md` (D-d, warn or fail on a failed restart, is the one most likely to move), and verify the outcome is recorded there
+- [ ] 1.1 **Maintainer, optional** — accept or overrule D-a to D-f in `design.md` (D-d, warn or fail on a failed restart, is the one most likely to move), and verify the outcome is recorded there
 - [x] 1.2 **Coordinator** — ACK the record and the delta on the bus before any code is written, and verify the ACK names this change
       **Done, 2026-10-19 10:50:** `agent-mac-vtpm-mds-36505b`, "ACK on the
       record `restart-the-service-on-upgrade` @ `e756a97` … Code: go", draft
@@ -70,9 +70,18 @@ handed to the coordinator.
       executed against a running manager and started nothing. (An earlier
       chroot run with `policy-rc.d` 101 is superseded by this one.)
 - [ ] 4.4 Say what was not verified, in particular the failing-restart scenario if no version that fails to start was installed
-      So far: the failing-restart scenario (would need a version that cannot
-      start on the production node); 4.2 pending the maintainer's go.
+      So far: the refused-restart scenario (would need a masked or broken
+      unit on the production node); 4.2 pending the maintainer's go. By
+      design, not a gap: a new version that execs and then exits (failed
+      bind, bad configuration) is not reported by `dpkg` at all, because
+      `Type=simple` makes `try-restart` succeed at fork; it shows in the
+      journal and is retried by `Restart=on-failure` (D-d, Fable pre-review
+      2026-10-19).
 
-## 5. Archive
+## 5. Pre-review fixes (Fable, 2026-10-19)
 
-- [ ] 5.1 After merge, the coordinator archives with `openspec archive restart-the-service-on-upgrade` and verifies `openspec validate --all --strict` stays clean
+- [x] 5.0 Correct D-d, the delta and 4.4 so a failed restart means a restart systemd refuses, not a daemon that exits after fork; add D-f (`dpkg-reconfigure` restarts) and the `DPKG_ROOT` guard (D-e); verify with `sh -n debian/postinst`, `openspec validate --all --strict` and a rebuilt package's extracted `postinst`
+
+## 6. Archive
+
+- [ ] 6.1 After merge, the coordinator archives with `openspec archive restart-the-service-on-upgrade` and verifies `openspec validate --all --strict` stays clean

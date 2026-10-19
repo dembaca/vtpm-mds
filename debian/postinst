@@ -21,7 +21,7 @@ esac
 #
 # Reload the manager so the installed unit is the effective one. Still no
 # start: whether the service runs stays an operator decision.
-if [ "$1" = "configure" ] && [ -d /run/systemd/system ]; then
+if [ "$1" = "configure" ] && [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ]; then
     systemctl --system daemon-reload >/dev/null 2>&1 || true
 fi
 
@@ -29,11 +29,13 @@ fi
 # ends up serving the version just installed; a stopped daemon stays stopped
 # and a first install ($2 empty) starts nothing. This follows the reload so
 # the restart uses the installed unit. deb-systemd-invoke honours
-# policy-rc.d and passes try-restart to systemctl. A failed restart is
-# reported but does not fail the upgrade (restart-the-service-on-upgrade D-d).
-if [ "$1" = "configure" ] && [ -n "$2" ] && [ -d /run/systemd/system ]; then
+# policy-rc.d and passes try-restart to systemctl. A restart systemd refuses
+# is reported but does not fail the upgrade; with Type=simple a daemon that
+# exits after it was forked is not seen here, only in the journal, where
+# Restart=on-failure retries it (restart-the-service-on-upgrade D-d).
+if [ "$1" = "configure" ] && [ -n "$2" ] && [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ]; then
     if ! deb-systemd-invoke try-restart vtpm-mds.service >/dev/null; then
-        echo "vtpm-mds: restart after upgrade failed; see journalctl -u vtpm-mds" >&2
+        echo "vtpm-mds: restart after upgrade refused; see journalctl -u vtpm-mds" >&2
     fi
 fi
 

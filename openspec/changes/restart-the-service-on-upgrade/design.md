@@ -69,17 +69,29 @@ bridge.
   `PartOf=`, `LoadCredential=` and sandbox directives change between
   versions), so it follows the reload added by
   `make-host-package-install-deterministic`.
-- **D-d. A failed restart warns, it does not fail `dpkg`.** If the new
-  version cannot start, the old process is already gone either way; failing
-  the `configure` step would leave the package half-configured on top of a
-  down service and block unrelated `apt` runs. The script prints one line to
-  stderr (`vtpm-mds: restart after upgrade failed; see journalctl -u
-  vtpm-mds`) and exits 0. Alternative, for the maintainer to choose instead:
+- **D-d. A refused restart warns, it does not fail `dpkg`.** What the
+  script can see is `try-restart`'s exit status, and with `Type=simple`
+  (`debian/vtpm-mds.service`) systemd reports success as soon as the new
+  process is forked. So the warning covers a restart systemd **refuses**
+  (masked unit, missing unit, manager error), not a daemon that execs and
+  then exits — a failed bind or a bad configuration. That one shows in the
+  journal and is retried by `Restart=on-failure` until `StartLimitBurst`,
+  exactly as a manual start would. Changing the unit to `Type=exec` or
+  `Type=notify` to surface it would be a unit change, a non-goal here.
+  Failing the `configure` step on a refused restart would leave the package
+  half-configured on top of a down service and block unrelated `apt` runs,
+  so the script prints `vtpm-mds: restart after upgrade refused; see
+  journalctl -u vtpm-mds` and exits 0. Alternative, for the maintainer:
   fail the configure step so Ansible stops the rollout at the first node.
 - **D-e. Only where a manager runs, and through `deb-systemd-invoke`.** Same
-  `[ -d /run/systemd/system ]` guard as the reload; `deb-systemd-invoke`
-  honours `policy-rc.d`, so chroots and image builds that deny service actions
-  keep doing so.
+  `[ -d /run/systemd/system ]` guard as the reload, and like debhelper's own
+  snippets neither runs when `DPKG_ROOT` is set (an installation into another
+  root must not act on the host's manager); the reload gains that guard too.
+  `deb-systemd-invoke` honours `policy-rc.d`, so chroots and image builds
+  that deny service actions keep doing so.
+- **D-f. `dpkg-reconfigure` restarts too.** It calls `postinst configure`
+  with the current version as `$2`, so a running daemon is restarted — the
+  same as debhelper's own restart snippet does on reconfigure.
 
 ## Risks / Trade-offs
 
@@ -87,9 +99,9 @@ bridge.
   but rollouts that previously relied on a later manual start to stagger
   restarts now restart at install time. Mitigation: they could already not
   rely on it, since the old package stopped the daemon anyway.
-- A new version that fails to start is now discovered at upgrade time, by the
-  warning, rather than at the next manual start. That is an improvement, but
-  D-d means `dpkg` still exits 0.
+- A new version that execs and then exits is not reported by `dpkg` (D-d);
+  it shows in the journal and as a failed or restarting unit, which the
+  operator checks after an upgrade as before.
 - `--no-stop-on-upgrade` is the debhelper name; its deprecated alias
   `--no-restart-on-upgrade` disappears in compat 14 and is not used.
 

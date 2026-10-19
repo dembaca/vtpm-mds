@@ -41,8 +41,11 @@ validator looks at the generated `preinst`, so the contradiction went unseen.
 - A daemon that was **not** running before the upgrade stays stopped: the
   package restarts, it never starts. A first installation still starts
   nothing, so build hosts and lab hosts without the IMDS bridge are unaffected.
-- A failed restart does not fail the installation, but it is reported on
-  stderr so an operator or an Ansible run sees it.
+- A restart that systemd refuses does not fail the installation, but it is
+  reported on stderr. A new version that starts and then exits (a failed
+  bind, say) is not seen by the installation: the unit is `Type=simple`, so
+  the restart succeeds once the process is forked. That failure shows in the
+  journal, where `Restart=on-failure` retries it, as it does today.
 - No change to the unit's directives, to `--no-start` for first installs, to
   removal, or to any daemon behaviour.
 
@@ -72,5 +75,4 @@ None.
   "the package never touches the running daemon" — which was not true — loses
   nothing they had.
 - Verification of every later change on `hogan`: the post-install
-  `systemctl start` becomes unnecessary, and its absence no longer hides a
-  daemon that fails to start.
+  `systemctl start` becomes unnecessary.

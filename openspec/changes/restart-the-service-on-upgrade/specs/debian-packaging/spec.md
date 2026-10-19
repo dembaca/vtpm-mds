@@ -16,11 +16,13 @@ service runs stays an operator decision.
 An upgrade SHALL NOT stop the daemon before the new files are unpacked. After
 the manager has been reloaded, an upgrade SHALL restart the daemon if, and only
 if, it is running at that point, so a running daemon ends the upgrade running
-the new version and a stopped daemon stays stopped. A failed restart SHALL be
-reported on standard error and SHALL NOT fail the installation.
+the new version and a stopped daemon stays stopped. A restart that the service
+manager refuses SHALL be reported on standard error and SHALL NOT fail the
+installation. A daemon that the manager starts and that exits afterwards is
+reported by the service manager, not by the installation.
 
 A reload or restart SHALL be attempted only where a systemd manager is
-running, and a failure to reload SHALL NOT fail the installation.
+running and the installation targets the running system, and a failure to reload SHALL NOT fail the installation.
 
 #### Scenario: Unit change takes effect without a manual reload
 
@@ -57,9 +59,10 @@ running, and a failure to reload SHALL NOT fail the installation.
 - **WHEN** a newer host package is installed
 - **THEN** after the installation `vtpm-mds` is still inactive
 
-#### Scenario: A daemon that fails to start does not fail the upgrade
+#### Scenario: A refused restart does not fail the upgrade
 
-- **GIVEN** a host where `vtpm-mds` is running and the new version cannot start
+- **GIVEN** a host where `vtpm-mds` is running and the service manager
+  refuses to restart it
 - **WHEN** the newer host package is installed
 - **THEN** the installation succeeds, the package is configured, and standard
-  error names the failed restart
+  error names the refused restart
