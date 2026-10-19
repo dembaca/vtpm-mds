@@ -119,11 +119,57 @@ new `internal/bridgebind/`, a NIC reader in `internal/proxmox/` (not
       rule (counter 1); **control without that rule: it reached the observer
       port**, so the finding was real. Package
       `0.2.0+git20261019.6f82f86cabb3`: `lintian` exit 0.
-- [ ] 4.2 Install on `hogan` (rebased onto current `main`, needs the maintainer's go); verify that the binder started by `postinst` (`vtpm-mds` is active) applied its table **under the unit's sandbox** — `nft` as `vtpm-mds` with ambient `CAP_NET_ADMIN`, `SystemCallFilter=~@privileged @resources`, `MemoryDenyWriteExecute`, `ProtectKernelModules`, which the netns runs did not have — by its `Applied table` journal line and `systemctl is-active vtpm-mds-bind`; verify the generated table equals the hand-written one for VM 399 plus a pair for VM 300's `tap300i1`, and nothing for VM 106
-- [ ] 4.3 Repeat the MAC test of 2026-10-19 in VM 399 (foreign MAC → timeout and `ether saddr` counter rises; own MAC → `200`), VM 399 restored afterwards
-- [ ] 4.4 Test the ARP-sender rule on its own: from VM 399, with `eth1` keeping its own MAC, send an ARP packet whose sender hardware address is foreign (raw socket in `python3`, no `scapy` needed); verify the `arp saddr ether` counter rises and the host's neighbour entry for `169.254.169.10` keeps VM 399's MAC (reading counters needs the maintainer, or `hogan-lab` widened to list `bridge vtpm_mds_bind`)
-- [ ] 4.5 Restart `nftables` (maintainer), verify the table is restored within one interval with one log line
-- [ ] 4.6 Say what was not verified (e.g. a migration in and its fail-open window on the target, a hot-plugged NIC, `firewall=1` beyond reading the rules for VM 300, LXC)
+- [x] 4.2 Install on `hogan` (rebased onto current `main`, needs the maintainer's go); verify that the binder started by `postinst` (`vtpm-mds` is active) applied its table **under the unit's sandbox** — `nft` as `vtpm-mds` with ambient `CAP_NET_ADMIN`, `SystemCallFilter=~@privileged @resources`, `MemoryDenyWriteExecute`, `ProtectKernelModules`, which the netns runs did not have — by its `Applied table` journal line and `systemctl is-active vtpm-mds-bind`; verify the generated table equals the hand-written one for VM 399 plus a pair for VM 300's `tap300i1`, and nothing for VM 106
+      Done 2026-10-19 19:38 on `hogan` with the maintainer's go: built `4b54732`
+      (rebased onto `main@da0083a`, clean tree) → `0.2.0+git20261019.4b547320d1c7`,
+      installed through `hogan-lab dpkg-install --force-confold` (dpkg calls it a
+      "downgrade" only because the hash sorts lower). `postinst` enabled
+      `vtpm-mds-bind` and started it because `vtpm-mds` was active:
+      `vtpm-mds` try-restart PID 3270635 → 3361048, `Server stopped gracefully`
+      19:38:25.002 → `Starting server` 19:38:25.268 (gap 0.27 s), `DevID CA key
+      from systemd credential`, 3 VMs/5 MACs; binder PID 3361065 logged
+      `Applied table bridge vtpm_mds_bind: 2 guest ports on vmbr_imds` at
+      19:38:25.463, `is-active` → `active` for both. **Sandbox:** `/proc/<pid>/status`
+      of the binder: Uid/Gid 987 (`vtpm-mds`), Groups 33 987, CapInh/Prm/Eff/Bnd/Amb
+      all `0x1000` = `cap_net_admin` only, `NoNewPrivs: 1`, `Seccomp: 2`; the
+      `nft` it ran applied under that. The table (`hogan-lab nft list ruleset`,
+      and `/run/vtpm-mds-bind/vtpm_mds_bind.nft`, `vtpm-mds:vtpm-mds`) is the
+      hand-written VM 399 pair plus the tag rule, and the same three rules for
+      `tap300i1` with VM 300's MAC; nothing for VM 106. The rest of the ruleset
+      is byte-identical to before the install. VM 399's EK pin was not touched
+      by the package (`postinst` only sets the mode of `/var/lib/vtpm-mds`);
+      the agent cannot read `ek-pins/` (0750), so its content was not re-read.
+- [x] 4.3 Repeat the MAC test of 2026-10-19 in VM 399 (foreign MAC → timeout and `ether saddr` counter rises; own MAC → `200`), VM 399 restored afterwards
+      Done 19:38 (`scratchpad/mac399b.py` via `qm guest exec 399`): before
+      `instance-id 200 i-399`; `eth1` → `02:00:00:00:03:99`: timeout after 2 s,
+      `ether saddr` counter 0 → `packets 1`; restored to `bc:24:11:06:1d:b2`:
+      first `/health` after 6.0 s, then `instance-id 200 i-399`.
+- [x] 4.4 Test the ARP-sender rule on its own: from VM 399, with `eth1` keeping its own MAC, send an ARP packet whose sender hardware address is foreign (raw socket in `python3`, no `scapy` needed); verify the `arp saddr ether` counter rises and the host's neighbour entry for `169.254.169.10` keeps VM 399's MAC (reading counters needs the maintainer, or `hogan-lab` widened to list `bridge vtpm_mds_bind`)
+      Done 19:39: from VM 399, `eth1` keeping its own MAC, three ARP replies
+      sent on an `AF_PACKET` socket with frame source = own MAC and ARP sender
+      = `02:00:00:00:03:99` for `169.254.169.10`. `arp saddr ether` counter
+      0 → `packets 3 bytes 84`, `ether saddr` unchanged at 1; the host's entry
+      stayed `169.254.169.10 lladdr bc:24:11:06:1d:b2`; `/health` 200 before and
+      after. No control without the rule on `hogan` (the netns run in 2.3 had
+      one).
+- [x] 4.5 Restart `nftables` (maintainer), verify the table is restored within one interval with one log line
+      Done 19:39 by the agent (`hogan-lab systemctl restart nftables`, allowed
+      since 2026-10-16): `nftables` finished 19:39:34.797, having reloaded only
+      the hand-written VM 399 pair; the binder logged `Table bridge
+      vtpm_mds_bind was changed outside the binder, restoring it` at
+      19:39:35.474 followed by its `Applied table …: 2 guest ports` line, so one
+      restore, logged once (the cause line plus the apply line), 0.68 s after the
+      reload; 6 rules again, both units `active`, same binder PID. Between the
+      reload and the restore only VM 399 was protected, as Risks says.
+- [x] 4.6 Say what was not verified (e.g. a migration in and its fail-open window on the target, a hot-plugged NIC, `firewall=1` beyond reading the rules for VM 300, LXC)
+      Not verified on `hogan`: a migration in and its fail-open window on the
+      target (VM 399 cannot migrate); a hot-plugged NIC; a new VM appearing
+      (netns only, 3.1); `firewall=1` traffic from VM 300 (only its rules were
+      read; VM 300 is not ours to test); LXC on the bridge (none exists); a
+      failing apply under the real unit and the `StartLimitBurst` path (unit
+      tests only); `postrm remove` deleting the table (would remove the
+      package); the upgrade from a version without the binder on a node whose
+      daemon is stopped (`No running daemon, no binder`).
 
 ## 5. Hand over
 
