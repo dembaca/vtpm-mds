@@ -88,9 +88,34 @@ a new `internal/server/reload.go`, fingerprint functions in
       hogan was down 16.6 s (12:20:56.96 to a manual start at 12:21:13.56).
       The rebase above is the fix; rebase onto the current `main` before
       every install on hogan.
-- [ ] 4.2 Change a tag on VM 399 with `qm set` (needs the maintainer's go, or the maintainer runs it), and verify the new `tags/instance/<key>` is served to VM 399 within one interval without `systemctl reload`
-- [ ] 4.3 Verify the remote-write case: a config written by another node (a migration to `hogan` by the maintainer, or a `qm set` on another node through the API) is picked up without a reload, and say which was used
-- [ ] 4.4 Say what was not verified (e.g. a newly created guest, if none was created; the YAML half if the lab did not run it)
+- [x] 4.2 Change a tag on VM 399 with `qm set` (needs the maintainer's go, or the maintainer runs it), and verify the new `tags/instance/<key>` is served to VM 399 within one interval without `systemctl reload`
+      Done 2026-10-19: the maintainer ran `qm set 399 --tags
+      vtpm_mds.io.e2e.reload` on hogan (`hogan-lab` has no `qm set`), about
+      3–5 s before 13:19. The journal shows `13:19:10.32 Cache refresh
+      complete (proxmox:/etc/pve): 3 VMs, 5 MAC addresses cached` from the
+      daemon started at the install (PID 3126137), with no restart and no
+      `SIGHUP`; VM 399 then reads `tags/instance/e2e` → `200` `reload`.
+- [x] 4.3 Verify the remote-write case: a config written by another node (a migration to `hogan` by the maintainer, or a `qm set` on another node through the API) is picked up without a reload, and say which was used
+      **A direct pmxcfs write on holger**, not the API: `qm set` or `pvesh`
+      on holger is proxied to hogan's daemon and written on hogan, so it
+      would not have exercised the case this task names (the task text's "a
+      `qm set` on another node through the API" is therefore not a remote
+      write). The maintainer, as root on holger at about 13:30, rewrote
+      `/etc/pve/nodes/hogan/qemu-server/399.conf` in place, turning the
+      line `tags: vtpm_mds.io.e2e.reload` back into the empty `tags: ` it
+      had before 4.2. On hogan: `13:30:50.32 Cache refresh complete …`,
+      same PID 3126137; VM 399 reads `tags/instance/e2e` → `404` and the
+      index no longer lists `tags/`; `qm config 399` on hogan shows
+      `tags: ` again, so VM 399 is as it was.
+- [x] 4.4 Say what was not verified (e.g. a newly created guest, if none was created; the YAML half if the lab did not run it)
+      Not verified on hogan: a newly created guest and a real migration
+      (the remote write in 4.3 stands in for both: either way a `.conf`
+      appears or changes under `local/qemu-server` from outside this
+      node's daemon), a changed MAC on the IMDS NIC (the fingerprint covers
+      the whole `.conf`, unit-tested), a change of the node description
+      or `corosync.conf` (unit-tested only), and a broken `.conf` on the
+      live stack (YAML half, 5.1). The exact latency of 4.2 is known only as
+      "within one interval": the maintainer's `qm set` time is approximate.
 
 ## 5. Verify in the lab
 
