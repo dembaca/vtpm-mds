@@ -39,6 +39,8 @@ type Server struct {
 	caCheckedAt     time.Time
 	// now is time.Now in production; tests inject a clock for the CA cache.
 	now func() time.Time
+
+	poll inventoryPoller
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -54,7 +56,7 @@ func New(cfg *config.Config) (*Server, error) {
 	activeServerMu.Unlock()
 
 	// Load VM inventory (YAML path preferred; otherwise Proxmox /etc/pve)
-	if err := srv.RefreshVMConfigCache(); err != nil {
+	if err := srv.reloadNow(); err != nil {
 		log.Printf("Warning: Failed to load VM config cache on startup: %v", err)
 	}
 
@@ -156,10 +158,12 @@ func (s *Server) Start() error {
 		return err
 	}
 
+	s.startInventoryPoller(inventoryPollInterval)
 	return s.httpServer.Serve(listener)
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.stopInventoryPoller()
 	return s.httpServer.Shutdown(ctx)
 }
 
@@ -574,7 +578,7 @@ func RefreshActiveVMConfigCache() error {
 	if srv == nil {
 		return fmt.Errorf("server not initialized")
 	}
-	return srv.RefreshVMConfigCache()
+	return srv.reloadNow()
 }
 
 // credentialCAKeyName is the systemd credential the unit passes the DevID CA
