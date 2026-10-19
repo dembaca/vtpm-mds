@@ -63,7 +63,7 @@ DEB=$(ls -t dist/vtpm-mds_*+git*.deb | head -1)   # newest git-stamped build
 dpkg-deb -f "$DEB" Version                        # check before installing
 sudo dpkg -i --force-confold "$DEB"
 vtpm-mds -version                                 # must match the line above
-sudo systemctl start vtpm-mds   # enabled on install, not auto-started
+sudo systemctl start vtpm-mds   # first install only; an upgrade restarts a running daemon
 ```
 
 Guest — client only, nothing to start:

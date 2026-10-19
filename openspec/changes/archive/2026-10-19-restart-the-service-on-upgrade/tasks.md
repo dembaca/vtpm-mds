@@ -9,7 +9,9 @@ handed to the coordinator.
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer, optional** — accept or overrule D-a to D-f in `design.md` (D-d, warn or fail on a failed restart, is the one most likely to move), and verify the outcome is recorded there
+- [x] 1.1 **Maintainer, optional** — accept or overrule D-a to D-f in `design.md` (D-d, warn or fail on a failed restart, is the one most likely to move), and verify the outcome is recorded there
+      **Done, 2026-10-19 11:49:** dembaca accepted D-d "warn" (E3, 👍 on the
+      bus); the rest stands as recorded. `design.md` "Open Questions" says so.
 - [x] 1.2 **Coordinator** — ACK the record and the delta on the bus before any code is written, and verify the ACK names this change
       **Done, 2026-10-19 10:50:** `agent-mac-vtpm-mds-36505b`, "ACK on the
       record `restart-the-service-on-upgrade` @ `e756a97` … Code: go", draft
@@ -98,4 +100,6 @@ handed to the coordinator.
 
 ## 6. Archive
 
-- [ ] 6.1 After merge, the coordinator archives with `openspec archive restart-the-service-on-upgrade` and verifies `openspec validate --all --strict` stays clean
+- [x] 6.1 After merge, the coordinator archives with `openspec archive restart-the-service-on-upgrade` and verifies `openspec validate --all --strict` stays clean
+      Done 2026-10-19 from `main` at `e034138` (#60 merged); see the archive
+      commit for the delta counts and validation.

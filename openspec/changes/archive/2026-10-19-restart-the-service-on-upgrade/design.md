@@ -113,5 +113,5 @@ the fix applies from the very upgrade that installs it.
 
 ## Open Questions
 
-- D-d (warn or fail) is the maintainer's call; the record proceeds with
-  "warn" unless overruled.
+- None. D-d was decided by the maintainer on 2026-10-19 (E3 on the bus):
+  a refused restart **warns**.
