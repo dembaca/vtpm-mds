@@ -1,9 +1,10 @@
 # Tasks
 
 Written on 2026-10-19 against `main@da0083a` by the coordinator, from the
-maintainer's E2.5. Files: `internal/devid/ca.go`, `internal/devid/devid_test.go`
-and this change directory. **Not** `cmd/devid-enroll`, `debian/`, `AGENTS.md`,
-root `README.md`.
+maintainer's E2.5. Files: `internal/devid/ca.go`, `internal/devid/devid_test.go`,
+`debian/devid-enroll.1`, one example line in the root `README.md` and this
+change directory. **Not** `cmd/devid-enroll` code, other `debian/` files,
+`AGENTS.md`.
 
 ## 1. Decide
 
@@ -29,6 +30,13 @@ root `README.md`.
       vet clean; test ok for config, devid, inventory, proxmox, server, imds;
       strict 6 passed. A trial `openspec archive` on a scratch copy left the
       new requirement and no trace of the old one, strict 5 passed.
+- [x] 2.5 Fable pre-review (2026-10-19): no must-fix. Should-fixes done: the
+      `-cn` entry in `debian/devid-enroll.1` and the `subject=` example in
+      `README.md` now say the subject is always `CN=<VM ID>`; the `Finish` test
+      carries an organization too. The lifetime record it could not find is
+      PR #71. Left as is: the new requirement lands at the end of the spec
+      after archive; `subjectIsEmpty` in `ca.go` is now always false (later
+      cleanup).
 
 ## 3. Verify
 

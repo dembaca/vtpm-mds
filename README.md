@@ -288,7 +288,7 @@ wc -c /var/lib/spire/agent/devid.priv.blob /var/lib/spire/agent/devid.pub.blob
 # Hogan today: priv=222 pub=280 bytes (TPM2B_PRIVATE / TPM2B_PUBLIC)
 
 openssl x509 -in /var/lib/spire/agent/devid.crt.pem -noout -subject -issuer -dates
-# subject=CN=vtpm-pilot   issuer=CN=BGL Proxmox DevID CA
+# subject=CN=399   issuer=CN=BGL Proxmox DevID CA  (the subject is always CN=<VM ID>)
 openssl x509 -in /var/lib/spire/agent/devid.crt.pem -noout -text | less
 devid-enroll -version
 ```

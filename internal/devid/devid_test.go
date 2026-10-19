@@ -201,11 +201,11 @@ func TestIssueDevIDAndSessionNonceMismatch(t *testing.T) {
 	}
 }
 
-// TestGuestSuppliedCommonNameIsIgnored: platform identity CN other-name is
-// ignored; the authenticated VM ID becomes the certificate CN.
+// TestGuestSuppliedCommonNameIsIgnored: platform identity CN other-name and
+// organization are ignored; the authenticated VM ID is the whole subject.
 func TestGuestSuppliedCommonNameIsIgnored(t *testing.T) {
 	ca := mustParseTestCA(t)
-	sr := mustMinimalSigningRequest(t, pkix.Name{CommonName: "other-name"})
+	sr := mustMinimalSigningRequest(t, pkix.Name{CommonName: "other-name", Organization: []string{"Example GmbH"}})
 
 	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
 	if err != nil {
