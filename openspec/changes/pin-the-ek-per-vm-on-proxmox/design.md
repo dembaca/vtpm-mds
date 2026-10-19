@@ -45,11 +45,16 @@ once a readable, stable host-side EK source exists for this deployment.
   inventory `ek_sha256`). Directory mode `0750`, files `0640`, owned by the
   service user. The package already creates `/var/lib/<package>`; this change
   ensures `ek-pins/` exists at enroll time (`mkdir` in code is enough).
-- **D-b. When the pin is written.** On **successful** `enroll/finish` only
-  (LDevID issued), and only if neither inventory `ek_sha256` nor a store file
-  already pins that VMID. Failed finish / start never writes. Concurrent first
-  finishes: create with `O_EXCL` (or write-temp + `link`); loser keeps the
-  winner's pin and the next enroll must match it.
+- **D-b. Write the pin with `O_EXCL` before signing.** On `enroll/finish`,
+  when neither inventory `ek_sha256` nor a store file pins the VMID yet, the
+  service SHALL create `/var/lib/…/ek-pins/<vmid>` with `O_EXCL` (content =
+  fingerprint) **before** `IssueDevID`. An unusable state directory (or any
+  create error other than "already exists") → HTTP `500`, **no** LDevID PEM.
+  A pin file without a certificate is harmless: the same EK's next finish
+  passes the pin check and signs. Concurrent first finishes: one `O_EXCL`
+  wins; the loser sees the file exist, re-reads the pin, and must match it
+  (then may sign). Start never writes. Failed finish after a successful pin
+  create leaves the pin in place.
 - **D-c. Enforcement order.** For both enroll legs, effective pin =
   1. inventory `ek_sha256` if non-empty, else
   2. store file for that VMID if present, else
@@ -59,20 +64,24 @@ once a readable, stable host-side EK source exists for this deployment.
   when it came from the store (so operators can tell which source to fix).
 - **D-d. Reset / fresh-tpm / re-enroll.** Replacing a vTPM changes the EK.
   The service **SHALL NOT** auto-clear the pin. Operator removes
-  `/var/lib/…/ek-pins/<vmid>` (documented in `debian/README.Debian` only if
-  the coordinator wants packaging docs in a follow-up; this change's tasks
-  document the path in the delta and in a short comment near the store). No
-  HTTP admin API in this change.
+  `/var/lib/…/ek-pins/<vmid>`. No HTTP admin API in this change.
 - **D-e. Inventory layer stays dumb.** `ek_sha256` on the VM record remains
   YAML-only from inventory's point of view. The store is read inside
-  `devid` auth, not merged into `VMConfig` by Proxmox parse. That keeps #62's
-  fingerprint/reload work out of this change's inventory files except a
-  one-line spec clarification.
+  `devid` auth, not merged into `VMConfig` by Proxmox parse.
 - **D-f. Lab verification.** Cloud lab: enroll guest100 once → pin file
-  appears; second enroll with same TPM succeeds; after deleting guest TPM
-  state / using a different EK (or swapping the pin file to another digest),
-  enroll fails with the stored-pin body. Hogan: same against VM 399 after
-  code ACK (optional in tasks if lab covers it).
+  appears; second enroll with same TPM succeeds; mismatch / reset scenarios
+  as in tasks. Hogan: seed (D-g) + enroll for VM 399 once dembaca gives the go.
+- **D-g. Seed pins for VMs already enrolled (upgrade gap).** After this
+  change ships, every existing VM has no store file; the first post-upgrade
+  enroll wins (including a spoofer). The journal already logs
+  `devid issued serial=… vm=<id> ek=<sha256>`
+  (`quiet-the-log-and-record-issuance`). **Operators seed** before relying on
+  the pin: extract those pairs into `ek-pins/<vmid>` (no new binary — a
+  documented `journalctl`/`awk` one-liner in `tasks.md`). Hogan carries out
+  the seed for VM 399 as a verification task once dembaca approves host work.
+- **D-h. Both inventory backends.** The store applies whenever inventory
+  `ek_sha256` is empty — **YAML and Proxmox**. The change title says
+  "proxmox" because that is the production gap; behaviour is backend-agnostic.
 
 ## Non-Goals
 
@@ -93,8 +102,8 @@ once a readable, stable host-side EK source exists for this deployment.
   old ID inherits the old pin and cannot enroll until the file is removed —
   related to E2 VM-ID reuse; document under reset, do not auto-delete on
   missing VM config (a temporary inventory gap must not wipe pins).
-- **Disk full / permission errors on write:** finish has already issued the
-  cert; log and leave unpinned (retry write on next success) rather than
-  failing the HTTP response after issuance — or fail finish before sign if
-  the pin dir is unusable. **Prefer:** attempt pin write **before** signing
-  the LDevID when no pin exists yet, so a broken state dir fails closed.
+- **Disk full / permission errors on write:** fail finish with `500` before
+  signing (D-b); never issue an unpinned LDevID on first enroll.
+- **Upgrade without seeding (D-g):** until operators seed from the journal,
+  the TOFU race window is open for every already-enrolled VM; E1(a)/(b) still
+  matter.

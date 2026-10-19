@@ -2,18 +2,18 @@
 
 ### Requirement: Persist An EK Pin Per VM After First Successful Enrollment
 
-On a successful `enroll/finish` that issues an LDevID, when the caller's VMID
-has **no** inventory `ek_sha256` and **no** pin file yet, the service SHALL
-persist the lowercase hex SHA-256 digest of that enrollment's EK certificate
-DER to `/var/lib/<package>/ek-pins/<vmid>` (one line, no other fields). The
-`ek-pins` directory SHALL be created if missing. The write SHALL use an
-exclusive create (or equivalent) so two concurrent first finishes leave a
-single pin.
+On `enroll/finish`, when the caller's VMID has **no** inventory `ek_sha256`
+and **no** pin file yet, the service SHALL create
+`/var/lib/<package>/ek-pins/<vmid>` (one line: lowercase hex SHA-256 of that
+enrollment's EK certificate DER) with an exclusive create (`O_EXCL` or
+equivalent) **before** signing the LDevID. The `ek-pins` directory SHALL be
+created if missing. Two concurrent first finishes SHALL leave a single pin.
 
-The pin write SHALL be attempted **before** the LDevID is signed when no pin
-exists yet, so an unusable state directory fails the finish with `5xx` rather
-than issuing a certificate that is not pinned. When a pin already exists, finish
-SHALL NOT rewrite it.
+If that create fails for any reason other than the file already existing, the
+finish SHALL answer `500` and SHALL NOT return an LDevID PEM. When a pin
+already exists (including the concurrent loser), finish SHALL NOT rewrite it
+and SHALL enforce it before signing. The store applies for both YAML and
+Proxmox inventory whenever `ek_sha256` is empty.
 
 The service SHALL NOT delete or replace a pin automatically on TPM reset,
 failed enroll, inventory reload, or absence of the VM from inventory.

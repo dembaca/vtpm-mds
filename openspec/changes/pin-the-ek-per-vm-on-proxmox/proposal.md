@@ -11,14 +11,15 @@ the EK per VM first, then bind callers to their bridge port.
 
 ## What Changes
 
-- After a **first successful** DevID enrollment for a VMID, the service
-  **persists** the EK certificate fingerprint under `/var/lib/…` (TOFU).
-- Later enroll legs for that VMID **require** the presented EK fingerprint to
-  match the stored pin when the inventory `ek_sha256` is empty (inventory pin
-  still wins when set).
-- A mismatch is `401` with a clear body; resetting a pin is an **operator**
-  action (remove the pin file), not automatic on `fresh-tpm` / failed enroll.
-- **Record only in this PR.** Code after the coordinator's ACK of the record.
+- On `enroll/finish`, when no pin exists yet, the service **creates** the EK
+  fingerprint file under `/var/lib/…/ek-pins/<vmid>` with `O_EXCL` **before**
+  signing the LDevID (TOFU; unusable dir → `500`, no certificate).
+- Later enroll legs **require** that fingerprint when inventory `ek_sha256` is
+  empty (inventory pin still wins when set). Applies to **YAML and Proxmox**.
+- A mismatch is `401` with a body that names the pin source; reset is
+  **operator** delete of the file. Operators **seed** existing VMs from
+  `devid issued … ek=` journal lines after upgrade (no new binary).
+- Code after the coordinator's ACK of the record (and of the D-g/D-b tightenings).
 
 ## Capabilities
 
