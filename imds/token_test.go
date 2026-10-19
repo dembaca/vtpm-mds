@@ -11,7 +11,7 @@ func TestTokenStore_GenerateToken(t *testing.T) {
 	cfg := config.DefaultConfig()
 	store := NewTokenStore(cfg)
 	
-	token, err := store.GenerateToken()
+	token, err := store.GenerateToken("test")
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestTokenStore_ValidateToken(t *testing.T) {
 	cfg := config.DefaultConfig()
 	store := NewTokenStore(cfg)
 	
-	token, err := store.GenerateToken()
+	token, err := store.GenerateToken("test")
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestTokenStore_TokenExpiry(t *testing.T) {
 	cfg.MDS.TokenTTL = "1ms"
 	store := NewTokenStore(cfg)
 	
-	token, err := store.GenerateToken()
+	token, err := store.GenerateToken("test")
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}

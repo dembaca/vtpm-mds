@@ -24,7 +24,7 @@ func signatureTestServer(t *testing.T) (*Server, string) {
 	if err != nil {
 		t.Fatalf("New returned an error: %v", err)
 	}
-	token, err := srv.tokenStore.GenerateToken()
+	token, err := srv.tokenStore.GenerateToken("test")
 	if err != nil {
 		t.Fatalf("failed to generate a session token: %v", err)
 	}
