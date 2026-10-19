@@ -1,0 +1,76 @@
+.TH VTPM-MDS-BIND 8 "October 2026" "vtpm-mds" "System Manager's Manual"
+.SH NAME
+vtpm-mds-bind \- bind guest ports of the IMDS bridge to their configured MAC
+.SH SYNOPSIS
+.B vtpm-mds-bind
+.RB [ \-bridge
+.IR name ]
+.RB [ \-pve-root
+.IR path ]
+.RB [ \-nft
+.IR path ]
+.RB [ \-run-dir
+.IR path ]
+.RB [ \-print ]
+.RB [ \-version ]
+.SH DESCRIPTION
+.B vtpm-mds
+identifies a guest by the MAC address behind its IP address.
+.B vtpm-mds-bind
+keeps the nftables table
+.B bridge vtpm_mds_bind
+so that, for every NIC of a guest of this node that is attached to the IMDS
+bridge, frames from its port
+.BI tap <vmid> i <n>
+are dropped when their source MAC is not the one in the guest's configuration,
+and ARP packets are dropped when their sender MAC is not.
+NICs on other bridges are not touched.
+.PP
+It reads
+.IR /etc/pve/local/qemu-server/*.conf
+every five seconds, rewrites the table in one transaction when the bound ports
+change, and restores the table when it is missing or was changed by anything
+else, for example after
+.BR "systemctl restart nftables" .
+When it stops, the table stays as it was; removing the package deletes it.
+.SH OPTIONS
+.TP
+.BI \-bridge " name"
+The IMDS bridge. Default
+.BR vmbr_imds .
+.TP
+.BI \-pve-root " path"
+The Proxmox cluster filesystem. Default
+.IR /etc/pve .
+.TP
+.BI \-nft " path"
+The nft binary. Default
+.IR /usr/sbin/nft .
+.TP
+.BI \-run-dir " path"
+Where the last applied script is written as
+.IR vtpm_mds_bind.nft .
+Default
+.BR $RUNTIME_DIRECTORY ,
+which the unit sets to
+.IR /run/vtpm-mds-bind .
+.TP
+.B \-print
+Print the table for the current configurations and exit, changing nothing.
+.TP
+.B \-version
+Print the version and exit.
+.SH FILES
+.TP
+.I /usr/lib/systemd/system/vtpm-mds-bind.service
+Runs the binder as user
+.B vtpm-mds
+with
+.B CAP_NET_ADMIN
+only.
+.TP
+.I /run/vtpm-mds-bind/vtpm_mds_bind.nft
+The last applied script.
+.SH SEE ALSO
+.BR vtpm-mds (8),
+.BR nft (8)

@@ -1,0 +1,59 @@
+[Unit]
+Description=vTPM metadata service: bind guest ports of the IMDS bridge to their MAC
+Documentation=man:vtpm-mds-bind(8)
+Documentation=file:///usr/share/doc/vtpm-mds/README.Debian
+# After nftables, so a ruleset loaded at boot does not flush the table again.
+After=nftables.service pve-cluster.service
+# Restarted with pmxcfs, so the read-only view of /etc/pve is rebuilt on remount.
+PartOf=pve-cluster.service
+StartLimitIntervalSec=60
+StartLimitBurst=12
+
+[Service]
+Type=simple
+# The IMDS bridge; a drop-in replaces this line for another name.
+ExecStart=/usr/sbin/vtpm-mds-bind -bridge vmbr_imds
+Restart=on-failure
+RestartSec=5s
+
+# The daemon's user: www-data reads /etc/pve. CAP_NET_ADMIN writes the
+# nftables table, and the nft child inherits it as an ambient capability. The
+# metadata daemon never holds it (bind-callers-to-their-bridge-port D-a).
+User=vtpm-mds
+Group=vtpm-mds
+SupplementaryGroups=www-data
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+
+# The last applied script, for inspection.
+RuntimeDirectory=vtpm-mds-bind
+RuntimeDirectoryMode=0755
+
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+UMask=0022
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+# Netlink to nftables, nothing else; no IP traffic at all.
+RestrictAddressFamilies=AF_NETLINK AF_UNIX
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target
