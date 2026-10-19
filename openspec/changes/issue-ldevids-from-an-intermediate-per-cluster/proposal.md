@@ -10,23 +10,30 @@ mint an LDevID for any VM ID in any cluster that trusts that root. Maintainer
 beta scope (dembaca, 2026-10-19): move to an **intermediate CA per cluster** so
 nodes hold only their cluster intermediate; the root stays offline.
 
+Whether that also **stops cross-cluster forgery** depends on SPIRE selectors
+(design Q0): CN-only aliases still accept any intermediate under the root;
+adding `tpm_devid:ca:fingerprint:<cluster intermediate>` scopes trust per
+cluster. That choice gates Q2/Q4/Q5.
+
 This change is a **record only** until dembaca answers the open questions
 below. No code until coordinator code-go.
 
 ## What Changes
 
+- **Threat model (Q0):** key-hygiene only vs cluster-scoped
+  `ca:fingerprint` selectors on node aliases / registrations.
 - **Issuing CA:** `IssueDevID` signs with a cluster intermediate, not the root.
 - **Trust chain to SPIRE:** guests present a chain SPIRE 1.14 `tpm_devid` can
   verify; the server plugin's `devid_ca_path` holds the **root** (trust
-  anchors), while intermediates travel with the leaf (see design D-spire).
+  anchors), while intermediates travel with the leaf (see design SPIRE facts).
 - **Config / packaging:** how the intermediate cert+key and the root bundle
   are named, delivered (systemd credential vs files), and reflected in
   `/health` `devid_ca_readable`.
 - **Migration:** coexistence of root-issued and intermediate-issued LDevIDs;
   interaction with finite lifetime (#71) and CN-only subject (#70).
 
-Concrete wire/config names and lifetimes are **recommendations pending
-dembaca**, not settled defaults.
+Concrete wire/config names, lifetimes, and the Q0 variant are
+**recommendations pending dembaca**, not settled defaults.
 
 ## Apply order
 

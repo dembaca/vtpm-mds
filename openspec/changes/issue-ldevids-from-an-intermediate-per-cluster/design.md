@@ -24,7 +24,8 @@
 
 ## SPIRE 1.14.0 facts (source + lab)
 
-Checked against tag `v1.14.0`:
+Checked against tag `v1.14.0`
+(`pkg/server/plugin/nodeattestor/tpmdevid/{devid.go,selectors.go,devid_test.go}`):
 
 | Side | Behaviour |
 |---|---|
@@ -33,18 +34,62 @@ Checked against tag `v1.14.0`:
 | Attestation payload `DevIDCert[1:]` | **Intermediates** (parsed into `Intermediates` pool) |
 | Verify | `x509.Verify` with `Roots=devIDRoots`, `Intermediates=…` |
 | Agent `devid_cert_path` | `util.LoadCertificates` → **one or more** PEMs; all go into `DevIDCert` in order |
+| Selectors | `subject:cn:<leaf CN>`, `issuer:cn:<leaf issuer CN>`, and for **every** cert in each verified chain **except the leaf**: `ca:fingerprint:<hex>` |
+| Fingerprint | `sha1.Sum(cert.Raw)` then hex — SHA-1 over the certificate’s ASN.1 DER (`selectors.go` `Fingerprint`) |
+| Root vs intermediate | With an intermediate, tests expect **both** `ca:fingerprint:<intermediate>` and `ca:fingerprint:<root>`. With no intermediate, only the root fingerprint appears |
+| Multi-selector entries | `spire-server entry create -selector` “can be used more than once, to specify multiple selectors that **must** be satisfied” (AND). A node alias with `subject:cn` **and** `ca:fingerprint:<cluster intermediate>` matches only when both are present |
 
-Lab today uses a single-cert `devid-ca.pem` (root = issuing CA) and a
-single-cert agent `devid.crt.pem`. That matches “no intermediates” tests in
-SPIRE. With a real intermediate, the **agent file must contain leaf +
+Lab (single-tier today): agent
+`spiffe://lab.local/spire/agent/tpm_devid/6c525395…` shows
+`tpm_devid:subject:cn:100`, `tpm_devid:issuer:cn:… Lab DevID CA`, and
+`tpm_devid:ca:fingerprint:ff923f7e3604e117041492c13554936a510d90ac`, which
+equals `sha1(DER)` of `/var/lib/mds-lab/spire/conf/server/devid-ca.pem`.
+Two-tier lab mint was not run in this pass; intermediate+root dual
+`ca:fingerprint` selectors are covered by SPIRE’s own unit tests on
+`v1.14.0`.
+
+With a real intermediate, the **agent file must contain leaf +
 intermediate**; the **server file must contain the offline root** (not the
-intermediate alone, or Verify fails unless the intermediate is also trusted as
-a root — which defeats the point).
-
-Selectors include `ca:fingerprint:` of intermediates when present (server
-plugin tests). Prefer continuing `tpm_devid:subject:cn:<vmid>` registration.
+intermediate alone — trusting the intermediate as a root is variant A below
+and defeats cluster-scoped revocation).
 
 ## Open questions for dembaca (with recommendations)
+
+### Q0 — What does the intermediate protect against?
+
+**Ask:** Today a node holds the root and can mint an LDevID for any VM ID.
+After cut-over, SPIRE still trusts the offline root in `devid_ca_path`. If
+registrations / node aliases select **only** on `tpm_devid:subject:cn:<vmid>`
+(as D8 / the lab entry do today), a compromised node that holds its
+**cluster intermediate** can still mint an LDevID for any VM ID — including
+IDs that belong to another cluster — and SPIRE will accept it. Without a CRL,
+revoking a leaked intermediate means rotating the **root** (or every alias
+that trusted that path). So relative to today, intermediate-only packaging
+buys “root private key off the hypervisors”, and little else for
+cross-cluster forgery.
+
+**Within one cluster**, every node that holds that cluster’s intermediate can
+forge any VM ID of that cluster. That limit is true for **both** variants
+below and is not fixed by this change.
+
+Two variants — pick one; Q2/Q4/Q5 mostly follow:
+
+| | **(A) Key hygiene only** | **(B) Cluster-scoped selectors** |
+|---|---|---|
+| Trust | Root in `devid_ca_path`; nodes hold intermediate | Same |
+| Registration / node alias | Keep `tpm_devid:subject:cn:<vmid>` only | **Also** require `tpm_devid:ca:fingerprint:<sha1(intermediate DER)>` (AND with CN) |
+| Cross-cluster forge | Still possible with a stolen intermediate | Blocked: forged leaf carries the wrong intermediate fingerprint |
+| Revoke one cluster | Rotate root (or rebuild all trust) | Drop / replace aliases for that fingerprint; root stays |
+| Affects | Packaging + PEM chain only | D8 node-alias shape, registration docs, ops playbooks |
+
+**Recommendation: (B)**, because SPIRE 1.14 already emits
+`tpm_devid:ca:fingerprint:` for the intermediate (and the root) and entry
+selectors AND. Lab proof after code-go: mint two-tier materials, attest,
+confirm both fingerprints, create a node alias with CN **and** intermediate
+fingerprint, show a leaf minted under another intermediate does not match.
+
+If dembaca picks (A), document explicitly that the threat model is only
+“protect the offline root key”, not cross-cluster isolation.
 
 ### Q1 — Who mints the intermediate, and where does the root live?
 
@@ -80,7 +125,11 @@ Does SPIRE `devid_ca_path` get only the root, or a bundle?
   LDevIDs). Optional new key `mds.devid_root_cert` only if something other than
   SPIRE must validate on the host — not required for enroll itself.
 - Lab proof: mint intermediate, point server `devid_ca_path` at root, agent
-  cert file at leaf+intermediate, attest once.
+  cert file at leaf+intermediate, attest once; under Q0(B) also confirm
+  `ca:fingerprint` for intermediate+root and a two-selector node alias.
+- If Q0 picks (B), registration / D8 node aliases gain the intermediate
+  fingerprint selector (AND with CN); that is ops/docs, not a new enroll
+  JSON field.
 
 ### Q3 — Intermediate lifetime, pathLen, name constraints, key usage
 
@@ -147,12 +196,22 @@ leaf).
 
 ## Risks
 
-- Shipping only the intermediate in SPIRE `devid_ca_path` makes the
-  intermediate a trust anchor — a stolen intermediate still enrolls forever
-  from SPIRE’s point of view until the path is rotated; the offline root does
-  not help unless SPIRE trusts the root and nodes only hold the intermediate.
+- **Variant (A) only (key hygiene):** SPIRE trusts the root; aliases select
+  only on `subject:cn`. A stolen cluster intermediate still mints any VM ID
+  SPIRE will accept. Gains are limited to keeping the root private key off
+  hypervisors. Revoking that intermediate without CRLs still means root
+  rotation (or mass re-registration). This is the failure mode the earlier
+  note “shipping only the intermediate in `devid_ca_path` …” was about when
+  misread as trusting the intermediate as a root — same end-state for
+  forgery if selectors ignore `ca:fingerprint`.
+- **Variant (B):** ops must keep node aliases (and any registration docs) in
+  sync with each cluster’s intermediate fingerprint; rotating an intermediate
+  requires updating those selectors before guests renew onto the new chain.
 - Forgetting to put the intermediate in the guest PEM breaks attest with
   “unable to verify DevID signature” while root-only leaves still work —
   confusing during migration.
 - Lab `gen-lab-pki.sh` today is single-tier; without a two-tier lab mode,
-  cloud verification of this change is weak.
+  cloud verification of intermediate `ca:fingerprint` selectors is weak
+  (source tests cover it; lab confirm is still owed at code-go).
+- **Intra-cluster:** any node with the cluster intermediate can forge any VM
+  ID in that cluster (A and B). Not in scope to fix here.

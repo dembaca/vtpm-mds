@@ -10,10 +10,15 @@ coordinator says code-go. Prefer applying after #70 and #71 are archived
       (intermediate issuer, SPIRE chain shape), apply order, and non-goals
       **Verify:** file present; Impact names `internal/devid`, config, packaging,
       SPIRE 1.14 — not E2.4 / #70 subject / new JSON fields by default
-- [x] 1.2 `design.md` frames Q1–Q5 as questions + recommendations for dembaca,
-      with SPIRE 1.14.0 source facts for `devid_ca_path` vs agent chain PEM
-      **Verify:** each of Q1–Q5 has Ask + Recommendation; D-spire / table cites
-      `tpmdevid` server+agent behaviour from tag `v1.14.0`
+- [x] 1.2 `design.md` frames Q0–Q5 as questions + recommendations for dembaca,
+      with SPIRE 1.14.0 source facts for `devid_ca_path`, agent chain PEM, and
+      `ca:fingerprint` (hash over DER; AND multi-selector entries)
+      **Verify:** Q0 has A/B + intra-cluster limit; Q1–Q5 Ask+Recommendation;
+      table cites `tpmdevid` on tag `v1.14.0`; lab single-tier fingerprint
+      match recorded
+- [x] 1.6 Review follow-up: add Q0 (threat model A vs B), expand SPIRE
+      selector facts, rewrite Risks for (A)/(B)
+      **Verify:** coordinator Review on ASSIGN addressed; RESULT posted
 - [x] 1.3 Delta `specs/devid-enrollment/spec.md`: ADDED intermediate issuance;
       MODIFIED gate to load intermediate as signing CA
       **Verify:** scenarios cover leaf+intermediate PEM, chain to offline root,
