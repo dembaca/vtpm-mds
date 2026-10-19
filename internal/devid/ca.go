@@ -131,8 +131,8 @@ func (ca *CA) uniqueSerial(template *x509.Certificate) (*big.Int, error) {
 }
 
 // IssueDevID builds and signs an LDevID certificate for sr.
-// subjectCN is the authenticated VM ID and always becomes the subject common
-// name, replacing any common name carried in the platform identity.
+// subjectCN is the authenticated VM ID and is the whole subject; nothing from
+// the platform identity in sr reaches the certificate.
 func (ca *CA) IssueDevID(sr *SigningRequest, subjectCN string, notBefore time.Time) (*x509.Certificate, error) {
 	if sr == nil || sr.DevIDKey == nil {
 		return nil, errors.New("missing DevID key")
@@ -142,9 +142,7 @@ func (ca *CA) IssueDevID(sr *SigningRequest, subjectCN string, notBefore time.Ti
 		return nil, err
 	}
 
-	var subj pkix.Name
-	subj.FillFromRDNSequence(&sr.PlatformIdentity)
-	subj.CommonName = subjectCN
+	subj := pkix.Name{CommonName: subjectCN}
 
 	subjectIsEmpty := len(subj.ToRDNSequence()) == 0
 	sanExt, err := buildDevIDSAN(subjectIsEmpty, sr)
