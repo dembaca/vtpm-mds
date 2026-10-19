@@ -27,9 +27,10 @@ new `internal/bridgebind/`, a NIC reader in `internal/proxmox/` (not
       `origin/archive-restart-the-service-on-upgrade`. Added: both units
       restart alike, and configuring starts `vtpm-mds-bind` when `vtpm-mds`
       is active (also on `dpkg-reconfigure`), with two scenarios.
-      `openspec validate --all --strict` passes. **#66 must merge before
-      this change is archived**; if #66's text changes before it merges, this
-      block is rebuilt against the archived text.
+      `openspec validate --all --strict` passes. #66 was merged before
+      this change was rebased onto `main@da0083a`; the block matches the text
+      it archived in `openspec/specs/debian-packaging/spec.md` plus this
+      change's additions (Fable re-check of `1f73bdb`).
 
 ## 2. Port list
 
@@ -166,6 +167,9 @@ new `internal/bridgebind/`, a NIC reader in `internal/proxmox/` (not
       target (VM 399 cannot migrate); a hot-plugged NIC; a new VM appearing
       (netns only, 3.1); `firewall=1` traffic from VM 300 (only its rules were
       read; VM 300 is not ours to test); LXC on the bridge (none exists); a
+      first check that cannot read the configurations exiting non-zero (Fable
+      re-check of `1f73bdb`; `TestRunFailsWhenTheFirstReadFails`, red on the
+      old `Run`, no reinstall on `hogan` for it); a
       failing apply under the real unit and the `StartLimitBurst` path (unit
       tests only); `postrm remove` deleting the table (would remove the
       package); the upgrade from a version without the binder on a node whose

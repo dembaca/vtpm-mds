@@ -196,6 +196,22 @@ func TestRunFailsWhenTheFirstApplyFails(t *testing.T) {
 	}
 }
 
+func TestRunFailsWhenTheFirstReadFails(t *testing.T) {
+	r := newRig(t, map[string]string{"399.conf": vm399})
+	if err := os.Remove(filepath.Join(r.root, "local")); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err := r.b.Run(ctx, time.Hour)
+	if err == nil || !strings.Contains(err.Error(), "cannot read guest NICs") {
+		t.Fatalf("Run = %v, want the read error", err)
+	}
+	if r.nft.applies != 0 {
+		t.Fatalf("applied %d times without configurations", r.nft.applies)
+	}
+}
+
 func TestUnreadableConfigsKeepTheTableAndAreLoggedOnce(t *testing.T) {
 	r := newRig(t, map[string]string{"399.conf": vm399})
 	r.b.Tick()

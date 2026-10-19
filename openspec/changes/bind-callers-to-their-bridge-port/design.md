@@ -121,17 +121,18 @@ Facts from `hogan` that shape the design:
   daemon, and on the upgrade that introduces it, it would otherwise be enabled
   but not running until the next boot (Fable pre-review). A node whose daemon
   is not running (a first install, a build host) starts neither. The package
-  depends on `nftables`, so `nft` is there. A failed first apply exits the
-  binder non-zero, so the unit shows `failed` and `Restart=on-failure`
+  depends on `nftables`, so `nft` is there. A first check that leaves no
+  table, because the configurations cannot be read or the apply fails, exits
+  the binder non-zero, so the unit shows `failed` and `Restart=on-failure`
   retries it, instead of an active unit without a table. A failure that
   lasts beyond `StartLimitBurst=12` in 60 s leaves the unit `failed`, and it
-  stays so after the cause is fixed until someone runs `systemctl
-  reset-failed` or `start`: visible, and on purpose. The
+  stays so after the cause is fixed: within that 60 s systemd refuses
+  `systemctl start` too, so someone runs `systemctl reset-failed` first, or
+  starts it once the window has passed. Visible, and on purpose. The
   `debian-packaging` requirement that says so ("Installing The Host Package
-  Leaves systemd In Step") is being archived by #66; its MODIFIED block is
-  added to this record against the archived text once #66 is merged (task
-  1.3), not copied from the change record, so the two edits cannot overwrite
-  each other.
+  Leaves systemd In Step") was archived by #66; its MODIFIED block in this
+  record was written against the text #66 archived (task 1.3), not copied
+  from the change record, so the two edits cannot overwrite each other.
 
 ## Risks / Trade-offs
 

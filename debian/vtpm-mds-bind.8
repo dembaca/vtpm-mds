@@ -34,14 +34,16 @@ else, for example after
 .BR "systemctl restart nftables" .
 When it stops, the table stays as it was; removing the package deletes it.
 .PP
-If the first apply fails, it exits non-zero and systemd restarts it. Twelve
+If the first check leaves no table, because the configurations cannot be
+read or the apply fails, it exits non-zero and systemd restarts it. Twelve
 failures within a minute leave the unit
 .BR failed ,
-and it stays failed after the cause is fixed until
-.B systemctl reset-failed vtpm-mds-bind
-or
+and it stays failed after the cause is fixed. Within that minute systemd
+refuses
 .B systemctl start vtpm-mds-bind
-is run. A failure after a successful start does not stop it: it retries every
+as well; run
+.B systemctl reset-failed vtpm-mds-bind
+first, or start it once the minute has passed. A failure after a successful start does not stop it: it retries every
 five seconds and logs when the error changes.
 .SH OPTIONS
 .TP

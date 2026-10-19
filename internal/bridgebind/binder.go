@@ -73,6 +73,7 @@ type Binder struct {
 	seen    tableState // the table as the last successful apply left it
 	failing bool       // the last apply failed; it is retried on every tick
 	failMsg string     // its error, logged again only when it changes
+	readMsg string     // why the configurations could not be read, if they could not
 }
 
 // tableState is what a listing found: the rules, or that the table is missing.
@@ -107,7 +108,9 @@ func (b *Binder) Tick() bool {
 	if fp := proxmox.SourceFingerprint(b.PVERoot); !b.haveFP || fp != b.fp {
 		b.fp, b.haveFP = fp, true
 		nics, err := proxmox.GuestNICs(b.PVERoot)
+		b.readMsg = ""
 		if err != nil {
+			b.readMsg = err.Error()
 			b.logf("Failed to read guest NICs, keeping the %s table as it is: %v", Table, err)
 		} else if script := Render(b.Bridge, nics); script != b.want {
 			b.want, b.ports, changed = script, Bound(b.Bridge, nics), true
@@ -158,11 +161,15 @@ func (b *Binder) writeScript() {
 }
 
 // Run ticks at once and then every interval until ctx is done. It returns an
-// error, without waiting, when that first apply fails, so the unit fails
+// error, without waiting, when that first check leaves no table, because the
+// configurations could not be read or the apply failed, so the unit fails
 // visibly and systemd restarts it instead of a binder that runs without a
 // table.
 func (b *Binder) Run(ctx context.Context, interval time.Duration) error {
 	b.Tick()
+	if b.want == "" {
+		return fmt.Errorf("cannot read guest NICs, no table bridge %s applied: %s", Table, b.readMsg)
+	}
 	if b.failing {
 		return fmt.Errorf("first apply of table bridge %s failed: %s", Table, b.failMsg)
 	}
