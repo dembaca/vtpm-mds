@@ -50,7 +50,11 @@ writes made on this node only.
   reads. pmxcfs serves them from memory, the files are small, and content
   comparison does not depend on how pmxcfs reports mtimes for replicated
   writes. A reload happens only when the fingerprint differs from the one of
-  the last successful load.
+  the last load **attempt**, successful or not. Comparing against the last
+  *successful* load instead would retry, and log, a broken file on every tick.
+  The fingerprint itself cannot fail: a missing or unreadable input adds a
+  marker, so its appearing, disappearing or becoming readable is a change like
+  any other, and the reload it triggers reports the error.
 - **D-c. Interval 5 s, a package constant.** First boot of a new VM takes
   longer than 5 s to reach cloud-init; a guest that asks earlier retries.
   Constant, like the throttling limits (no config key in this change);
@@ -58,9 +62,12 @@ writes made on this node only.
 - **D-d. One code path.** The loop calls `RefreshVMConfigCache`, so success,
   failure, logging and the swap behave exactly as for `SIGHUP`. A `SIGHUP`
   also records the new fingerprint, so the next tick does not reload again.
-- **D-e. Errors once.** A failing fingerprint or load logs one line when the
-  error first appears or its text changes, and nothing while it persists; the
-  previous inventory stays in effect.
+- **D-e. Errors once.** Because the fingerprint never fails (D-b) and a load
+  is attempted once per fingerprint, a failing load logs its one existing
+  line (`Failed to load VM configs from …`) once per change of the source and
+  nothing while the source stays as it is; the previous inventory stays in
+  effect, and `/health` reports it through `last_error`
+  (`report-readiness-honestly`). No separate error tracking is needed.
 - **D-f. Lifecycle.** The loop starts after the startup load and stops when
   the server shuts down, so a clean stop still exits 0
   (`A Requested Shutdown Is Not A Failure`).
@@ -70,9 +77,15 @@ writes made on this node only.
 - A partially written config (a `qm set` mid-write) could be read. pmxcfs
   writes are atomic per file, and the next tick re-reads; at worst one tick
   serves the half-state that `SIGHUP` would also have served.
-- During a pmxcfs restart the directory may vanish briefly: the check fails,
-  the old inventory stays (D-e), and `PartOf=pve-cluster.service` restarts
-  the daemon anyway.
+- During a pmxcfs restart the directory may vanish briefly: the fingerprint
+  changes, the load fails once, the old inventory stays (D-e); when the
+  directory returns the fingerprint changes back and the next check reloads.
+  `PartOf=pve-cluster.service` restarts the daemon anyway.
+- A load that fails for a transient reason while the files read for the
+  fingerprint were fine (both read the same in-memory pmxcfs files within
+  milliseconds) is not retried until the source changes again. Parse errors,
+  the realistic failure, are deterministic, so retrying would only repeat the
+  log line; `SIGHUP` forces a retry.
 - 5 s polling of three to a few hundred small files is negligible on a node;
   a node with thousands of guests would want a longer interval (D-c).
 
