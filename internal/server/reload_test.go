@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,4 +144,35 @@ func TestThePollerReloadsAndStops(t *testing.T) {
 		t.Fatalf("a stopped poller still reloaded: MAC bound to %q", got)
 	}
 	srv.stopInventoryPoller() // a second stop is a no-op
+}
+
+// Start runs the check and Shutdown stops it and waits for it.
+func TestStartRunsThePollerAndShutdownStopsIt(t *testing.T) {
+	srv, _ := yamlServer(t, oneVM)
+	go func() { _ = srv.Start() }()
+
+	var done chan struct{}
+	deadline := time.Now().Add(2 * time.Second)
+	for done == nil {
+		srv.poll.mu.Lock()
+		done = srv.poll.done
+		srv.poll.mu.Unlock()
+		if done == nil {
+			if time.Now().After(deadline) {
+				t.Fatal("Start did not start the inventory check")
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	select {
+	case <-done:
+	default:
+		t.Fatal("Shutdown returned with the inventory check still running")
+	}
 }

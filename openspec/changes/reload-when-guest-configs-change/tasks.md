@@ -63,7 +63,10 @@ a new `internal/server/reload.go`, fingerprint functions in
       hashed; a fixed node instead of `local`. Two survived the first round
       (length prefix, link target) and got sharper tests:
       `TestFingerprintFieldsDoNotRunTogether`'s forged-field case and
-      `TestSourceFingerprintFollowsTheLinkTarget`.
+      `TestSourceFingerprintFollowsTheLinkTarget`. After the Fable pre-review
+      two more, removing the poller start from `Start` and the stop from
+      `Shutdown`, survived; `TestStartRunsThePollerAndShutdownStopsIt` now
+      turns both red (14 of 14).
 - [x] 3.4 Run `go vet ./...`, `go test ./...` and `openspec validate --all --strict`, and verify all pass
       `go vet ./...` clean; `go test -race -count=1 ./...` all `ok`;
       `openspec validate --all --strict` 6 passed; `gofmt -l` clean on every
