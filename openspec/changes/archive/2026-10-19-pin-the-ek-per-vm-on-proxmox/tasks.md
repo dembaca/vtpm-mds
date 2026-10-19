@@ -8,8 +8,10 @@ product logic, **not** `AGENTS.md` / root `README.md`.
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer, optional** — accept or overrule D-a to D-h in
+- [x] 1.1 **Maintainer, optional** — accept or overrule D-a to D-h in
       `design.md`. Verify the outcome is recorded there.
+      **Done, 2026-10-19:** dembaca overruled none of D-a to D-h; he carried
+      out the D-g seed himself (4.1) and merged PR #65 as recorded.
 - [x] 1.2 **Coordinator** — ACK the record and the delta on the bus before any
       code is written, and verify the ACK names this change.
       **Done, 2026-10-19:** `agent-mac-…-fc45cd`, "ACK on the record
@@ -128,6 +130,11 @@ product logic, **not** `AGENTS.md` / root `README.md`.
 
 ## 5. Archive
 
-- [ ] 5.1 After merge, the coordinator archives with
+- [x] 5.1 After merge, the coordinator archives with
       `openspec archive pin-the-ek-per-vm-on-proxmox` and verifies strict stays
       clean. Note that pin alone does not replace E1(a)/(b).
+      **Done, 2026-10-19:** archived by the coordinator after PR #65 merged
+      (`8e98a45`); `openspec validate --all --strict` clean afterwards. The
+      pin closes the spoofed-MAC enrolment only for a VM that has already
+      enrolled; a spoofer that enrols first still wins, which is what
+      `bind-callers-to-their-bridge-port` (E1(b), PR #68) closes.

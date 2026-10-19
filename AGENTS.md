@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-19
 
-None. Five were archived on 2026-10-17, seven on 2026-10-18 and four on 2026-10-19; the first two in this order:
+None. Five were archived on 2026-10-17, seven on 2026-10-18 and five on 2026-10-19; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -339,6 +339,26 @@ every install on hogan.** A build of this change cut from a base without
 `restart-the-service-on-upgrade` brought the old `preinst` stop back and took
 the IMDS down for 16.6 s; rebased, the longest gap was 0.201 s.
 
+The EK pin per VM followed as the fifth archive of 2026-10-19:
+`openspec/changes/archive/2026-10-19-pin-the-ek-per-vm-on-proxmox/`
+(PR #65, the maintainer's E1, first half). When inventory `ek_sha256` is
+empty (always, on Proxmox), the first `enroll/finish` of a VM writes
+`EKFingerprint` (lowercase hex SHA-256 of the EK certificate DER, the value
+of `ek=` in `devid issued`) to `$STATE_DIRECTORY/ek-pins/<vmid>` with
+`O_EXCL` **before** the LDevID is signed; an unusable directory answers `500`
+`pin store unavailable` and issues nothing. Later legs with another EK get
+`401` `EK certificate does not match stored pin`; an inventory pin still wins.
+**A replaced vTPM needs the operator to delete the pin file.** It is trust on
+first use: a guest that spoofs a MAC and enrols before the real VM pins its
+own EK, which is what MAC binding on the bridge port (PR #68) closes. VMs
+enrolled before the upgrade were seeded from the journal (design D-g) by the
+maintainer: `ek-pins/` `vtpm-mds:vtpm-mds 0750`, each pin `0640`. Verified
+in the lab and on hogan against `0.2.0+git20261019.256988ac0b8a` (VM 399
+enrols with the seeded pin, a wrong pin is refused with `401` and no
+`devid issued`, the restored pin enrols again, SPIRE's material untouched).
+Not verified on hogan: a first enrolment without a pin, the concurrent finish
+(unit test only).
+
 Honest readiness followed as the second archive of 2026-10-19:
 `openspec/changes/archive/2026-10-19-report-readiness-honestly/` (PR #61).
 `GET /health` still always answers `200`, but `status` is `ok` only when the
@@ -381,7 +401,7 @@ whole inventory while the service reports healthy; it is on the
 production-readiness list of 2026-10-18, which the maintainer wants worked off
 before production (debug logging, unit hardening, restart on upgrade (done), reload on new VMs (done), issuance
 log, health detail (done), the connection-map leak (done), CA operation, throttling (done), and MAC
-binding on `vmbr_imds` with an EK pin per VM on Proxmox).
+binding on `vmbr_imds` with an EK pin per VM on Proxmox (pin done)).
 
 Those first two both carry a `MODIFIED` block on `Refuse An Instance Identity
 To Callers With No VM Record`, so the signature change's block **was rebuilt
