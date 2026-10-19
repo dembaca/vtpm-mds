@@ -1,10 +1,10 @@
 package inventory
 
 import (
-	"reflect"
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )

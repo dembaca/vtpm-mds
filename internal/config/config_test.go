@@ -8,15 +8,15 @@ import (
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	
+
 	if cfg.MDS.ListenAddr != "169.254.169.1:80" {
 		t.Errorf("Expected listen_addr '169.254.169.1:80', got '%s'", cfg.MDS.ListenAddr)
 	}
-	
+
 	if !cfg.MDS.EnableEC2Compat {
 		t.Error("EnableEC2Compat should be true by default")
 	}
-	
+
 	if !cfg.MDS.EnableTPMAttestation {
 		t.Error("EnableTPMAttestation should be true by default")
 	}
@@ -302,19 +302,18 @@ func TestLoadInvalidYAML(t *testing.T) {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
 	defer os.Remove(tmpFile.Name())
-	
+
 	invalidYAML := "this is not valid yaml: ["
 	if _, err := tmpFile.WriteString(invalidYAML); err != nil {
 		t.Fatalf("Failed to write config: %v", err)
 	}
 	tmpFile.Close()
-	
+
 	_, err = Load(tmpFile.Name())
 	if err == nil {
 		t.Error("Expected error for invalid YAML")
 	}
 }
-
 
 func TestLoadRejectsUnknownKey(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "test-config-unknown-*.yaml")

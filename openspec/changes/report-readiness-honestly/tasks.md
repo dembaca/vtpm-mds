@@ -43,13 +43,16 @@
       bound guest still gets `instance-id`
       **Verify:** health JSON + one guest `instance-id` 200
       **Lab note:** unbound degraded + retained `vm_count` measured; bound
-      guest `instance-id` during degraded not re-checked (ssh); covered by
-      `TestHealthFailedReloadKeepsCount`.
+      guest `instance-id` during degraded not re-checked over ssh.
+      `TestHealthFailedReloadKeepsCount` asserts retained `vm_count`, unbound
+      `degraded`, kept MAC→VM cache entry, and bound `/health` still
+      `{"status":"degraded"}` (instance-id = `i-` + that VMID).
 - [x] 4.3 Say what was not verified: Proxmox inventory path, path-unit reload,
       postinst restart, removing dead config keys
       **Lab, 2026-10-19** (build-61): unbound detail ok/degraded as designed;
       bound guest `{"status":"ok"}` only; bad SIGHUP keeps vm_count=1. Guest
-      instance-id during degraded not re-checked (ssh); unit test covers keep.
+      instance-id during degraded not re-checked over ssh; unit test covers
+      retained cache + bound health while degraded.
 
 ## 5. Hogan (strict config before upgrade)
 
