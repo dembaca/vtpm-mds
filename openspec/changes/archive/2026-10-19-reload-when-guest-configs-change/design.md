@@ -95,5 +95,5 @@ None. `systemctl reload` keeps working and becomes optional.
 
 ## Open Questions
 
-- D-c: 5 s as a constant, or a configuration key — the maintainer's call;
-  the record proceeds with the constant unless overruled.
+- D-c: 5 s as a constant, or a configuration key — **decided by the
+  maintainer on 2026-10-19 (E5): a 5 s constant**, no configuration key.
