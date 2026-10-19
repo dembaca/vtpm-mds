@@ -72,7 +72,7 @@ product logic, **not** `AGENTS.md` / root `README.md`.
 
 ## 4. Hogan (seed + enroll; needs dembaca's go)
 
-- [ ] 4.1 **Seed path (D-g):** from the host journal, extract
+- [x] 4.1 **Seed path (D-g):** from the host journal, extract
       `devid issued … vm=<id> ek=<sha256>` into
       `/var/lib/<package>/ek-pins/<vmid>` for VM 399 (and any other VMs in
       scope). Create the directory as the service user first (a root-owned
@@ -92,8 +92,39 @@ product logic, **not** `AGENTS.md` / root `README.md`.
       After `fresh-tpm` the journal may list two EKs for the same VMID; the
       last `devid issued` line wins — verify `399` matches that last `ek=`.
       **Who:** hogan-d3e6 after dembaca approves host writes.
-- [ ] 4.2 After the new package is installed: enroll from VM 399 succeeds with
+      **Done 2026-10-19 16:24 by dembaca as root on `hogan`** (the agent
+      cannot write `/var/lib/vtpm-mds`), VM 399 only, with the coordinator's
+      block: the journal held three `devid issued … vm=399` lines, all with
+      `ek=19517bd139d4aa0512259dd96ca731d4c017b6c6af6891ceeb32e6a88aacc069`
+      (no second EK since `fresh-tpm`); `ek-pins/` `vtpm-mds:vtpm-mds`
+      `drwxr-x---`, `399` `vtpm-mds:vtpm-mds` `-rw-r-----`, 65 bytes, that
+      value.
+- [x] 4.2 After the new package is installed: enroll from VM 399 succeeds with
       the seeded pin; a wrong pin file content fails with `stored pin`.
+      Done 2026-10-19 on `hogan` by hogan-d3e6 and dembaca. Built `256988a`
+      (contains `main@c94bb2d`, clean tree) → `0.2.0+git20261019.256988ac0b8a`,
+      installed 16:33:38 through `hogan-lab dpkg-install`: `try-restart`
+      PID 3126137 → 3270635, gap 0.19 s, `DevID CA key from systemd
+      credential`, 3 VMs/5 MACs.
+      - Seeded pin: `devid-enroll -out /root/devid-scratch-65` in VM 399 at
+        16:34 → `DevID enrollment complete`, `devid issued … vm=399
+        ek=19517bd1…acc069`. The pin file kept its 16:24:33 mtime (read by
+        dembaca at 17:04), so the matching pin was compared, not rewritten.
+      - Wrong pin (dembaca, 17:04, 64 zeros, owner/mode kept):
+        `devid-enroll` exit 1, `enroll/start: HTTP 401: EK certificate does
+        not match stored pin`; journal `devid enroll auth: EK certificate does
+        not match stored pin` and `POST "/latest/devid/enroll/start" 401 …
+        169.254.169.10 399`; no `devid issued` line.
+      - Restored from `/root/ek-pin-399.bak-20261019`: `vtpm-mds:vtpm-mds 640
+        65`, `19517bd1…acc069`; `devid-enroll -out
+        /root/devid-scratch-65-back` → `DevID enrollment complete`, journal
+        `enroll/start 200`, `devid issued serial=7ad39ef6… vm=399
+        ek=19517bd1…`, `enroll/finish 200`.
+      - SPIRE's material `/var/lib/spire/agent/devid.{crt.pem,priv.blob,pub.blob}`
+        sha256 `253be3e4…`, `39679c24…`, `d8fb058d…` before 16:34 and after
+        17:04, unchanged. The scratch directories stay in the guest.
+      Not verified on `hogan`: a first enrollment of a VM with no pin (no
+      second test VM), and the concurrent finish (unit test only).
 
 ## 5. Archive
 
