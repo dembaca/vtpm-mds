@@ -322,12 +322,14 @@ Reload on new VMs followed as the fourth archive of 2026-10-19:
 `openspec/changes/archive/2026-10-19-reload-when-guest-configs-change/`
 (PR #62). The daemon checks its inventory source every **5 s** (a constant,
 the maintainer's E5) and reloads through the `SIGHUP` path when a SHA-256 over
-the names and contents of exactly the files the loader reads has changed; an
+the `local` link target and the names and contents of exactly the files the
+loader reads has changed; an
 unchanged source logs nothing, a failing load logs once per change and keeps
 the previous inventory, and `SIGHUP` stays for an immediate reload. **A
 `.path` unit cannot do this on a cluster:** inotify on `/etc/pve/nodes/*`
-saw no event for writes that arrived from another node, which is how a
-migration or HA recovery writes a guest config. Verified on hogan against
+saw no event for writes that arrived from another node (measured on
+`lrm_status`), and a migration or HA recovery writes a guest config the same
+way. Verified on hogan against
 `0.2.0+git20261019.90a2a368116a`: a tag set with `qm set` reached VM 399
 within the interval and a write made **on holger** into
 `nodes/hogan/qemu-server/399.conf` was picked up, both with the same PID; and
