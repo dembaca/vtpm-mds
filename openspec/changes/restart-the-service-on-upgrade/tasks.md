@@ -59,7 +59,18 @@ handed to the coordinator.
       **0.257 s** (245 polls at 50 ms, 5 failed); the same kind of upgrade
       before this change left the IMDS down 43 s until a manual start. VM 399
       afterwards: token `200`, `instance-id` `200` `i-399`.
-- [ ] 4.2 Upgrade a **stopped** daemon (needs the maintainer's go: the node's IMDS is down for the test), and verify it is still `inactive` afterwards; then start it and verify VM 399 reads `instance-id` `200`
+- [x] 4.2 Upgrade a **stopped** daemon (needs the maintainer's go: the node's IMDS is down for the test), and verify it is still `inactive` afterwards; then start it and verify VM 399 reads `instance-id` `200`
+      Done on hogan 2026-10-19 with the maintainer's go (11:38, in the
+      thread of the 10:57 request that named this case). `systemctl stop`
+      at 11:42:06; `hogan-lab dpkg-install --force-confold` of
+      `0.2.0+git20261019.27d0db6e0a7c` (`27d0db6`, the final code) over
+      `…e18ac5792907`: `dpkg` exit 0, no stderr from `postinst`, three
+      seconds later `is-active` `inactive` and no journal line after the
+      stop. Then `systemctl start`: `Started` 11:42:19.99, `vtpm-mds version
+      0.2.0+git20261019.27d0db6e0a7c`, `DevID enrollment routes
+      registered`; VM 399 token `200`, `instance-id` `200` `i-399`. The IMDS
+      was down 13.5 s, all of it the deliberate stop. hogan now runs
+      `27d0db6`.
 - [x] 4.3 Verify the first-install case on a host without the IMDS bridge (cloud lab, or a chroot where `policy-rc.d` denies), and say which was used
       **Lab guest** `guest100`, by `agent-cursor-vtpm-22e0` on the cloud lab,
       2026-10-19 11:12: systemd running (`/run/systemd/system` present), no
@@ -69,9 +80,12 @@ handed to the coordinator.
       `restart after upgrade failed`. So the `[ -n "$2" ]` branch was
       executed against a running manager and started nothing. (An earlier
       chroot run with `policy-rc.d` 101 is superseded by this one.)
-- [ ] 4.4 Say what was not verified, in particular the failing-restart scenario if no version that fails to start was installed
-      So far: the refused-restart scenario (would need a masked or broken
-      unit on the production node); 4.2 pending the maintainer's go. By
+- [x] 4.4 Say what was not verified, in particular the failing-restart scenario if no version that fails to start was installed
+      Not verified: the refused-restart scenario (would need a masked or
+      broken unit on the production node), and the `DPKG_ROOT` guard (no
+      installation into another root was made). 4.1 ran on `e18ac57`, whose
+      `postinst` differs from the final `27d0db6` only by the `DPKG_ROOT`
+      guards, the warning text and comments; 4.2 ran on `27d0db6`. By
       design, not a gap: a new version that execs and then exits (failed
       bind, bad configuration) is not reported by `dpkg` at all, because
       `Type=simple` makes `try-restart` succeed at fork; it shows in the
