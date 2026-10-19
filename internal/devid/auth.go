@@ -96,7 +96,15 @@ func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certifi
 	fp := EKFingerprint(ekCert)
 	if pin := strings.TrimSpace(vm.EKSHA256); pin != "" {
 		if !strings.EqualFold(pin, fp) {
-			return "", nil, errUnauthorized("EK certificate does not match inventory pin")
+			return "", nil, errUnauthorized(errInventoryPinMismatch)
+		}
+	} else if e.PinDir != "" {
+		stored, serr := readStoredPin(e.PinDir, vm.VMID)
+		if serr != nil {
+			return "", nil, serr
+		}
+		if stored != "" && !strings.EqualFold(stored, fp) {
+			return "", nil, errUnauthorized(errStoredPinMismatch)
 		}
 	}
 	if expectedFP != "" && !strings.EqualFold(expectedFP, fp) {

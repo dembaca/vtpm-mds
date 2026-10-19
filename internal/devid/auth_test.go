@@ -132,7 +132,7 @@ func TestFinishRejectsIdentityMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := enroller.Finish(sid, []byte("nonce"), "999", "fp-a"); err == nil {
+	if _, err := enroller.Finish(sid, []byte("nonce"), "999", "fp-a", ""); err == nil {
 		t.Fatal("expected VM mismatch")
 	}
 
@@ -140,7 +140,7 @@ func TestFinishRejectsIdentityMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := enroller.Finish(sid, []byte("nonce"), "100", "fp-b"); err == nil {
+	if _, err := enroller.Finish(sid, []byte("nonce"), "100", "fp-b", ""); err == nil {
 		t.Fatal("expected EK mismatch")
 	}
 }

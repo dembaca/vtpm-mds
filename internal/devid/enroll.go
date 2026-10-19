@@ -15,6 +15,9 @@ type Enroller struct {
 	CA       *CA
 	EKRoots  *x509.CertPool
 	Sessions *SessionStore
+	// PinDir is /var/lib/<package>/ek-pins. Empty disables the TOFU store
+	// (unit tests that do not exercise pins).
+	PinDir string
 }
 
 // NewEnroller constructs an Enroller. sessions may be nil (a default is created).
@@ -88,7 +91,9 @@ func (e *Enroller) Start(requestData, signature []byte, vmid, ekFP string) (*Sta
 
 // Finish completes enrollment if challengeResponse matches the stored nonce.
 // vmid and ekFP must match the values bound at Start (MAC + EK auth).
-func (e *Enroller) Finish(sessionID string, challengeResponse []byte, vmid, ekFP string) ([]byte, error) {
+// inventoryPin is the caller's inventory ek_sha256 (may be empty); when
+// non-empty the TOFU store is not written (inventory already pins).
+func (e *Enroller) Finish(sessionID string, challengeResponse []byte, vmid, ekFP, inventoryPin string) ([]byte, error) {
 	if e == nil || e.CA == nil {
 		return nil, errors.New("enroller not configured")
 	}
@@ -104,6 +109,11 @@ func (e *Enroller) Finish(sessionID string, challengeResponse []byte, vmid, ekFP
 	}
 	if !bytes.Equal(sess.Nonce, challengeResponse) {
 		return nil, errors.New("challenge verification failed")
+	}
+	if strings.TrimSpace(inventoryPin) == "" {
+		if err := e.ensurePinBeforeIssue(vmid, ekFP); err != nil {
+			return nil, err
+		}
 	}
 	cert, err := e.CA.IssueDevID(&sess.Request, sess.VMID, time.Now().UTC())
 	if err != nil {
