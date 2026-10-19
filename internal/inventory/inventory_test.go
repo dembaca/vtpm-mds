@@ -281,3 +281,15 @@ func TestValidTopologyKey(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadYAMLRejectsUnknownKey(t *testing.T) {
+	path := writeInventory(t, `vms:
+  - id: "100"
+    name: guest-a
+    macs: ["52:54:00:12:34:56"]
+    not_a_real_field: true
+`)
+	if _, err := LoadYAML(path); err == nil {
+		t.Fatal("expected error for unknown VM field")
+	}
+}

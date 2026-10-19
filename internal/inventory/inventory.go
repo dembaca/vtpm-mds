@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"net"
@@ -20,7 +21,7 @@ type VMConfig struct {
 	// They are kept apart from RawConfig so that a tag can never collide with a
 	// Proxmox key such as name, and nil when the VM has none.
 	Tags map[string]string
-	MACs      []string          // NIC MAC addresses used for caller identification
+	MACs []string // NIC MAC addresses used for caller identification
 	// EKSHA256 is an optional pin: lowercase hex SHA-256 of the TPM EK
 	// certificate DER. When set, DevID enroll requires a matching EK cert.
 	EKSHA256 string
@@ -52,7 +53,9 @@ func LoadYAML(path string) (VMConfigMap, error) {
 	}
 
 	var parsed fileFormat
-	if err := yaml.Unmarshal(data, &parsed); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&parsed); err != nil {
 		return nil, fmt.Errorf("failed to parse inventory YAML: %w", err)
 	}
 

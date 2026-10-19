@@ -29,6 +29,14 @@ type Server struct {
 	tokenStore *imds.TokenStore
 	devid      *devid.Enroller
 	limiter    *guestLimiter
+
+	readyMu         sync.Mutex
+	inventoryLoaded bool
+	vmCount         int
+	lastReload      time.Time
+	lastErrorClass  string
+	caReadable      bool
+	caCheckedAt     time.Time
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -110,11 +118,8 @@ func New(cfg *config.Config) (*Server, error) {
 		}
 	}
 
-	// Health check
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
+	// Health check (readiness; detail only for unbound callers — D-h)
+	mux.HandleFunc("GET /health", srv.handleHealth)
 
 	// Catch-all handler for debugging unmatched routes
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -405,6 +410,7 @@ func (s *Server) RefreshVMConfigCache() error {
 	}
 	if err != nil {
 		log.Printf("Failed to load VM configs from %s: %v", source, err)
+		s.recordInventoryLoadFailure()
 		return err
 	}
 
@@ -417,7 +423,128 @@ func (s *Server) RefreshVMConfigCache() error {
 	}
 
 	log.Printf("Cache refresh complete (%s): %d VMs, %d MAC addresses cached", source, len(vmConfigCache), macCount)
+	s.recordInventoryLoadSuccess(len(vmConfigCache))
 	return nil
+}
+
+const (
+	errClassInventoryLoadFailed = "inventory_load_failed"
+	errClassDevIDCAUnreadable   = "devid_ca_unreadable"
+	caReadableCacheTTL          = 5 * time.Second
+)
+
+func (s *Server) recordInventoryLoadSuccess(n int) {
+	s.readyMu.Lock()
+	defer s.readyMu.Unlock()
+	s.inventoryLoaded = true
+	s.vmCount = n
+	s.lastReload = time.Now().UTC()
+	s.lastErrorClass = ""
+}
+
+func (s *Server) recordInventoryLoadFailure() {
+	s.readyMu.Lock()
+	defer s.readyMu.Unlock()
+	s.lastErrorClass = errClassInventoryLoadFailed
+}
+
+type healthDetail struct {
+	Status          string `json:"status"`
+	InventoryLoaded bool   `json:"inventory_loaded"`
+	VMCount         int    `json:"vm_count"`
+	DevIDCAReadable *bool  `json:"devid_ca_readable,omitempty"`
+	LastReload      string `json:"last_reload"`
+	LastError       string `json:"last_error"`
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	status, detail := s.readiness()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if inventory.GetVMConfigFromRequest(r) != nil {
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": status})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(detail)
+}
+
+func (s *Server) readiness() (status string, detail healthDetail) {
+	s.readyMu.Lock()
+	loaded := s.inventoryLoaded
+	vmCount := s.vmCount
+	lastReload := s.lastReload
+	lastErr := s.lastErrorClass
+	s.readyMu.Unlock()
+
+	attestation := s.cfg.MDS.EnableTPMAttestation
+	var caOK *bool
+	if attestation {
+		ok := s.devIDCAReadableCached()
+		caOK = &ok
+		if !ok && lastErr == "" {
+			lastErr = errClassDevIDCAUnreadable
+		}
+	}
+
+	status = "degraded"
+	if loaded && (!attestation || (caOK != nil && *caOK)) && lastErr == "" {
+		status = "ok"
+	}
+	if loaded && attestation && caOK != nil && !*caOK {
+		status = "degraded"
+	}
+	if lastErr != "" {
+		status = "degraded"
+	}
+
+	reloadStr := ""
+	if !lastReload.IsZero() {
+		reloadStr = lastReload.Format(time.RFC3339)
+	}
+	detail = healthDetail{
+		Status:          status,
+		InventoryLoaded: loaded,
+		VMCount:         vmCount,
+		DevIDCAReadable: caOK,
+		LastReload:      reloadStr,
+		LastError:       lastErr,
+	}
+	return status, detail
+}
+
+func (s *Server) devIDCAReadableCached() bool {
+	s.readyMu.Lock()
+	if !s.caCheckedAt.IsZero() && time.Since(s.caCheckedAt) < caReadableCacheTTL {
+		ok := s.caReadable
+		s.readyMu.Unlock()
+		return ok
+	}
+	s.readyMu.Unlock()
+
+	ok := s.checkDevIDCAReadable()
+	s.readyMu.Lock()
+	s.caReadable = ok
+	s.caCheckedAt = time.Now()
+	s.readyMu.Unlock()
+	return ok
+}
+
+func (s *Server) checkDevIDCAReadable() bool {
+	certPath := s.cfg.MDS.DevIDCACert
+	keyPath := s.cfg.MDS.DevIDCAKey
+	if cred := credentialCAKeyPath(); cred != "" {
+		keyPath = cred
+	}
+	if certPath == "" || keyPath == "" {
+		return false
+	}
+	if _, err := os.Stat(certPath); err != nil {
+		return false
+	}
+	if _, err := os.Stat(keyPath); err != nil {
+		return false
+	}
+	return true
 }
 
 // RefreshActiveVMConfigCache reloads inventory for the running server (SIGHUP).

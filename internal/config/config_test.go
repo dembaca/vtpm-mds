@@ -315,3 +315,41 @@ func TestLoadInvalidYAML(t *testing.T) {
 	}
 }
 
+
+func TestLoadRejectsUnknownKey(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test-config-unknown-*.yaml")
+	if err != nil {
+		t.Fatalf("temp: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.WriteString(`mds:
+  listen_addr: "127.0.0.1:8080"
+  listen_addres: "typo"
+`); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	tmpFile.Close()
+	if _, err := Load(tmpFile.Name()); err == nil {
+		t.Fatal("expected error for unknown key listen_addres")
+	}
+}
+
+func TestLoadShippedDebianConfig(t *testing.T) {
+	cfg, err := Load("../../debian/config.yaml")
+	if err != nil {
+		t.Fatalf("debian/config.yaml must strict-decode: %v", err)
+	}
+	if cfg.MDS.ListenAddr == "" {
+		t.Fatal("listen_addr empty after load")
+	}
+}
+
+func TestLoadRootExampleConfig(t *testing.T) {
+	cfg, err := Load("../../config.yaml")
+	if err != nil {
+		t.Fatalf("config.yaml must strict-decode: %v", err)
+	}
+	if cfg.MDS.ListenAddr == "" {
+		t.Fatal("listen_addr empty after load")
+	}
+}
