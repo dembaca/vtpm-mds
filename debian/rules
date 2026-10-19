@@ -31,6 +31,7 @@ override_dh_auto_build:
 	mkdir -p bin "$(GOCACHE)" "$(GOMODCACHE)"
 	go build -buildvcs=false -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/vtpm-mds .
 	go build -buildvcs=false -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/devid-enroll ./cmd/devid-enroll
+	go build -buildvcs=false -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/vtpm-mds-bind ./cmd/vtpm-mds-bind
 
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
@@ -40,6 +41,9 @@ endif
 override_dh_auto_install:
 	install -d debian/vtpm-mds/usr/sbin
 	install -m 0755 bin/vtpm-mds debian/vtpm-mds/usr/sbin/vtpm-mds
+	install -m 0755 bin/vtpm-mds-bind debian/vtpm-mds/usr/sbin/vtpm-mds-bind
+	install -d debian/vtpm-mds/usr/lib/systemd/system
+	install -m 0644 debian/vtpm-mds-bind.service debian/vtpm-mds/usr/lib/systemd/system/vtpm-mds-bind.service
 	install -d debian/devid-enroll/usr/bin
 	install -m 0755 bin/devid-enroll debian/devid-enroll/usr/bin/devid-enroll
 
@@ -56,4 +60,7 @@ override_dh_installsystemd:
 	# --no-stop-on-upgrade drops the preinst that would otherwise stop the
 	# daemon on every upgrade with nothing to start it again; postinst
 	# restarts a running daemon instead (restart-the-service-on-upgrade).
+	# Both units of the package, vtpm-mds and vtpm-mds-bind, are handled
+	# alike: vtpm-mds-bind.service is installed in override_dh_auto_install
+	# and picked up from the package tree.
 	dh_installsystemd --no-start --no-stop-on-upgrade

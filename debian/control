@@ -11,7 +11,7 @@ Rules-Requires-Root: no
 
 Package: vtpm-mds
 Architecture: any
-Depends: ${misc:Depends}
+Depends: ${misc:Depends}, nftables
 Recommends: swtpm
 Provides: prox-mds, qemu-mds
 Conflicts: prox-mds

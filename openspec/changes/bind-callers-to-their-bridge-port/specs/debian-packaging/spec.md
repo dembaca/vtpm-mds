@@ -1,0 +1,119 @@
+## MODIFIED Requirements
+
+### Requirement: Host Package Ships The Daemon Only
+
+The `vtpm-mds` binary package SHALL install the metadata daemon at
+`/usr/sbin/vtpm-mds`, the legacy aliases `prox-mds` and `qemu-mds`, the
+`vtpm-mds` systemd unit, host configuration under `/etc/vtpm-mds`, and the
+state directory `/var/lib/vtpm-mds`. It SHALL also install the port binder at
+`/usr/sbin/vtpm-mds-bind` and its systemd unit `vtpm-mds-bind.service`, which
+keeps the `bridge vtpm_mds_bind` nftables table.
+
+It SHALL NOT install `/usr/bin/devid-enroll`.
+
+#### Scenario: Host package contents
+
+- **WHEN** `vtpm-mds` is installed on a hypervisor
+- **THEN** `/usr/sbin/vtpm-mds`, `/usr/sbin/vtpm-mds-bind` and both systemd
+  units are present, and `/usr/bin/devid-enroll` is absent
+
+#### Scenario: Host package does not enable a guest client
+
+- **WHEN** an operator inspects the installed `vtpm-mds` file list
+- **THEN** no guest-only enrollment client path is included
+
+#### Scenario: Removing the host package removes the table
+
+- **GIVEN** a node where `vtpm-mds-bind` has applied its table
+- **WHEN** the `vtpm-mds` package is removed
+- **THEN** the `bridge vtpm_mds_bind` table no longer exists
+
+### Requirement: Installing The Host Package Leaves systemd In Step
+
+Installing or upgrading the host package SHALL leave the systemd manager
+holding the unit definition the package just installed. The package's
+maintainer scripts SHALL reload the manager after the unit file is in place,
+so that no manual `systemctl daemon-reload` is needed for the installed unit
+to be the effective one.
+
+A first installation SHALL NOT start the daemon. The daemon binds a
+link-local address that is absent on build hosts and on lab hosts without the
+IMDS bridge, so starting it from `postinst` would fail there; whether the
+service runs stays an operator decision.
+
+An upgrade SHALL NOT stop the daemon before the new files are unpacked. After
+the manager has been reloaded, an upgrade SHALL restart the daemon if, and only
+if, it is running at that point, so a running daemon ends the upgrade running
+the new version and a stopped daemon stays stopped. A restart that the service
+manager refuses SHALL be reported on standard error and SHALL NOT fail the
+installation. A daemon that the manager starts and that exits afterwards is
+reported by the service manager, not by the installation.
+
+The host package carries two units, `vtpm-mds` and `vtpm-mds-bind`. Every
+rule above about stopping and restarting the daemon on upgrade SHALL apply to
+each unit alike. In addition, whenever the package is configured (a first
+installation, an upgrade, or `dpkg-reconfigure`), it SHALL start
+`vtpm-mds-bind` if `vtpm-mds` is active at that point, and SHALL NOT start it
+otherwise: the binder protects a running daemon, and a node without one starts
+neither. A start that the service manager refuses SHALL be reported on
+standard error and SHALL NOT fail the installation.
+
+A reload, restart or start SHALL be attempted only where a systemd manager is
+running and the installation targets the running system, and a failure to reload SHALL NOT fail the installation.
+
+#### Scenario: Unit change takes effect without a manual reload
+
+- **GIVEN** a host with the package installed and the service running
+- **WHEN** a package whose `vtpm-mds.service` differs is installed with
+  `dpkg -i --force-confold`
+- **THEN** `systemctl status vtpm-mds` reports no warning that the unit file
+  changed on disk, and the next `systemctl start` uses the new definition
+
+#### Scenario: Installation does not start the daemon
+
+- **GIVEN** a host where `vtpm-mds` is not running and the listen address
+  cannot be bound
+- **WHEN** the host package is installed
+- **THEN** the installation succeeds, the unit is enabled, and no daemon was
+  started
+
+#### Scenario: Installing without a running systemd manager
+
+- **GIVEN** a container or chroot with no systemd manager running
+- **WHEN** the host package is installed
+- **THEN** the installation succeeds and no reload is attempted
+
+#### Scenario: Upgrade restarts a running daemon
+
+- **GIVEN** a host where `vtpm-mds` is running an older version
+- **WHEN** a newer host package is installed with `dpkg -i --force-confold`
+- **THEN** after the installation `vtpm-mds` is active, its journal shows the
+  new version starting, and no manual `systemctl start` was needed
+
+#### Scenario: Upgrade leaves a stopped daemon stopped
+
+- **GIVEN** a host where the package is installed and `vtpm-mds` is stopped
+- **WHEN** a newer host package is installed
+- **THEN** after the installation `vtpm-mds` is still inactive
+
+#### Scenario: A refused restart does not fail the upgrade
+
+- **GIVEN** a host where `vtpm-mds` is running and the service manager
+  refuses to restart it
+- **WHEN** the newer host package is installed
+- **THEN** the installation succeeds, the package is configured, and standard
+  error names the refused restart
+
+#### Scenario: The upgrade that introduces the binder starts it
+
+- **GIVEN** a host where `vtpm-mds` is running a version without
+  `vtpm-mds-bind`
+- **WHEN** a host package that ships `vtpm-mds-bind` is installed
+- **THEN** after the installation both `vtpm-mds` and `vtpm-mds-bind` are
+  active, without a manual `systemctl start`
+
+#### Scenario: No running daemon, no binder
+
+- **GIVEN** a host where `vtpm-mds` is not running
+- **WHEN** the host package is installed or reconfigured
+- **THEN** `vtpm-mds-bind` is enabled but not started
