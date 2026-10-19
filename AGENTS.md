@@ -131,9 +131,9 @@ quote must cover — never had to be settled, because the conclusion was that
 nothing should consume them. The analysis is kept under item 6 so it is not
 re-derived.
 
-### Open changes as of 2026-10-18
+### Open changes as of 2026-10-19
 
-None. Five were archived on 2026-10-17 and seven on 2026-10-18; the first two in this order:
+None. Five were archived on 2026-10-17, seven on 2026-10-18 and one on 2026-10-19; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -284,6 +284,23 @@ seam for the ARP table (`arpTablePath`). Verified on hogan against
 45000. The old build was not run under the same load, and only `VmRSS` was
 measured, no heap profile.
 
+Throttling followed on 2026-10-19:
+`openspec/changes/archive/2026-10-19-throttle-guest-requests/` (PR #50). Limits
+are per peer address (`PeerIP`, never `X-Forwarded-For`): 30 token mints,
+120 requests and 6 enrolments per 60 s, 16 concurrent connections; over a limit
+a request answers `429` `Too many requests` with `Retry-After: 60` and
+`Connection: close`, while a 17th connection is closed at accept without an
+answer. Only `GET /health` is exempt. Each peer keeps at most 32 live tokens
+(the oldest of **that** peer is evicted); a global brake of 65536 tokens answers
+`429` with a log line, and only holds against spoofed addresses once callers are
+bound to their bridge port. Idle peers are removed from the limiter. There are
+no config keys. Verified in the lab and on hogan against
+`0.2.0+git20261018.02dadca5c027`: the host flooded tokens, reads and
+connections while VM 399 kept getting `200`. Not verified: a bound VM as the
+flooder, enrolment under budget on hogan, long-running load. **After `dpkg -i`
+the unit stayed stopped** (IMDS down 43 s until a manual start); whether
+postinst should restart it is open for the maintainer and a separate change.
+
 **Pre-review rule (maintainer, 2026-10-18):** before the coordinator calls a PR
 ready to merge, an agent on a **stronger** model than the author reviews it
 read-only (Sonnet → Opus, Opus → Fable, Cursor/Composer → Fable); findings are
@@ -307,7 +324,7 @@ certificate). Found on the way: one typo in the YAML inventory empties the
 whole inventory while the service reports healthy; it is on the
 production-readiness list of 2026-10-18, which the maintainer wants worked off
 before production (debug logging, unit hardening, reload on new VMs, issuance
-log, health detail, the connection-map leak (done), CA operation, throttling, and MAC
+log, health detail, the connection-map leak (done), CA operation, throttling (done), and MAC
 binding on `vmbr_imds` with an EK pin per VM on Proxmox).
 
 Those first two both carry a `MODIFIED` block on `Refuse An Instance Identity
