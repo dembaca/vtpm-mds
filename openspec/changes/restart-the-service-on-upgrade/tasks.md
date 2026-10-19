@@ -61,21 +61,17 @@ handed to the coordinator.
       afterwards: token `200`, `instance-id` `200` `i-399`.
 - [ ] 4.2 Upgrade a **stopped** daemon (needs the maintainer's go: the node's IMDS is down for the test), and verify it is still `inactive` afterwards; then start it and verify VM 399 reads `instance-id` `200`
 - [x] 4.3 Verify the first-install case on a host without the IMDS bridge (cloud lab, or a chroot where `policy-rc.d` denies), and say which was used
-      **Chroot**, by `agent-cursor-vtpm-22e0` on the cloud lab, 2026-10-19
-      11:11: debootstrap minbase noble, `policy-rc.d` exit 101, no prior
-      package or unit; `0.2.0+git20261019.88c2405a4e51` from `88c2405`.
-      `dpkg -i` exit 0, `is-enabled` enabled, no daemon process, no start in
-      the install log. **What it covers:** the install succeeds and enables
-      without starting where no manager runs and `policy-rc.d` denies. It does
-      **not** execute the `[ -n "$2" ]` first-install branch against a running
-      manager (no running manager in the chroot, and `policy-rc.d` would have
-      made a `try-restart` a no-op anyway); that branch is covered by reading
-      the extracted `postinst` (3.2) only.
+      **Lab guest** `guest100`, by `agent-cursor-vtpm-22e0` on the cloud lab,
+      2026-10-19 11:12: systemd running (`/run/systemd/system` present), no
+      `policy-rc.d`, no IMDS listen address, unit never installed;
+      `0.2.0+git20261019.88c2405a4e51` from `88c2405`. `dpkg -i` exit 0,
+      `is-enabled` enabled, `is-active` inactive, stderr without
+      `restart after upgrade failed`. So the `[ -n "$2" ]` branch was
+      executed against a running manager and started nothing. (An earlier
+      chroot run with `policy-rc.d` 101 is superseded by this one.)
 - [ ] 4.4 Say what was not verified, in particular the failing-restart scenario if no version that fails to start was installed
       So far: the failing-restart scenario (would need a version that cannot
-      start on the production node); a first install in a guest with a running
-      manager and no bridge (4.3 was a chroot); 4.2 pending the maintainer's
-      go.
+      start on the production node); 4.2 pending the maintainer's go.
 
 ## 5. Archive
 
