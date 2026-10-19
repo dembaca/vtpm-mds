@@ -295,8 +295,11 @@ outside this repository and later. Until then the data-centre node-label
 controller and an Ansible role read `topology.kubernetes.io/` from the same
 description, so keep both prefixes there.
 
-Still open from #33, each needing a go: `public-ipv4` and any value carrier
-(D2, later perhaps as a tag). D8 is decided (the LDevID CN stays the VM ID, a
+#33 was closed on 2026-10-18 and nothing from it is open. D2 is decided (the
+maintainer, 2026-10-18): the Proxmox backend gets no source for `public-ipv4`;
+a guest that needs a public address reads it from a VM tag
+(`vtpm_mds.io.<key>.<value>`, served under `tags/instance/<key>`), and the key
+stays served only from the YAML inventory. D8 is decided (the LDevID CN stays the VM ID, a
 readable SPIFFE ID comes from a SPIRE node alias on
 `tpm_devid:subject:cn:<vmid>`), and D9 was researched (only `Administrator` has
 `Sys.Modify`, which guards the node description; nothing from tags goes into a
@@ -369,8 +372,8 @@ stay a disjoint set from product work elsewhere:
   `public-ipv4:` line is dropped by the next `qm set`, and since
   `read-guest-configs-from-this-node` the Proxmox backend ignores it anyway. The YAML half was verified on
   the cloud lab, the Proxmox half on VM 399 against the installed package.
-  Where a declared address should come from on Proxmox is deferred, with the
-  wider per-VM metadata question, to PR #33.
+  Where a declared address should come from on Proxmox was decided on
+  2026-10-18 when #33 closed: nowhere; a VM tag carries it when needed.
 - `imds.getClientIP` falls back to the literal `"127.0.0.1"` when `PeerIP`
   cannot parse `RemoteAddr`, so with `mds.require_vm_identity: false` an
   unparseable peer is served the invented id `i-127-0-0-1`.
