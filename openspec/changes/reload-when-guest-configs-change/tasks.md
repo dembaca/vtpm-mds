@@ -74,7 +74,20 @@ a new `internal/server/reload.go`, fingerprint functions in
 
 ## 4. Verify on hogan
 
-- [ ] 4.1 With the package installed, verify that over two minutes without changes the journal shows no reload line
+- [x] 4.1 With the package installed, verify that over two minutes without changes the journal shows no reload line
+      Done on hogan 2026-10-19 with the maintainer's go (12:16): package
+      `0.2.0+git20261019.90a2a368116a` (`90a2a36`, rebased onto
+      `main@e034138`, which contains `restart-the-service-on-upgrade`).
+      Upgrade gap 0.201 s via `try-restart`, `Cache refresh complete
+      (proxmox:/etc/pve): 3 VMs, 5 MAC addresses cached` once at start. From
+      12:25:26 to 12:27:41 the journal holds 151 access lines and **no**
+      `Cache refresh` or `Failed to load` line.
+      **Incident, same day:** the first install, of `c8bca58`, was built on
+      `main@14be2a8`, before `restart-the-service-on-upgrade` merged; its
+      old `preinst` stopped the daemon and nothing started it, so the IMDS on
+      hogan was down 16.6 s (12:20:56.96 to a manual start at 12:21:13.56).
+      The rebase above is the fix; rebase onto the current `main` before
+      every install on hogan.
 - [ ] 4.2 Change a tag on VM 399 with `qm set` (needs the maintainer's go, or the maintainer runs it), and verify the new `tags/instance/<key>` is served to VM 399 within one interval without `systemctl reload`
 - [ ] 4.3 Verify the remote-write case: a config written by another node (a migration to `hogan` by the maintainer, or a `qm set` on another node through the API) is picked up without a reload, and say which was used
 - [ ] 4.4 Say what was not verified (e.g. a newly created guest, if none was created; the YAML half if the lab did not run it)
