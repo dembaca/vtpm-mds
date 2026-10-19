@@ -43,4 +43,16 @@ if [ "$1" = "configure" ] && [ -n "$2" ] && [ -z "$DPKG_ROOT" ] && [ -d /run/sys
     done
 fi
 
+# The binder protects a running daemon. On the upgrade that introduces it, it
+# is enabled but not running, and try-restart above leaves it so; start it
+# whenever the daemon runs, so the node is not left unprotected until the next
+# boot. A node whose daemon is stopped (a first install, a build host) starts
+# nothing (bind-callers-to-their-bridge-port D-i).
+if [ "$1" = "configure" ] && [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ] \
+        && systemctl is-active --quiet vtpm-mds.service; then
+    if ! deb-systemd-invoke start vtpm-mds-bind.service >/dev/null; then
+        echo "vtpm-mds: start of vtpm-mds-bind refused; see journalctl -u vtpm-mds-bind" >&2
+    fi
+fi
+
 exit 0

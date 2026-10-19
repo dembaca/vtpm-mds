@@ -74,8 +74,11 @@ Facts from `hogan` that shape the design:
   The last applied text is kept in `/run/vtpm-mds-bind/vtpm_mds_bind.nft`
   for inspection. Alternative: a netlink library (`google/nftables`); no new
   dependency is the reason against it.
-- **D-d. Rule shape: two drops per bound NIC, by tap name.** Exactly the two
-  rules above, generated for `tap<vmid>i<n>` for every local guest whose
+- **D-d. Rule shape: three drops per bound NIC, by tap name.** The two rules
+  above, plus one dropping 802.1Q and 802.1ad tagged frames from the port
+  (`ether type arp` does not see an ARP packet inside a tag, so a tagged ARP
+  with a forged sender would pass rule 2; the IMDS has no use for tagged
+  frames; Fable pre-review). Generated for `tap<vmid>i<n>` for every local guest whose
   `net<n>` is on the IMDS bridge, at `prerouting` priority `-200` (`filter`).
   Keying on the tap name covers `firewall=1` NICs too, because the bridge hook
   sees the tap's frames on `fwbr`. Rules are sorted by VM id and NIC index,
@@ -97,7 +100,10 @@ Facts from `hogan` that shape the design:
   On every tick it also lists the table and compares it with the listing
   taken after its last apply; a missing or different table (a `systemctl
   restart nftables`, a hand edit, the old hand-written block) is re-applied
-  and logged once. Nothing is logged while nothing changes.
+  and logged once. Nothing is logged while nothing changes. A failed apply
+  is retried on every tick, because the ports stay open meanwhile, and logged
+  again only when its error changes; a transient `EBUSY` during an
+  `nftables` reload is closed on the next tick, not on the next config change.
 - **D-h. Stop leaves the table; removal deletes it.** Stopping the unit keeps
   the last rules in force, which stay correct until a guest changes. `postrm
   remove` deletes `bridge vtpm_mds_bind`. The table name stays
@@ -108,9 +114,16 @@ Facts from `hogan` that shape the design:
   `RestrictAddressFamilies=AF_NETLINK AF_UNIX`, `IPAddressDeny=any`,
   `ProtectSystem=strict`, `RuntimeDirectory=vtpm-mds-bind`,
   `After=nftables.service pve-cluster.service`,
-  `PartOf=pve-cluster.service`. Handled by the package exactly like
-  `vtpm-mds.service`: enabled, not started on a first installation, restarted
-  on upgrade only if it was running (`restart-the-service-on-upgrade`). The
+  `PartOf=pve-cluster.service`. The package enables it and restarts it on
+  upgrade if it was running, as for `vtpm-mds.service`
+  (`restart-the-service-on-upgrade`), and in addition **starts it whenever
+  `vtpm-mds` is active** after configuring: the binder protects a running
+  daemon, and on the upgrade that introduces it, it would otherwise be enabled
+  but not running until the next boot (Fable pre-review). A node whose daemon
+  is not running (a first install, a build host) starts neither. The package
+  depends on `nftables`, so `nft` is there. A failed first apply exits the
+  binder non-zero, so the unit shows `failed` and `Restart=on-failure`
+  retries it, instead of an active unit without a table. The
   `debian-packaging` requirement that says so ("Installing The Host Package
   Leaves systemd In Step") is being archived by #66; its MODIFIED block is
   added to this record against the archived text once #66 is merged (task

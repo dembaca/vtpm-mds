@@ -29,8 +29,10 @@ func TestRenderBindsEachPortOnTheBridgeToItsMAC(t *testing.T) {
 	}
 	want := header +
 		"\t\tiifname \"tap7i0\" counter drop\n" +
+		"\t\tiifname \"tap300i1\" ether type { 8021q, 8021ad } counter drop\n" +
 		"\t\tiifname \"tap300i1\" ether saddr != 52:54:00:00:03:01 counter drop\n" +
 		"\t\tiifname \"tap300i1\" ether type arp arp saddr ether != 52:54:00:00:03:01 counter drop\n" +
+		"\t\tiifname \"tap399i1\" ether type { 8021q, 8021ad } counter drop\n" +
 		"\t\tiifname \"tap399i1\" ether saddr != bc:24:11:06:1d:b2 counter drop\n" +
 		"\t\tiifname \"tap399i1\" ether type arp arp saddr ether != bc:24:11:06:1d:b2 counter drop\n" +
 		footer

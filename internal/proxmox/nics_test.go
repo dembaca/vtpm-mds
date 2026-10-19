@@ -49,6 +49,22 @@ func TestGuestNICsReadsTheLiveSectionOnly(t *testing.T) {
 	}
 }
 
+func TestGuestNICsSkipsIDsThatCannotNameATap(t *testing.T) {
+	root := pveTree(t, "hogan", map[string]map[string]string{
+		"hogan": {
+			"1000000000.conf": "net0: virtio=52:54:00:00:00:01,bridge=vmbr_imds\n",
+			"999999999.conf":  "net31: virtio=52:54:00:00:00:02,bridge=vmbr_imds\nnet100: virtio=52:54:00:00:00:03,bridge=vmbr_imds\n",
+		},
+	})
+	got, err := GuestNICs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Tap() != "tap999999999i31" || len(got[0].Tap()) > 15 {
+		t.Fatalf("GuestNICs = %+v, want only net31 of 999999999", got)
+	}
+}
+
 func TestGuestNICsFailsWithoutALocalLink(t *testing.T) {
 	root := pveTree(t, "", map[string]map[string]string{
 		"hogan": {"100.conf": "net0: virtio=52:54:00:00:01:00,bridge=vmbr_imds\n"},

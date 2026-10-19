@@ -30,8 +30,13 @@ type NFT interface {
 // Exec runs the nft binary at Path.
 type Exec struct{ Path string }
 
+// execTimeout bounds one nft call, so a hanging nft cannot stop the checks.
+const execTimeout = 10 * time.Second
+
 func (e Exec) run(stdin string, args ...string) (string, error) {
-	cmd := exec.Command(e.Path, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), execTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, e.Path, args...)
 	cmd.Stdin = bytes.NewBufferString(stdin)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
@@ -61,11 +66,13 @@ type Binder struct {
 	RunDir string
 	Logf   func(format string, args ...any)
 
-	fp     inventory.Fingerprint
-	haveFP bool
-	want   string // the script for the current configurations; "" until read
-	ports  int
-	seen   tableState // the table as the last apply, or failed apply, left it
+	fp      inventory.Fingerprint
+	haveFP  bool
+	want    string // the script for the current configurations; "" until read
+	ports   int
+	seen    tableState // the table as the last successful apply left it
+	failing bool       // the last apply failed; it is retried on every tick
+	failMsg string     // its error, logged again only when it changes
 }
 
 // tableState is what a listing found: the rules, or that the table is missing.
@@ -92,9 +99,9 @@ func (b *Binder) logf(format string, args ...any) {
 // Tick runs one check and reports whether it applied the table. The
 // configurations are read again only when their fingerprint changed; the table
 // is listed every time and restored when it is missing or differs from what
-// the last apply left. Nothing is logged when nothing changes; a failure is
-// logged once and retried on the next change of the configurations or of the
-// table.
+// the last apply left. Nothing is logged when nothing changes. A failed apply
+// is retried on every tick, because the ports it should close stay open
+// meanwhile, but logged again only when its error changes.
 func (b *Binder) Tick() bool {
 	changed := false
 	if fp := proxmox.SourceFingerprint(b.PVERoot); !b.haveFP || fp != b.fp {
@@ -111,7 +118,7 @@ func (b *Binder) Tick() bool {
 	}
 
 	now := stateOf(b.NFT.List())
-	if !changed {
+	if !changed && !b.failing {
 		if now == b.seen {
 			return false
 		}
@@ -123,12 +130,13 @@ func (b *Binder) Tick() bool {
 	}
 
 	if err := b.NFT.Apply(b.want); err != nil {
-		b.logf("Failed to apply table bridge %s: %v", Table, err)
-		// Remember the table as it is now, so it is not retried, and the
-		// failure not logged again, until it or the configurations change.
-		b.seen = now
+		if !b.failing || err.Error() != b.failMsg {
+			b.logf("Failed to apply table bridge %s, retrying every check: %v", Table, err)
+		}
+		b.failing, b.failMsg = true, err.Error()
 		return false
 	}
+	b.failing, b.failMsg = false, ""
 	listing, err := b.NFT.List()
 	if err != nil {
 		b.logf("Applied table bridge %s but cannot list it: %v", Table, err)
@@ -149,15 +157,21 @@ func (b *Binder) writeScript() {
 	}
 }
 
-// Run ticks at once and then every interval until ctx is done.
-func (b *Binder) Run(ctx context.Context, interval time.Duration) {
+// Run ticks at once and then every interval until ctx is done. It returns an
+// error, without waiting, when that first apply fails, so the unit fails
+// visibly and systemd restarts it instead of a binder that runs without a
+// table.
+func (b *Binder) Run(ctx context.Context, interval time.Duration) error {
 	b.Tick()
+	if b.failing {
+		return fmt.Errorf("first apply of table bridge %s failed: %s", Table, b.failMsg)
+	}
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-t.C:
 			b.Tick()
 		}

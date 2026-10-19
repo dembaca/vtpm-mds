@@ -6,8 +6,9 @@ On a Proxmox node, the host package SHALL keep an nftables `bridge` table
 `vtpm_mds_bind` in which, for every NIC `net<n>` of every guest configuration
 under this node's `qemu-server` directory whose `bridge=` is the IMDS bridge,
 frames entering from the port `tap<vmid>i<n>` are dropped when their source
-MAC differs from the MAC configured for that NIC, and ARP packets entering from
-that port are dropped when their sender hardware address differs from it.
+MAC differs from the MAC configured for that NIC, ARP packets entering from
+that port are dropped when their sender hardware address differs from it, and
+802.1Q and 802.1ad tagged frames entering from that port are dropped.
 This SHALL hold for every NIC model and whether or not the NIC has
 `firewall=1`. NICs on other bridges SHALL NOT be affected.
 
@@ -34,6 +35,13 @@ The metadata daemon SHALL NOT write the table and SHALL NOT hold
 - **WHEN** it sends an ARP packet from MAC A whose sender hardware address is
   MAC B
 - **THEN** the packet is dropped at its port
+
+#### Scenario: A tagged frame is dropped
+
+- **GIVEN** a running guest whose NIC on the IMDS bridge is configured with
+  MAC A
+- **WHEN** it sends an 802.1Q tagged frame from MAC A
+- **THEN** the frame is dropped at its port
 
 #### Scenario: The configured MAC is answered
 

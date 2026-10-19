@@ -25,9 +25,10 @@ func (n NIC) Tap() string {
 }
 
 var (
-	nicKeyPattern = regexp.MustCompile(`^net(\d+)$`)
+	nicKeyPattern = regexp.MustCompile(`^net(\d{1,2})$`)
 	macPattern    = regexp.MustCompile(`^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$`)
-	vmidPattern   = regexp.MustCompile(`^[1-9][0-9]*$`)
+	// Nine digits at most, so tap<vmid>i<n> fits IFNAMSIZ (15 characters).
+	vmidPattern = regexp.MustCompile(`^[1-9][0-9]{0,8}$`)
 )
 
 // GuestNICs lists every NIC of every guest under this node's qemu-server

@@ -54,6 +54,8 @@ func main() {
 		NFT:     bridgebind.Exec{Path: *nft},
 		RunDir:  *runDir,
 	}
-	b.Run(ctx, bridgebind.Interval)
+	if err := b.Run(ctx, bridgebind.Interval); err != nil {
+		log.Fatal(err)
+	}
 	log.Printf("vtpm-mds-bind stopped; table bridge %s left in place", bridgebind.Table)
 }

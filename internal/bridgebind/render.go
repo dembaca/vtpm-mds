@@ -19,6 +19,9 @@ const Table = "vtpm_mds_bind"
 // sorted (GuestNICs sorts them); the output is then byte-identical for
 // identical input. A NIC on the bridge without a valid MAC gets a rule that
 // drops everything from its port: an unbound port must not be an open one.
+// Tagged frames are dropped on every bound port: "ether type arp" does not see
+// an ARP packet inside an 802.1Q or 802.1ad tag, and the IMDS has no use for
+// tagged traffic.
 func Render(bridge string, nics []proxmox.NIC) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "table bridge %s\n", Table)
@@ -35,6 +38,7 @@ func Render(bridge string, nics []proxmox.NIC) string {
 			fmt.Fprintf(&b, "\t\tiifname %q counter drop\n", tap)
 			continue
 		}
+		fmt.Fprintf(&b, "\t\tiifname %q ether type { 8021q, 8021ad } counter drop\n", tap)
 		fmt.Fprintf(&b, "\t\tiifname %q ether saddr != %s counter drop\n", tap, n.MAC)
 		fmt.Fprintf(&b, "\t\tiifname %q ether type arp arp saddr ether != %s counter drop\n", tap, n.MAC)
 	}

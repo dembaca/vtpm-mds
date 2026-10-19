@@ -13,14 +13,20 @@ import (
 
 // fakeNFT holds one table; Apply replaces it with the script, List returns it.
 type fakeNFT struct {
-	table   string
-	exists  bool
-	applies int
-	failing bool
+	table    string
+	exists   bool
+	applies  int
+	attempts int
+	failing  bool
+	failErr  string
 }
 
 func (f *fakeNFT) Apply(script string) error {
+	f.attempts++
 	if f.failing {
+		if f.failErr != "" {
+			return errors.New(f.failErr)
+		}
 		return errors.New("netlink: Operation not permitted")
 	}
 	f.applies++
@@ -149,7 +155,7 @@ func TestAMissingOrAlteredTableIsRestoredAndLoggedOnce(t *testing.T) {
 	}
 }
 
-func TestAFailedApplyIsLoggedOnceAndRetriedOnChange(t *testing.T) {
+func TestAFailedApplyIsRetriedEveryTickAndLoggedOnce(t *testing.T) {
 	r := newRig(t, map[string]string{"399.conf": vm399})
 	r.nft.failing = true
 	for i := 0; i < 4; i++ {
@@ -157,16 +163,36 @@ func TestAFailedApplyIsLoggedOnceAndRetriedOnChange(t *testing.T) {
 			t.Fatal("a failing apply reported success")
 		}
 	}
+	if r.nft.attempts != 4 {
+		t.Fatalf("apply attempted %d times over 4 ticks, want 4", r.nft.attempts)
+	}
 	if n := r.count("Failed to apply"); n != 1 {
 		t.Fatalf("failure logged %d times: %q", n, r.logs)
 	}
 	if r.count("is missing") != 0 {
 		t.Fatalf("a table that never existed was reported missing: %q", r.logs)
 	}
+	r.nft.failErr = "netlink: Device or resource busy"
+	r.b.Tick()
+	if n := r.count("Failed to apply"); n != 2 {
+		t.Fatalf("a different error was not logged: %q", r.logs)
+	}
 	r.nft.failing = false
-	r.write("400.conf", "net0: virtio=52:54:00:00:04:00,bridge=vmbr_imds\n")
-	if !r.b.Tick() {
-		t.Fatal("not retried after the configurations changed")
+	if !r.b.Tick() || r.count("Applied") != 1 {
+		t.Fatalf("not applied on the next tick after the error went away: %q", r.logs)
+	}
+	r.b.Tick()
+	if r.nft.applies != 1 {
+		t.Fatalf("applied %d times after recovery, want 1", r.nft.applies)
+	}
+}
+
+func TestRunFailsWhenTheFirstApplyFails(t *testing.T) {
+	r := newRig(t, map[string]string{"399.conf": vm399})
+	r.nft.failing = true
+	err := r.b.Run(context.Background(), time.Hour)
+	if err == nil || !strings.Contains(err.Error(), "Operation not permitted") {
+		t.Fatalf("Run = %v, want the apply error", err)
 	}
 }
 
@@ -212,7 +238,7 @@ func TestRunChecksAtOnceAndUntilCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	// An interval far beyond the test: only the check at start can apply.
-	go func() { r.b.Run(ctx, time.Hour); close(done) }()
+	go func() { _ = r.b.Run(ctx, time.Hour); close(done) }()
 	select {
 	case <-applied:
 	case <-time.After(2 * time.Second):
