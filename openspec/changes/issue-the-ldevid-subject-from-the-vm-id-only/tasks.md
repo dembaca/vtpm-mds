@@ -53,10 +53,25 @@ change directory. **Not** `cmd/devid-enroll` code, other `debian/` files,
       `Node attestation was successful`, `reattestable=true`, agent ID
       `…/tpm_devid/6c5253955e5386ca87bd53d9b4e3f794d980a85f` (the SHA-1 of that
       PEM's DER).
-- [ ] 3.2 hogan: after the install, enrol VM 399 into a scratch directory and
+- [x] 3.2 hogan: after the install, enrol VM 399 into a scratch directory and
       show the subject is `CN=399`; SPIRE's material under
       `/var/lib/spire/agent/` unchanged.
-- [ ] 3.3 Say what was not verified.
+      **Done, 2026-10-19 22:28, hogan (`agent-vtpm-hogan-d3e6cbc82`)** against
+      `0.2.0+git20261019.e487c6bf62a6` (`e487c6b` on `main@01fd5f1`), installed
+      with the maintainer's go: `try-restart` gap 0.23 s, `DevID CA key from
+      systemd credential`; `vtpm-mds-bind` re-applied the same rules. VM 399
+      enrolled to `/root/devid-scratch-70`; `openssl x509 -noout -subject
+      -nameopt RFC2253` reads `subject=CN=399`; the journal shows `devid issued
+      serial=7233ad01… vm=399` with the seeded EK pin matching. The sha256 of
+      `/var/lib/spire/agent/devid.*` is the same before and after. lintian
+      `--fail-on error,warning` exits 2 on one warning only,
+      `debian-changelog-line-too-long`, from the branch name that
+      `scripts/deb-local.sh` stamps into the changelog, not from this change.
+- [x] 3.3 Say what was not verified. On hogan, VM 399's request carried no
+      `O`/`OU` (only the lab run in 3.1 did), and SPIRE on VM 399 was not
+      re-attested with the new certificate (SPIRE attestation is shown only in
+      the lab). Certificates issued before this change keep their old subject
+      until the guest enrols again.
 
 ## 4. Archive
 
