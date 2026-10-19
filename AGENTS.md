@@ -303,8 +303,8 @@ change fixed that.
 
 Restart on upgrade followed as the third archive of 2026-10-19:
 `openspec/changes/archive/2026-10-19-restart-the-service-on-upgrade/` (PR #60).
-`dh_installsystemd --no-start` had generated a `preinst` that stopped the
-daemon on every upgrade, and nothing started it again. Now
+`dh_installsystemd` had generated a `preinst` that stopped the daemon on
+every upgrade (its default), and nothing started it again. Now
 `--no-stop-on-upgrade` removes that stop, and `postinst` runs
 `deb-systemd-invoke try-restart` after the manager reload, only on an upgrade
 (`$2` set), only on a running manager and without `DPKG_ROOT`: a running
