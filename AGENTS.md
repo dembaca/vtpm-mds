@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-19
 
-None. Five were archived on 2026-10-17, seven on 2026-10-18 and two on 2026-10-19; the first two in this order:
+None. Five were archived on 2026-10-17, seven on 2026-10-18 and three on 2026-10-19; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -298,8 +298,25 @@ no config keys. Verified in the lab and on hogan against
 `0.2.0+git20261018.02dadca5c027`: the host flooded tokens, reads and
 connections while VM 399 kept getting `200`. Not verified: a bound VM as the
 flooder, enrolment under budget on hogan, long-running load. **After `dpkg -i`
-the unit stayed stopped** (IMDS down 43 s until a manual start); whether
-postinst should restart it is open for the maintainer and a separate change.
+the unit stayed stopped** (IMDS down 43 s until a manual start); the next
+change fixed that.
+
+Restart on upgrade followed as the third archive of 2026-10-19:
+`openspec/changes/archive/2026-10-19-restart-the-service-on-upgrade/` (PR #60).
+`dh_installsystemd --no-start` had generated a `preinst` that stopped the
+daemon on every upgrade, and nothing started it again. Now
+`--no-stop-on-upgrade` removes that stop, and `postinst` runs
+`deb-systemd-invoke try-restart` after the manager reload, only on an upgrade
+(`$2` set), only on a running manager and without `DPKG_ROOT`: a running
+daemon gets one restart, a stopped one stays stopped, a first install starts
+nothing, and `dpkg-reconfigure` restarts too. A restart systemd **refuses**
+(masked or missing unit) warns on stderr and does not fail `dpkg` (the
+maintainer's E3); a daemon that exits after it was forked is **not** seen by
+`dpkg` (`Type=simple`), only in the journal, where `Restart=on-failure` retries
+it. Verified on hogan: upgrade while running, longest `/health` gap 0.257 s;
+upgrade while stopped stays `inactive`; first install in a lab guest `enabled`
+and `inactive`. hogan runs `0.2.0+git20261019.27d0db6e0a7c`. Not verified: a
+refused restart, the `DPKG_ROOT` guard.
 
 Honest readiness followed as the second archive of 2026-10-19:
 `openspec/changes/archive/2026-10-19-report-readiness-honestly/` (PR #61).
@@ -341,7 +358,7 @@ readable SPIFFE ID comes from a SPIRE node alias on
 certificate). Found on the way: one typo in the YAML inventory empties the
 whole inventory while the service reports healthy; it is on the
 production-readiness list of 2026-10-18, which the maintainer wants worked off
-before production (debug logging, unit hardening, reload on new VMs, issuance
+before production (debug logging, unit hardening, restart on upgrade (done), reload on new VMs, issuance
 log, health detail (done), the connection-map leak (done), CA operation, throttling (done), and MAC
 binding on `vmbr_imds` with an EK pin per VM on Proxmox).
 
