@@ -1,10 +1,10 @@
 package inventory
 
 import (
-	"reflect"
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -279,5 +279,17 @@ func TestValidTopologyKey(t *testing.T) {
 		if got := ValidTopologyKey(key); got != want {
 			t.Errorf("ValidTopologyKey(%q) = %v, want %v", key, got, want)
 		}
+	}
+}
+
+func TestLoadYAMLRejectsUnknownKey(t *testing.T) {
+	path := writeInventory(t, `vms:
+  - id: "100"
+    name: guest-a
+    macs: ["52:54:00:12:34:56"]
+    not_a_real_field: true
+`)
+	if _, err := LoadYAML(path); err == nil {
+		t.Fatal("expected error for unknown VM field")
 	}
 }

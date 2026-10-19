@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"time"
@@ -16,18 +17,18 @@ type Config struct {
 // MDSConfig holds the metadata service specific configuration
 type MDSConfig struct {
 	ListenAddr           string `yaml:"listen_addr"`
-	JWKSPath             string `yaml:"jwks_path"`
-	AttestationCA        string `yaml:"attestation_ca"`
-	EKCAChain            string `yaml:"ek_ca_chain"`
-	DevIDCACert          string `yaml:"devid_ca_cert"`
-	DevIDCAKey           string `yaml:"devid_ca_key"`
+	JWKSPath             string `yaml:"jwks_path"`      // pragma: allowlist secret
+	AttestationCA        string `yaml:"attestation_ca"` // pragma: allowlist secret
+	EKCAChain            string `yaml:"ek_ca_chain"`    // pragma: allowlist secret
+	DevIDCACert          string `yaml:"devid_ca_cert"`  // pragma: allowlist secret
+	DevIDCAKey           string `yaml:"devid_ca_key"`   // pragma: allowlist secret
 	TokenTTL             string `yaml:"token_ttl"`
 	JWTTTL               string `yaml:"jwt_ttl"`
 	EnableEC2Compat      bool   `yaml:"enable_ec2_compat"`
 	EnableTPMAttestation bool   `yaml:"enable_tpm_attestation"`
-	TPMDevice            string `yaml:"tpm_device"`
-	HostTPMDevice        string `yaml:"host_tpm_device"`
-	SigningKeyPath       string `yaml:"signing_key_path"`
+	TPMDevice            string `yaml:"tpm_device"`       // pragma: allowlist secret
+	HostTPMDevice        string `yaml:"host_tpm_device"`  // pragma: allowlist secret
+	SigningKeyPath       string `yaml:"signing_key_path"` // pragma: allowlist secret
 	// InventoryPath is a YAML VM inventory (MAC → VM ID). When set, it is
 	// preferred over Proxmox /etc/pve parsing so the service can run on plain QEMU.
 	InventoryPath string `yaml:"inventory_path"`
@@ -46,21 +47,21 @@ type MDSConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		MDS: MDSConfig{
-			ListenAddr:         "169.254.169.1:80",
-			JWKSPath:          "/var/lib/vtpm-mds/jwks.json",
-			AttestationCA:     "/etc/vtpm-mds/attestation-ca.pem",
-			EKCAChain:         "/etc/vtpm-mds/ek-chain.pem",
-			DevIDCACert:       "/etc/vtpm-mds/devid-ca.pem",
-			DevIDCAKey:        "/etc/vtpm-mds/devid-ca-key.pem",
-			TokenTTL:          "60s",
-			JWTTTL:            "5m",
-			EnableEC2Compat:   true,
+			ListenAddr:           "169.254.169.1:80",
+			JWKSPath:             "/var/lib/vtpm-mds/jwks.json",      // pragma: allowlist secret
+			AttestationCA:        "/etc/vtpm-mds/attestation-ca.pem", // pragma: allowlist secret
+			EKCAChain:            "/etc/vtpm-mds/ek-chain.pem",       // pragma: allowlist secret
+			DevIDCACert:          "/etc/vtpm-mds/devid-ca.pem",       // pragma: allowlist secret
+			DevIDCAKey:           "/etc/vtpm-mds/devid-ca-key.pem",   // pragma: allowlist secret
+			TokenTTL:             "60s",
+			JWTTTL:               "5m",
+			EnableEC2Compat:      true,
 			EnableTPMAttestation: true,
-			TPMDevice:         "/dev/tpm0",
-			HostTPMDevice:     "/dev/tpmrm0",
-			SigningKeyPath:    "/var/lib/vtpm-mds/signing-key.pem",
-			InventoryPath:     "",
-			RequireVMIdentity: true,
+			TPMDevice:            "/dev/tpm0",                         // pragma: allowlist secret
+			HostTPMDevice:        "/dev/tpmrm0",                       // pragma: allowlist secret
+			SigningKeyPath:       "/var/lib/vtpm-mds/signing-key.pem", // pragma: allowlist secret
+			InventoryPath:        "",
+			RequireVMIdentity:    true,
 		},
 	}
 }
@@ -76,7 +77,9 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg := DefaultConfig()
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
@@ -91,4 +94,3 @@ func Load(path string) (*Config, error) {
 
 	return cfg, nil
 }
-

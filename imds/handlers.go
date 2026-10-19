@@ -76,7 +76,7 @@ func RequireVMIdentity(require bool, s *TokenStore, next http.Handler) http.Hand
 			next.ServeHTTP(w, r)
 			return
 		}
-		if vmConfig := inventory.GetVMConfigFromRequest(r); vmConfig == nil || vmConfig.VMID == "" {
+		if !inventory.IsBound(inventory.GetVMConfigFromRequest(r)) {
 			log.Printf("Refusing %s %s: no VM record bound to caller %s", r.Method, r.URL.Path, r.RemoteAddr)
 			http.NotFound(w, r)
 			return
@@ -326,8 +326,7 @@ func storeValidatesToken(s *TokenStore, r *http.Request) bool {
 // one derivation: the identity package calls it rather than keeping a copy.
 func InstanceID(r *http.Request) string {
 	// Get VM config from request context (set by server middleware)
-	vmConfig := inventory.GetVMConfigFromRequest(r)
-	if vmConfig != nil && vmConfig.VMID != "" {
+	if vmConfig := inventory.BoundVMFromRequest(r); vmConfig != nil {
 		return fmt.Sprintf("i-%s", vmConfig.VMID)
 	}
 

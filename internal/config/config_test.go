@@ -8,15 +8,15 @@ import (
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	
+
 	if cfg.MDS.ListenAddr != "169.254.169.1:80" {
 		t.Errorf("Expected listen_addr '169.254.169.1:80', got '%s'", cfg.MDS.ListenAddr)
 	}
-	
+
 	if !cfg.MDS.EnableEC2Compat {
 		t.Error("EnableEC2Compat should be true by default")
 	}
-	
+
 	if !cfg.MDS.EnableTPMAttestation {
 		t.Error("EnableTPMAttestation should be true by default")
 	}
@@ -302,16 +302,53 @@ func TestLoadInvalidYAML(t *testing.T) {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
 	defer os.Remove(tmpFile.Name())
-	
+
 	invalidYAML := "this is not valid yaml: ["
 	if _, err := tmpFile.WriteString(invalidYAML); err != nil {
 		t.Fatalf("Failed to write config: %v", err)
 	}
 	tmpFile.Close()
-	
+
 	_, err = Load(tmpFile.Name())
 	if err == nil {
 		t.Error("Expected error for invalid YAML")
 	}
 }
 
+func TestLoadRejectsUnknownKey(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test-config-unknown-*.yaml")
+	if err != nil {
+		t.Fatalf("temp: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.WriteString(`mds:
+  listen_addr: "127.0.0.1:8080"
+  listen_addres: "typo"
+`); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	tmpFile.Close()
+	if _, err := Load(tmpFile.Name()); err == nil {
+		t.Fatal("expected error for unknown key listen_addres")
+	}
+}
+
+func TestLoadShippedDebianConfig(t *testing.T) {
+	cfg, err := Load("../../debian/config.yaml")
+	if err != nil {
+		t.Fatalf("debian/config.yaml must strict-decode: %v", err)
+	}
+	if cfg.MDS.ListenAddr == "" {
+		t.Fatal("listen_addr empty after load")
+	}
+}
+
+func TestLoadRootExampleConfig(t *testing.T) {
+	cfg, err := Load("../../config.yaml")
+	if err != nil {
+		t.Fatalf("config.yaml must strict-decode: %v", err)
+	}
+	if cfg.MDS.ListenAddr == "" {
+		t.Fatal("listen_addr empty after load")
+	}
+}
