@@ -56,11 +56,17 @@
 
 ## 5. Hogan (strict config before upgrade)
 
-- [ ] 5.1 On hogan, **before** installing the new package: confirm the live
+- [x] 5.1 On hogan, **before** installing the new package: confirm the live
       `/etc/…/config.yaml` strict-decodes with this change's `config.Load`
       (or an equivalent decode of the same schema). If it fails, stop and
       report — do not install.
       **Verify:** command output + path; then install only if green
+      **Done, 2026-10-19** (hogan-d3e6, read-only, nothing installed):
+      `config.Load` from `17a0286` (`KnownFields(true)`) against
+      `/etc/…/config.yaml` (sha256 `4edcaee89866…`, as of 2026-09-13):
+      err=nil; same for `config.yaml.dpkg-dist` and `debian/config.yaml`.
+      Cross-check: copy + `bogus_key: 1` → `field bogus_key not found`.
+      Bus RESULT in ASSIGNMENTS thread.
 
 ## 6. Archive
 
