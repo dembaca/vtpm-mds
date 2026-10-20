@@ -35,8 +35,12 @@ at the maintainer's request ("ok baue den fix", confirmed 21:39). Files:
   under the `*` item (the only ones lintian measures); wording narrowed.
   Nits: first line 62 columns, not 63; characters are counted under
   `C.UTF-8`, so a non-ASCII branch is not cut mid-codepoint in a C locale.
-- [ ] 1.5 After the pre-review fix, rebuild on an 86-character branch under
+- [x] 1.5 After the pre-review fix, rebuild on an 86-character branch under
       `LC_ALL=C`; verify lintian exit 0 and the branch line at 80 columns
+      Done at `1c8e0d7` on an 89-character branch with `äöü`, `LC_ALL=C make
+      deb-local`: the branch line is 80 characters (83 bytes), cut after 67
+      characters plus `~`, valid UTF-8 (`iconv`); `lintian --fail-on
+      error,warning` exit 0 for both packages.
 
 ## 2. Archive
 
