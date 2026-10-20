@@ -1,8 +1,18 @@
 # Tasks
 
-Record only — no product code until dembaca answers Q1–Q5 and the
-coordinator says code-go. Prefer applying after #70 and #71 are archived
-(see `proposal.md` Apply order).
+Written on 2026-10-19/20 by `agent-cursor-vtpm-22e0`. Record against
+`main@da0083a`; **Code-Go base** is #71 @ `92e4484`
+(`cursor/limit-the-ldevid-lifetime-and-renew-it-1e7e`), not `main` — rebase
+onto `main` once #71 merges. Decisions Q0=B / Q1=A / Q3 recorded @ `863be35`
+(then rebased).
+
+**Files in scope (code-go):** `internal/devid/` (Finish PEM, tests),
+`internal/server/health_test.go` (one intermediate scenario),
+`debian/config.yaml` + unit comments / `README.Debian` (intermediate wording;
+credential name stays `devid_ca.key`), `scripts/gen-devid-intermediate.sh`,
+`scripts/qemu-lab/gen-lab-pki.sh` (two-tier mode), short lab/SPIRE docs under
+`scripts/qemu-lab/` as needed. **Not** root `README.md`, **not** `AGENTS.md`,
+**not** Ansible roles, **not** renaming the systemd credential.
 
 ## 1. Record
 
@@ -30,7 +40,7 @@ coordinator says code-go. Prefer applying after #70 and #71 are archived
       credential docs name intermediate key + root-for-SPIRE (not root key on node)
       **Verify:** ADDED requirement; no change to postinst start/reload behaviour
 
-## 2. Validate and hand off
+## 2. Validate and hand off (record)
 
 - [x] 2.1 `openspec validate --all --strict` clean for this change
       **Verify:** CLI: Totals 6 passed, 0 failed (2026-10-19)
@@ -41,12 +51,73 @@ coordinator says code-go. Prefer applying after #70 and #71 are archived
       ready for dembaca (coordinator asks singly)
       **Verify:** RESULT on ASSIGN root `pw96c7k1tpb8mpxjc56gboiqoc`
 
-## 3. After dembaca answers
+## 3. After dembaca answers (record)
 
 - [x] 3.1 Fold dembaca's answers into `design.md` (replace recommendations
       with decisions where they differ); retick only the deltas that change
       **Verify (2026-10-20):** Q0=B, Q1=A, Q3=1y/`pathLen=0`/`keyCertSign`/
       no EKU/NC recorded as Decisions; Q2/Q4/Q5 marked confirmed
       recommendations; Risks for B/D8 only; `openspec validate --all --strict`
-- [ ] 3.2 Code-go on a later ASSIGN — implement task-by-task then; out of
-      scope for this record until coordinator ACK
+- [x] 3.2 Code-go ACK from interim coordinator (conditions: base #71@`92e4484`,
+      keep `devid_ca.key` name, lab Q0(B) proof, health test, Fable before ready)
+      **Verify:** ACK on `pw96c7k1…` / Cursor ACK `h667n8qh…`
+
+## 4. Implementation (Code-Go)
+
+- [x] 4.1 `Finish` returns leaf then intermediate PEM (no root); unit test
+      decodes two certs, verifies leaf CN and chain to offline root with/without
+      intermediate block
+      **Verify:** `go test ./internal/devid/ -run 'TestFinishLeafThenIntermediate|TestIssueDevIDAndSession'`
+- [x] 4.2 `/health` `devid_ca_readable` true with intermediate cert+key and no
+      root private key on the node (one dedicated test)
+      **Verify:** `go test ./internal/server/ -run TestHealth.*Intermediate`
+- [x] 4.3 Packaged comments: `debian/config.yaml`, unit `LoadCredential=` note,
+      `README.Debian` describe cluster intermediate + SPIRE needs root cert;
+      credential **name** stays `devid_ca.key`
+      **Verify:** grep/comments; `go test ./internal/config/ -run TestLoadShippedDebianConfig` if present
+- [x] 4.4 `scripts/gen-devid-intermediate.sh` mints a 1y `pathLen=0`
+      `keyCertSign`-only intermediate from an offline root; docs note Ansible
+      owns distribution
+      **Verify:** script `-h` / dry run against a temp root; openssl inspect
+- [x] 4.5 `scripts/qemu-lab/gen-lab-pki.sh` two-tier mode: root for SPIRE
+      `devid_ca_path`, intermediate as host `devid_ca_*`
+      **Verify:** mode produces distinct root vs intermediate; fingerprints differ
+
+## 5. Lab / hogan verification (Code-Go)
+
+- [x] 5.1 Cloud lab Q0(B): two-tier PKI; SPIRE 1.14 `devid_ca_path` = root;
+      agent PEM = leaf+intermediate; attest; selectors include both
+      `ca:fingerprint` values; node alias with `subject:cn` **and** intermediate
+      fingerprint matches; a leaf from a *second* intermediate does **not**
+      **Verify:** `spire-server agent show` / entry create evidence in RESULT
+- [ ] 5.2 Hogan: VM 399 enroll/renew into a **scratch** directory only; do not
+      overwrite live `/var/lib/spire/agent/` materials. SPIRE live materials
+      unchanged. (Coordinator / hogan agent after merge readiness.)
+      **Verify:** openssl + sha1sum; journal as appropriate
+
+## 6. OpenSpec / ship
+
+- [x] 6.1 `openspec validate --all --strict` green; `go vet ./...` and
+      `go test ./...` green; push draft PR; bus RESULT on #72 thread
+- [ ] 6.2 Fable pre-review (read-only) before marking ready-for-review
+
+## 7. Not verified in this change (do not tick as done)
+
+- [ ] 7.1 Ansible role that mints/distributes intermediates (Q1) — out of repo
+- [ ] 7.2 Hogan live SPIRE agent paths on 399 (only scratch in 5.2)
+- [ ] 7.3 Name Constraints / CRL / HSM (non-goals)
+- [ ] 7.4 Rebase onto `main` after #71 merges
+
+## Verification notes (Code-Go 2026-10-20)
+
+- **4.1** `go test ./internal/devid/ -run TestFinishLeafThenIntermediate` PASS; full `./internal/devid/` PASS.
+- **4.2** `go test ./internal/server/ -run TestHealthAttestationOnIntermediateWithoutRootKey` PASS.
+- **4.3** `debian/config.yaml`, unit `LoadCredential=` comment, `README.Debian` name intermediate; credential name still `devid_ca.key`.
+- **4.4** `scripts/gen-devid-intermediate.sh`: 365d, pathLen=0, keyCertSign only (openssl inspect).
+- **4.5** `MDS_LAB_DEVID_TIER=two`: host=intermediate fp `7ff474c2…`, SPIRE=root fp `a78be7ec…`.
+- **5.1** Lab Q0(B): e2e guest enroll PASS (TCG); PEM 2 blocks; agent `…/tpm_devid/b90bb8f2…` selectors =
+  `subject:cn:100`, `ca:fingerprint:7ff474c2…` (inter), `ca:fingerprint:a78be7ec…` (root).
+  Node alias CN+inter → SVID `workload/ok`; alias CN+cluster2 inter → no `workload/nope`.
+- **6.1** `openspec validate --all --strict` 9/9; `go vet ./...` + `go test ./...` green.
+- **6.2** Fable pre-review still open before ready-for-review.
+- **5.2** Hogan scratch renew deferred (coordinator).

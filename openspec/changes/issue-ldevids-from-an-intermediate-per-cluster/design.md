@@ -101,9 +101,8 @@ Not asked separately; follows Q0(B) + SPIRE 1.14 facts:
 - Host `devid_ca_cert` / credential: the **intermediate** (signing CA).
 - Lab at code-go: two-tier mint + attest + two-selector node alias proof.
 
-**Still open (naming only):** exact filenames / whether the systemd credential
-keeps the name `devid_ca.key` while pointing at the intermediate key file —
-recommend keep the name; settle at code-go if packaging needs a rename.
+**Settled at code-go:** systemd credential name stays `devid_ca.key`; only the
+file content is the per-cluster intermediate key (coordinator condition).
 
 ### Q3 — Intermediate lifetime / constraints → **decided**
 

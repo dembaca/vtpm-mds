@@ -36,6 +36,10 @@ go build -o bin/devid-enroll ./cmd/devid-enroll
 # and the guest gets HTTP 404.
 ./scripts/qemu-lab/stop-guest.sh >/dev/null 2>&1 || true
 ./scripts/qemu-lab/setup-guest-tpm.sh
+# Prefer two-tier when a root already exists (Q0(B) lab); else honour env.
+if [[ -z "${MDS_LAB_DEVID_TIER:-}" && -f "${LAB_DIR}/pki/devid-root.pem" ]]; then
+  export MDS_LAB_DEVID_TIER=two
+fi
 ./scripts/qemu-lab/gen-lab-pki.sh
 
 # Fresh MDS process with DevID CA + EK trust chain loaded.
