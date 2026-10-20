@@ -21,7 +21,7 @@ lintian tags.
 
 - **D-a. Branch on its own line.** `  * Local lab build from git <sha>[,
   dirty working tree].` then `    Branch: <branch>`. The first line is at
-  most 63 columns.
+  most 62 columns.
 - **D-b. Shorten what still does not fit.** `    Branch: ` is 12 columns, so
   a branch longer than 68 characters is cut to its first 67 and ends in `~`.
   The SHA identifies the tree; the branch is a hint for humans.

@@ -28,6 +28,16 @@ at the maintainer's request ("ok baue den fix", confirmed 21:39). Files:
 - [x] 1.4 Run `openspec validate --all --strict`
       Totals: 7 passed, 0 failed (7 items)
 
+## Pre-review
+
+- Fable, 2026-10-20 (`409e09e`): no must-fix. Should-fix: the requirement
+  promised every line of the entry, while the script bounds only the lines
+  under the `*` item (the only ones lintian measures); wording narrowed.
+  Nits: first line 62 columns, not 63; characters are counted under
+  `C.UTF-8`, so a non-ASCII branch is not cut mid-codepoint in a C locale.
+- [ ] 1.5 After the pre-review fix, rebuild on an 86-character branch under
+      `LC_ALL=C`; verify lintian exit 0 and the branch line at 80 columns
+
 ## 2. Archive
 
 - [ ] 2.1 After merge, the coordinator archives the change
