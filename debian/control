@@ -46,6 +46,7 @@ Description: Guest DevID enrollment client for vtpm-mds
  private and public key blobs) so a SPIRE agent in the guest can attest
  with its vTPM.
  .
- This package contains the client binary and its man page only. It ships
- no daemon, no systemd unit, and no IMDS listener, and it does not require
+ This package contains the client binary, its man page, and a systemd
+ oneshot plus daily timer that renew the LDevID before SPIRE when due. It
+ ships no IMDS listener and does not require
  the vtpm-mds package.

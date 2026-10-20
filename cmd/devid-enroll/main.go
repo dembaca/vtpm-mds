@@ -17,7 +17,8 @@ func main() {
 	tpmPath := flag.String("tpm", "/dev/tpm0", "TPM device path")
 	mdsURL := flag.String("mds", "http://169.254.169.254", "MDS base URL")
 	outDir := flag.String("out", "/var/lib/vtpm-mds/devid", "output directory for DevID materials")
-	cn := flag.String("cn", "", "platform identity Common Name")
+	cn := flag.String("cn", "", "platform identity Common Name (ignored by the service; subject is always CN=<vmid>)")
+	spireData := flag.String("spire-data", "", "SPIRE agent data_dir; on PEM change, clear SVID cache here and try-restart spire-agent (empty skips)")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 
@@ -32,9 +33,14 @@ func main() {
 	}
 	defer rwc.Close()
 
-	if err := devid.ClientEnroll(rwc, *mdsURL, *cn, *outDir); err != nil {
+	if err := devid.ClientEnrollOrRenew(rwc, devid.ClientOptions{
+		MDSBaseURL:   *mdsURL,
+		PlatformCN:   *cn,
+		OutDir:       *outDir,
+		SpireDataDir: *spireData,
+	}); err != nil {
 		log.Fatalf("DevID enroll failed: %v", err)
 	}
-	fmt.Printf("DevID enrollment complete; materials written to %s\n", *outDir)
+	fmt.Printf("DevID enrollment check done; materials under %s\n", *outDir)
 	os.Exit(0)
 }

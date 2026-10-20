@@ -1,6 +1,6 @@
-.TH DEVID-ENROLL 1 "September 2026" "vtpm-mds 0.1.0" "User Commands"
+.TH DEVID-ENROLL 1 "October 2026" "vtpm-mds" "User Commands"
 .SH NAME
-devid-enroll \- enroll a guest LDevID via vtpm-mds
+devid-enroll \- enroll or renew a guest LDevID via vtpm-mds
 .SH SYNOPSIS
 .B devid-enroll
 .RB [ \-tpm
@@ -11,6 +11,8 @@ devid-enroll \- enroll a guest LDevID via vtpm-mds
 .IR dir ]
 .RB [ \-cn
 .IR name ]
+.RB [ \-spire-data
+.IR dir ]
 .RB [ \-version ]
 .SH DESCRIPTION
 Guest helper that authenticates to
@@ -18,6 +20,47 @@ Guest helper that authenticates to
 with MAC inventory identity and the TPM EK certificate, then writes SPIRE
 .B tpm_devid
 materials (PEM + TPM2B blobs).
+.PP
+On each run it renews when the certificate is missing, unreadable, expired, or
+in the last third of its validity; otherwise it exits successfully without
+calling enroll. When renewing, an existing DevID key under
+.I out
+is reused when the blobs still load under the SPIRE H-1 storage parent.
+.PP
+When the certificate PEM bytes change and
+.B \-spire-data
+is set, the helper removes the SPIRE agent SVID cache file
+.I agent-data.json
+(and
+.I agent_svid.der
+if present) under that directory and runs
+.B systemctl try-restart spire-agent.service
+so the next agent start attests the new LDevID. A missing or inactive
+.B spire-agent
+unit does not fail the renew. The default for
+.B \-spire-data
+is empty (no cache clear); the packaged oneshot passes the path.
+.PP
+The packaged oneshot runs after
+.B network-online.target
+and
+.B Before=spire-agent.service
+(without
+.BR Requires= ).
+A daily timer with a one-hour randomized delay repeats the check while the
+guest is up. Installing the package enables the timer and the
+.B postinst
+reloads systemd and starts
+.B devid-enroll.timer
+(not the oneshot service), so the daily renew is armed without waiting for a
+reboot. An immediate boot-time renew still runs via
+.B WantedBy=multi-user.target
+on the oneshot after the next boot.
+Overrides for output and SPIRE data directories may be set in
+.IR /etc/default/devid-enroll
+(for example
+.B DEVID_SPIRE_DATA=/var/lib/spire/agent
+on hogan VM 399).
 .SH OPTIONS
 .TP
 .BI \-tpm " path"
@@ -38,7 +81,28 @@ The service ignores it: the issued certificate's subject is always
 .BI CN= vmid
 and nothing else.
 .TP
+.BI \-spire-data " dir"
+SPIRE agent
+.BR data_dir .
+On a PEM change the SVID cache under this directory is cleared and
+.B spire-agent
+is try-restarted. Empty (the default) disables both. The packaged unit sets
+.IR /opt/spire/data/agent .
+.TP
 .B \-version
 Print the package/build version and exit.
+.SH SPIRE AGENT CLEANUP
+Each renewed LDevID has a new SHA-1 fingerprint, so the SPIFFE agent ID under
+.B tpm_devid
+changes. Prefer registration selectors
+.BI tpm_devid:subject:cn: vmid
+over fingerprint paths. After renew, stale server entries can be removed with
+SPIRE 1.14
+.BR "spire-server agent evict" " (\-spiffeID)"
+or
+.BR "spire-server agent purge" " (\-expiredFor,"
+default
+.BR 720h ).
 .SH SEE ALSO
-.BR vtpm-mds (8)
+.BR vtpm-mds (8),
+.BR systemctl (1)

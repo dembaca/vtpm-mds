@@ -1,0 +1,18 @@
+[Unit]
+Description=Renew guest LDevID before SPIRE
+Documentation=man:devid-enroll(1)
+Wants=network-online.target
+After=network-online.target
+Before=spire-agent.service
+# Do not Require=spire-agent; guests without SPIRE must still renew.
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/devid-enroll
+Environment=DEVID_OUT=/var/lib/vtpm-mds/devid
+Environment=DEVID_SPIRE_DATA=/opt/spire/data/agent
+ExecStart=/usr/bin/devid-enroll -out ${DEVID_OUT} -spire-data ${DEVID_SPIRE_DATA}
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

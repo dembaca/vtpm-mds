@@ -1,6 +1,7 @@
 package devid
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -8,6 +9,10 @@ import (
 	"github.com/google/go-tpm/legacy/tpm2"
 	"github.com/google/go-tpm/tpmutil"
 )
+
+// ErrDevIDLoad means existing DevID blobs could not be loaded under the
+// SPIRE H-1 parent. Callers may fall back to creating a new DevID key.
+var ErrDevIDLoad = errors.New("load existing DevID")
 
 // KeyInfo describes a TPM key (transient or persistent).
 type KeyInfo struct {
@@ -148,4 +153,35 @@ func FlushTransient(rw io.ReadWriter, h tpmutil.Handle) {
 		return
 	}
 	_ = tpm2.FlushContext(rw, h)
+}
+
+// LoadDevID loads an existing DevID key under a freshly derived SRK parent.
+func (f *KeyFactory) LoadDevID(rw io.ReadWriter, pubBlob, privBlob []byte) (*KeyInfo, error) {
+	if len(pubBlob) == 0 || len(privBlob) == 0 {
+		return nil, fmt.Errorf("%w: missing blobs", ErrDevIDLoad)
+	}
+	srk, err := f.CreateSRK(rw)
+	if err != nil {
+		return nil, err
+	}
+	defer tpm2.FlushContext(rw, srk.Handle)
+	auth := tpm2.AuthCommand{
+		Session:    tpm2.HandlePasswordSession,
+		Attributes: tpm2.AttrContinueSession,
+	}
+	pub, err := tpm2.DecodePublic(pubBlob)
+	if err != nil {
+		return nil, fmt.Errorf("%w: decode public: %v", ErrDevIDLoad, err)
+	}
+	handle, _, err := tpm2.LoadUsingAuth(rw, srk.Handle, auth, pubBlob, privBlob)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDevIDLoad, err)
+	}
+	return &KeyInfo{
+		Handle:      handle,
+		Template:    f.DevIDTemplate,
+		Public:      pub,
+		PublicBlob:  pubBlob,
+		PrivateBlob: privBlob,
+	}, nil
 }

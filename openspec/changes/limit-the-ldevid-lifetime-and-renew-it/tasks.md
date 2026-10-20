@@ -1,0 +1,65 @@
+# Tasks
+
+Written on 2026-10-19 by `agent-cursor-vtpm-22e0` against `main@da0083a`
+(record) / rebase onto `main` after #70 archives before code. Files in scope
+after code-go: `internal/devid/`, `internal/config/`, `cmd/devid-enroll/`,
+guest `debian/` units + man page, packaged host `config.yaml` comment.
+**Not** root `README.md`, **not** `AGENTS.md`, **not** host daemon logic beyond
+the config key.
+
+## 1. Implementation (after coordinator code-go)
+
+- [x] 1.1 Add `mds.devid_lifetime` (default `2160h`, reject bad/non-positive/`>8760h`); verify with `go test ./internal/config/...`.
+- [x] 1.2 Thread lifetime into the CA; set `notAfter = notBefore.Add(lifetime)`; include `notBefore`/`notAfter` in `uniqueSerial`; verify `go test ./internal/devid/...` including same-key renew → new serial.
+- [x] 1.3 Guest client renew-or-skip (one-third / expired / missing), reuse TPM blobs, clear SPIRE agent SVID cache on PEM change + `try-restart`; verify decision-logic unit tests with a fixed clock.
+- [x] 1.4 Guest package oneshot + daily timer (`Before=spire-agent`, no `Requires=`), enable timer in `postinst`, man page including E2.4 `evict`/`purge`; verify `dpkg-deb -c` and `systemd-analyze verify` where available.
+- [x] 1.5 Document `devid_lifetime: 2160h` (and the one-year cap) in packaged host `config.yaml`; verify tests that load `debian/config.yaml` still pass.
+
+## 2. Lab / hogan verification (after code)
+
+- [x] 2.1 Cloud lab: default lifetime → `notAfter ≈ now+90d`; verify with `openssl x509 -dates`.
+- [x] 2.2 Cloud lab: short lifetime + renew; verify same priv/pub blob checksums, new cert PEM, new SHA-1 fingerprint, new serial; SVID cache cleared so next agent start attests the new ID.
+- [x] 2.3 Hogan VM 399: renew into a **scratch** output directory (do not overwrite live `/var/lib/spire/agent/` materials); verify new cert shape / serial; confirm SPIRE's live materials unchanged. Verify with `openssl` + `sha1sum` / journal as appropriate.
+      **Verify (2026-10-20, hogan / coordinator):** package
+      `0.2.0+git20261020.92e44840705c` installed 20:38 (dembaca 👍); try-restart
+      gap 0.34 s; credential CA key; default lifetime (conffile kept). Guest
+      binary streamed to VM 399 as `/root/devid-enroll-71` (sha256 `e9131cbe…`);
+      guest package not installed; `-spire-data` empty. Scratch
+      `/root/devid-scratch-71`: (1) empty → enroll CN=399, notAfter +90 d,
+      serial `8634…25F5`; (2) immediately again → skip, same serial, no POST;
+      (3) PEM truncated → renew-due, new serial `BB90…C21C`, notAfter +90 d,
+      `devid.priv.blob`/`devid.pub.blob` byte-identical (`d733ec1e…`/`44bf1c0d…`).
+      Journal: two `devid issued … vm=399` (EK pin match), enroll/start+finish
+      200. Live SPIRE `/var/lib/spire/agent/devid.*` checksums unchanged
+      (`253be3e4…`/`39679c24…`/`d8fb058d…`). Not verified here: oneshot/timer,
+      `-spire-data`, last-third renew, explicit `mds.devid_lifetime`.
+- [x] 2.4 Confirm SPIRE 1.14.0 `agent evict` / `agent purge` flags still match design D-e; verify via `-help` on lab or hogan.
+
+## 3. OpenSpec / apply order
+
+- [x] 3.1 After #70 merges and archives, rebase this branch onto that `main`; verify the REMOVED title is `Issue A Non-Expiring LDevID Whose Subject Is Only The VM ID`.
+      **Verify (2026-10-20):** rebased onto `main@5653949` (PR #70 merge); head
+      `c45cf7e`. REMOVED title matches #70's living name. Archive order #70 → #71
+      confirmed on a scratch trial archive (Fable/hogan). #70 is merged; its
+      archive PR #74 was still open at tick time.
+- [x] 3.2 Before merge, verify `openspec validate --all --strict` is green.
+
+## 4. Not verified in this record (do not tick as done)
+
+- [ ] 4.1 Clock-skewed “LDevID expired while agent keeps running” was **inferred** from the cached-SVID path (lab A: swapped LDevID ignored) rather than by forging an expired PEM under a live agent; verify explicitly in 2.2 if reviewers require it.
+- [ ] 4.2 Hogan end-to-end renew against the **live** SPIRE agent paths (399) is deferred until code-go; verify only the scratch-directory check in 2.3 was planned in this record.
+
+## Verification notes (Code-Go)
+
+- **1.1** `go test ./internal/config/...` — PASS (default 2160h; reject `90`/`0s`/`9000h`/`8761h`; accept `8760h`).
+- **1.2** `go test ./internal/devid/...` — PASS (`TestIssueDevIDConfiguredLifetime`, `TestIssueDevIDRenewalSameKeyNewSerial`).
+- **1.3** `go test ./internal/devid/ -run 'TestRenewDue|TestClearSPIRE|TestLoadCert'` — PASS.
+- **1.4** `make deb-local` → `dpkg-deb -I/-c` shows binary, oneshot, timer, postinst (daemon-reload + `start devid-enroll.timer`). `lintian` only W: debian-changelog-line-too-long. `systemd-analyze verify` on extracted units: missing `/usr/bin/devid-enroll` on host only.
+- **1.5** `go test ./internal/config/ -run TestLoadShippedDebianConfig` — PASS.
+- **2.1** lab guest100 @ tree of `8715182` (pre-rebase; post-rebase equivalent
+  head `c45cf7e`, range-diff byte-identical): `openssl` → lifetime_hours 2160.0.
+- **2.2** lab: 3h lifetime, blob checksums identical across renew, serial/fp/PEM changed, `agent-data.json` cleared, fresh skip.
+- **2.3** see checkbox evidence above (hogan RESULT in #71 thread).
+- **2.4** SPIRE 1.14.0 `/opt/spire/bin/spire-server agent evict|purge -help` — flags match D-e.
+- **3.1** see checkbox evidence above.
+- **3.2** `openspec validate --all --strict` — 8 passed, 0 failed (after rebase onto `main@5653949`).

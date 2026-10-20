@@ -9,6 +9,7 @@ mds:
   # X-vtpm-mds-ek-cert (base64 DER of the TPM EK certificate).
   devid_ca_cert: "/etc/vtpm-mds/devid-ca.pem"
   devid_ca_key: "/etc/vtpm-mds/devid-ca-key.pem"
+  devid_lifetime: "2160h"
   token_ttl: "60s"
   jwt_ttl: "5m"
   enable_ec2_compat: true

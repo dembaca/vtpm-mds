@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,27 +15,85 @@ import (
 	"github.com/google/go-tpm/legacy/tpm2"
 )
 
+// ClientOptions configures ClientEnrollOrRenew.
+type ClientOptions struct {
+	MDSBaseURL   string
+	PlatformCN   string
+	OutDir       string
+	SpireDataDir string // empty skips SVID cache clear / try-restart
+	Now          func() time.Time
+}
+
 // ClientEnroll performs the full DevID enrollment against an MDS base URL.
 // The guest authenticates with:
 //  1. Source MAC → inventory VM identity (server ConnContext / ARP)
 //  2. TPM EK certificate in HeaderEKCert on every enroll request
 //
 // It writes devid.crt.pem, devid.priv.blob, and devid.pub.blob under outDir.
+// Prefer ClientEnrollOrRenew for packaged renewals.
 func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error {
-	if mdsBaseURL == "" {
+	return ClientEnrollOrRenew(rw, ClientOptions{
+		MDSBaseURL: mdsBaseURL,
+		PlatformCN: platformCN,
+		OutDir:     outDir,
+	})
+}
+
+// ClientEnrollOrRenew renews when due (or materials are missing/corrupt);
+// otherwise leaves files unchanged. On a PEM change it clears the SPIRE agent
+// SVID cache (when SpireDataDir is set) before writing the new PEM, then
+// try-restarts spire-agent.
+func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
+	if opts.MDSBaseURL == "" {
 		return fmt.Errorf("mds base URL required")
 	}
-	if outDir == "" {
+	if opts.OutDir == "" {
 		return fmt.Errorf("output directory required")
 	}
-	if err := os.MkdirAll(outDir, 0o700); err != nil {
+	nowFn := opts.Now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
+	now := nowFn().UTC()
+
+	certPath := filepath.Join(opts.OutDir, "devid.crt.pem")
+	privPath := filepath.Join(opts.OutDir, "devid.priv.blob")
+	pubPath := filepath.Join(opts.OutDir, "devid.pub.blob")
+
+	existing, err := LoadCertPEMFile(certPath)
+	if err != nil {
+		LogRenewCorruptCert(certPath, err)
+		existing = nil // renew-due
+	}
+	if existing != nil && !RenewDue(existing, now) {
+		return nil
+	}
+
+	if err := os.MkdirAll(opts.OutDir, 0o700); err != nil {
 		return err
 	}
 
+	var oldPEM []byte
+	if existing != nil {
+		oldPEM, _ = os.ReadFile(certPath)
+	}
+
+	pubBlob, _ := os.ReadFile(pubPath)
+	privBlob, _ := os.ReadFile(privPath)
+	reusePub, reusePriv := pubBlob, privBlob
+	if len(reusePub) == 0 || len(reusePriv) == 0 {
+		reusePub, reusePriv = nil, nil
+	}
+
 	factory := DefaultKeyFactory()
-	sr, res, err := CreateSigningRequest(rw, factory, platformCN)
+	sr, res, err := CreateSigningRequestWithDevID(rw, factory, opts.PlatformCN, reusePub, reusePriv)
 	if err != nil {
-		return err
+		if reusePub != nil && errors.Is(err, ErrDevIDLoad) {
+			sr, res, err = CreateSigningRequestWithDevID(rw, factory, opts.PlatformCN, nil, nil)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	defer res.Flush()
 
@@ -56,7 +115,7 @@ func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error
 		RequestB64:   base64.StdEncoding.EncodeToString(requestData),
 		SignatureB64: base64.StdEncoding.EncodeToString(sig),
 	})
-	startResp, err := httpPostJSON(mdsBaseURL+"/latest/devid/enroll/start", startBody, ekAuth)
+	startResp, err := httpPostJSON(opts.MDSBaseURL+"/latest/devid/enroll/start", startBody, ekAuth)
 	if err != nil {
 		return fmt.Errorf("enroll/start: %w", err)
 	}
@@ -82,7 +141,7 @@ func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error
 		SessionID:            start.SessionID,
 		ChallengeResponseB64: base64.StdEncoding.EncodeToString(challengeResp),
 	})
-	finishResp, err := httpPostJSON(mdsBaseURL+"/latest/devid/enroll/finish", finishBody, ekAuth)
+	finishResp, err := httpPostJSON(opts.MDSBaseURL+"/latest/devid/enroll/finish", finishBody, ekAuth)
 	if err != nil {
 		return fmt.Errorf("enroll/finish: %w", err)
 	}
@@ -94,15 +153,66 @@ func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error
 		return fmt.Errorf("empty DevID certificate in response")
 	}
 
-	if err := os.WriteFile(filepath.Join(outDir, "devid.crt.pem"), []byte(finish.DevIDCertPEM), 0o600); err != nil {
+	newPEM := []byte(finish.DevIDCertPEM)
+	pemChanged := !bytes.Equal(oldPEM, newPEM)
+
+	// Clear SVID cache before writing the new PEM so a crash after clear still
+	// forces re-attest; writing PEM first then failing to clear leaves the old ID.
+	if pemChanged && opts.SpireDataDir != "" {
+		if err := ClearSPIREAgentSVIDCache(opts.SpireDataDir); err != nil {
+			return err
+		}
+	}
+
+	// Blobs before cert so a crash cannot leave a new cert with old/missing key.
+	if err := writeFileAtomic(privPath, res.DevID.PrivateBlob, 0o600); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(outDir, "devid.priv.blob"), res.DevID.PrivateBlob, 0o600); err != nil {
+	if err := writeFileAtomic(pubPath, res.DevID.PublicBlob, 0o600); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(outDir, "devid.pub.blob"), res.DevID.PublicBlob, 0o600); err != nil {
+	if err := writeFileAtomic(certPath, newPEM, 0o600); err != nil {
 		return err
 	}
+
+	if pemChanged && opts.SpireDataDir != "" {
+		TryRestartSPIREAgent()
+	}
+	return nil
+}
+
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	ok := false
+	defer func() {
+		if !ok {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	ok = true
 	return nil
 }
 

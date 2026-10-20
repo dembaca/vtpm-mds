@@ -103,10 +103,13 @@ func TestCASignAndParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Far-future NotAfter is only for this Sign-path unit test; IssueDevID
+	// uses mds.devid_lifetime (see DefaultDevIDLifetime).
+	farFuture := time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 	template := &x509.Certificate{
 		Subject:               pkix.Name{CommonName: "test-devid"},
 		NotBefore:             time.Now().Add(-time.Minute),
-		NotAfter:              NoExpiration,
+		NotAfter:              farFuture,
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		BasicConstraintsValid: true,
 		PublicKey:             &leafKey.PublicKey,
@@ -122,8 +125,8 @@ func TestCASignAndParse(t *testing.T) {
 	if parsed.Subject.CommonName != "test-devid" {
 		t.Fatalf("CN=%q", parsed.Subject.CommonName)
 	}
-	if !parsed.NotAfter.Equal(NoExpiration) {
-		t.Fatalf("NotAfter=%v want %v", parsed.NotAfter, NoExpiration)
+	if !parsed.NotAfter.Equal(farFuture) {
+		t.Fatalf("NotAfter=%v want %v", parsed.NotAfter, farFuture)
 	}
 }
 
@@ -326,12 +329,14 @@ func TestIssueDevIDCertificateShape(t *testing.T) {
 	ca := mustParseTestCA(t)
 	sr := mustMinimalSigningRequest(t, pkix.Name{Organization: []string{"Example GmbH"}})
 
-	cert, err := ca.IssueDevID(sr, "100", time.Now().UTC())
+	now := time.Now().UTC().Truncate(time.Second)
+	cert, err := ca.IssueDevID(sr, "100", now)
 	if err != nil {
 		t.Fatalf("IssueDevID: %v", err)
 	}
-	if !cert.NotAfter.Equal(NoExpiration) {
-		t.Fatalf("NotAfter=%v want %v", cert.NotAfter, NoExpiration)
+	wantAfter := now.Add(DefaultDevIDLifetime)
+	if !cert.NotAfter.Equal(wantAfter) {
+		t.Fatalf("NotAfter=%v want %v", cert.NotAfter, wantAfter)
 	}
 	if cert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
 		t.Fatal("missing digitalSignature key usage")
@@ -521,5 +526,53 @@ func mustMinimalSigningRequest(t *testing.T, platform pkix.Name) *SigningRequest
 		EndorsementKey:   &ekTPM,
 		DevIDKey:         &devTPM,
 		PlatformIdentity: platform.ToRDNSequence(),
+	}
+}
+
+func TestIssueDevIDConfiguredLifetime(t *testing.T) {
+	ca := mustParseTestCA(t)
+	ca.Lifetime = 48 * time.Hour
+	sr := mustMinimalSigningRequest(t, pkix.Name{})
+	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	cert, err := ca.IssueDevID(sr, "100", now)
+	if err != nil {
+		t.Fatalf("IssueDevID: %v", err)
+	}
+	if !cert.NotAfter.Equal(now.Add(48 * time.Hour)) {
+		t.Fatalf("NotAfter=%v want %v", cert.NotAfter, now.Add(48*time.Hour))
+	}
+}
+
+func TestIssueDevIDRenewalSameKeyNewSerial(t *testing.T) {
+	ca := mustParseTestCA(t)
+	ca.Lifetime = 48 * time.Hour
+	sr := mustMinimalSigningRequest(t, pkix.Name{})
+	t1 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)
+	c1, err := ca.IssueDevID(sr, "100", t1)
+	if err != nil {
+		t.Fatalf("IssueDevID 1: %v", err)
+	}
+	c2, err := ca.IssueDevID(sr, "100", t2)
+	if err != nil {
+		t.Fatalf("IssueDevID 2: %v", err)
+	}
+	if c1.SerialNumber.Cmp(c2.SerialNumber) == 0 {
+		t.Fatalf("renewal with later notBefore must change serial; both %s", c1.SerialNumber)
+	}
+}
+
+func TestIssueDevIDRejectsMissingLifetimeWhenForced(t *testing.T) {
+	// Lifetime zero falls back to DefaultDevIDLifetime — documented behaviour.
+	ca := mustParseTestCA(t)
+	ca.Lifetime = 0
+	sr := mustMinimalSigningRequest(t, pkix.Name{})
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cert, err := ca.IssueDevID(sr, "100", now)
+	if err != nil {
+		t.Fatalf("IssueDevID: %v", err)
+	}
+	if !cert.NotAfter.Equal(now.Add(DefaultDevIDLifetime)) {
+		t.Fatalf("NotAfter=%v", cert.NotAfter)
 	}
 }
