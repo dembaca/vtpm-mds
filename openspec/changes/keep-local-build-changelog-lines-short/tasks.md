@@ -15,7 +15,7 @@ at the maintainer's request ("ok baue den fix", confirmed 21:39). Files:
       `/usr/share/doc/vtpm-mds/changelog.gz` of both packages is at most 80
       columns and `lintian --fail-on error,warning` exits 0 for both
       Done 2026-10-20 on hogan, `666a522`: on this branch the entry's lines
-      are 68/42/50/75 columns; on an 88-character branch the branch line is
+      are 68/42/50/75 columns; on an 86-character branch the branch line is
       cut to exactly 80 (`…-builds-stays~`); `lintian --fail-on
       error,warning` exit 0 for `vtpm-mds` and `devid-enroll` in every
       build (before the fix: `debian-changelog-line-too-long`, exit 2).
