@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-19
 
-None. Five were archived on 2026-10-17, seven on 2026-10-18 and seven on 2026-10-19; the first two in this order:
+None. Five were archived on 2026-10-17, seven on 2026-10-18, seven on 2026-10-19 and one on 2026-10-20; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -399,6 +399,34 @@ the guest enrols again. **`make deb-local` on a long branch name** fails
 lintian with `debian-changelog-line-too-long`, because `scripts/deb-local.sh`
 stamps the branch into the changelog line; that is a packaging defect of its
 own, not of the change being built.
+
+The LDevID lifetime followed as the first archive of 2026-10-20:
+`openspec/changes/archive/2026-10-20-limit-the-ldevid-lifetime-and-renew-it/`
+(PR #71, the maintainer's E2.3). LDevIDs now expire: `mds.devid_lifetime`,
+default `2160h` (90 days), at most `8760h`; the serial hashes the CA, the
+subject, the key **and** `notBefore`/`notAfter` at second resolution, so a
+renewal with the same key gets a new serial. The requirement is now **Issue A
+Time-Limited LDevID Whose Subject Is Only The VM ID**. The guest package ships
+`devid-enroll.service` (oneshot, before `spire-agent`) and
+`devid-enroll.timer` (daily, `RandomizedDelaySec=1h`), started from its
+`postinst`; `devid-enroll` renews only when the certificate is missing,
+unreadable, expired or in its last third, reuses the TPM key when the blobs
+still load, writes atomically, and with `-spire-data` deletes only
+`agent-data.json` and `agent_svid.der` and try-restarts `spire-agent`.
+**SPIRE 1.14 checks the LDevID only at node attestation:** a running agent
+with a cached SVID keeps its old ID even after the LDevID expired, so the
+lifetime only bites because of that cache clear; a renewal changes the agent
+ID (SHA-1 of the certificate), so registrations must use the node alias on
+`tpm_devid:subject:cn:<vmid>`. Stale agents are evicted by hand for the
+beta (`spire-server agent evict`, see the `devid-enroll` man page).
+Verified in the lab (90-day dates, renew with the same key, cache cleared,
+fresh certificate skipped) and on hogan against
+`0.2.0+git20261020.92e44840705c`: VM 399 into a scratch directory got
+`notAfter` +90 days, a second run made no request, a truncated PEM renewed
+with the same key and a new serial, SPIRE's material untouched. Not verified
+on hogan: the oneshot and timer units, `-spire-data`, renewal from the last
+third, an explicit `mds.devid_lifetime`. Certificates issued before keep
+`notAfter` 9999 until the guest enrols again.
 
 Honest readiness followed as the second archive of 2026-10-19:
 `openspec/changes/archive/2026-10-19-report-readiness-honestly/` (PR #61).
