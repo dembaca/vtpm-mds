@@ -119,5 +119,16 @@ func (e *Enroller) Finish(sessionID string, challengeResponse []byte, vmid, ekFP
 	if err != nil {
 		return nil, fmt.Errorf("issue DevID: %w", err)
 	}
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}), nil
+	// Leaf then intermediate (signing CA). No root — SPIRE tpm_devid puts
+	// DevIDCert[1:] in the Intermediates pool and trusts devid_ca_path as roots.
+	leafPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+	caCert := e.CA.Certificate()
+	if caCert == nil {
+		return nil, errors.New("DevID CA certificate missing")
+	}
+	interPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})
+	out := make([]byte, 0, len(leafPEM)+len(interPEM))
+	out = append(out, leafPEM...)
+	out = append(out, interPEM...)
+	return out, nil
 }

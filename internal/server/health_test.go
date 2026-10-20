@@ -280,6 +280,52 @@ func TestHealthAttestationOnMissingCAAndCache(t *testing.T) {
 	}
 }
 
+// TestHealthAttestationOnIntermediateWithoutRootKey: devid_ca_readable tracks
+// the signing intermediate; the offline root private key need not be on the node.
+func TestHealthAttestationOnIntermediateWithoutRootKey(t *testing.T) {
+	dir := t.TempDir()
+	inv := filepath.Join(dir, "inv.yaml")
+	cert := filepath.Join(dir, "intermediate.pem")
+	key := filepath.Join(dir, "intermediate.key")
+	if err := os.WriteFile(inv, []byte("vms:\n  - id: \"100\"\n    name: g\n    macs: [\"52:54:00:00:00:01\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cert, []byte("intermediate-cert"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(key, []byte("intermediate-key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultConfig()
+	cfg.MDS.EnableTPMAttestation = true
+	cfg.MDS.InventoryPath = inv
+	cfg.MDS.DevIDCACert = cert
+	cfg.MDS.DevIDCAKey = key
+	cfg.MDS.ListenAddr = "127.0.0.1:0"
+	srv, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Enrollment loaded shape: non-nil enroller + readable intermediate paths.
+	// No root key file exists under dir.
+	srv.devid = &devid.Enroller{}
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+	srv.handleHealth(rec, req)
+	var body map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if body["devid_ca_readable"] != true {
+		t.Fatalf("devid_ca_readable=%v want true (intermediate only)", body["devid_ca_readable"])
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("status=%v want ok", body["status"])
+	}
+	if _, err := os.Stat(filepath.Join(dir, "root.key")); !os.IsNotExist(err) {
+		t.Fatalf("root key must be absent: %v", err)
+	}
+}
+
 func newHealthTestServer(t *testing.T, attestation bool) *Server {
 	t.Helper()
 	dir := t.TempDir()
