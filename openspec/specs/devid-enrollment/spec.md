@@ -282,10 +282,11 @@ has bound it to the header; a request that carries no endorsement certificate
 SHALL be rejected there with body `missing EK certificate`.
 
 The request's platform identity is parsed as an RDN sequence and is not
-verified against the caller's identity. It contributes only the subject
-attributes other than the common name, which is taken from the authenticated
-VM ID. A platform identity that names another VM SHALL therefore be accepted
-without error and SHALL have no effect on the identity the certificate asserts.
+verified against the caller's identity. It SHALL contribute nothing to the
+issued certificate: the subject is built from the authenticated VM ID alone. A
+platform identity that names another VM or carries any other attribute SHALL
+therefore be accepted without error and SHALL have no effect on the
+certificate.
 
 #### Scenario: Request signature does not verify
 
@@ -580,72 +581,6 @@ The service SHALL perform no revocation checking on either leg.
 - **WHEN** it runs both enroll legs
 - **THEN** the binding check passes and a certificate is issued
 
-### Requirement: Issue A Non-Expiring LDevID Bound To The Authenticated VM
-
-On a successful finish the service SHALL sign a certificate with the DevID CA
-containing:
-
-- the DevID public key from the signing request as the certificate public key;
-- a subject whose common name is the authenticated VM ID bound to the enroll
-  session. A common name carried in the signing request's platform identity
-  SHALL be ignored; the guest SHALL NOT be able to influence the common name of
-  the certificate it receives. The remaining relative distinguished names of
-  the platform identity SHALL be carried into the subject unchanged, because
-  they assert no identity the service has established;
-- `notBefore` set to the time of the finish call and `notAfter` set to
-  `9999-12-31T23:59:59Z`, so LDevIDs do not expire;
-- key usage digitalSignature, basic constraints present with CA false, and the
-  extended key usage OID `2.23.133.11.1.2` (tcg-cap-verifiedTPMFixed);
-- a Subject Alternative Name extension carrying a TCG HardwareModuleName with
-  hardware type `2.23.133.1.2` and a PermanentIdentifier with assigner
-  `2.23.133.12.1`, built from the SHA-256 digest of the request's endorsement
-  public key when one is present and from the endorsement certificate DER
-  otherwise. Because authentication requires a non-empty VM ID and that VM ID
-  is always the common name, the subject is never empty, so this extension
-  SHALL NOT be marked critical;
-- a serial number derived deterministically from the CA certificate, the
-  subject and the public key, so re-enrolling the same key with the same
-  subject yields the same serial.
-
-The certificate SHALL be returned PEM-encoded in `devid_cert_pem`. The service
-SHALL NOT publish a revocation list or offer any other way to withdraw an
-issued LDevID.
-
-#### Scenario: Guest-supplied common name is ignored
-
-- **GIVEN** an authenticated caller identified as VM `100`
-- **WHEN** its signing request carries a platform identity with common name
-  `other-name`
-- **THEN** the issued certificate's subject common name is `100` and the string
-  `other-name` does not appear in the subject
-
-#### Scenario: VM ID is the common name
-
-- **GIVEN** an authenticated caller identified as VM `100`
-- **WHEN** its signing request carries no platform identity
-- **THEN** the issued certificate's subject is `CN=100`
-
-#### Scenario: Other platform identity attributes survive
-
-- **GIVEN** an authenticated caller identified as VM `100`
-- **WHEN** its signing request carries a platform identity with organization
-  `Example GmbH` and organizational unit `lab`
-- **THEN** the issued certificate's subject carries that organization and
-  organizational unit, and its common name is `100`
-
-#### Scenario: Certificate shape
-
-- **WHEN** a certificate is issued
-- **THEN** it has `notAfter` `9999-12-31T23:59:59Z`, key usage
-  digitalSignature, CA false, extended key usage `2.23.133.11.1.2`, and a TCG
-  SAN with a HardwareModuleName and a PermanentIdentifier
-
-#### Scenario: The TCG SAN is never critical
-
-- **WHEN** a certificate is issued to any authenticated caller
-- **THEN** its Subject Alternative Name extension is not marked critical,
-  because the subject always carries the VM ID as common name
-
 ### Requirement: Log Each Issued LDevID
 
 On every successful finish the service SHALL write exactly one log line stating
@@ -786,3 +721,77 @@ This extends, and does not replace, the existing inventory-pin scenarios in
 - **WHEN** either enroll leg is called with a trusted EK bound to the
   endorsement key
 - **THEN** the pin check does not reject the request
+
+### Requirement: Issue A Non-Expiring LDevID Whose Subject Is Only The VM ID
+
+On a successful finish the service SHALL sign a certificate with the DevID CA
+containing:
+
+- the DevID public key from the signing request as the certificate public key;
+- a subject consisting of exactly one attribute, the common name, set to the
+  authenticated VM ID bound to the enroll session. Nothing from the signing
+  request's platform identity SHALL be carried into the subject; the guest
+  SHALL NOT be able to influence any attribute of the subject of the
+  certificate it receives, because every attribute is signed by the same CA
+  and a relying party cannot tell which ones the service checked;
+- `notBefore` set to the time of the finish call and `notAfter` set to
+  `9999-12-31T23:59:59Z`, so LDevIDs do not expire;
+- key usage digitalSignature, basic constraints present with CA false, and the
+  extended key usage OID `2.23.133.11.1.2` (tcg-cap-verifiedTPMFixed);
+- a Subject Alternative Name extension carrying a TCG HardwareModuleName with
+  hardware type `2.23.133.1.2` and a PermanentIdentifier with assigner
+  `2.23.133.12.1`, built from the SHA-256 digest of the request's endorsement
+  public key when one is present and from the endorsement certificate DER
+  otherwise. Because authentication requires a non-empty VM ID and that VM ID
+  is always the common name, the subject is never empty, so this extension
+  SHALL NOT be marked critical;
+- a serial number derived deterministically from the CA certificate, the
+  subject and the public key, so re-enrolling the same key for the same VM
+  yields the same serial whatever platform identity the request carries.
+
+The certificate SHALL be returned PEM-encoded in `devid_cert_pem`. The service
+SHALL NOT publish a revocation list or offer any other way to withdraw an
+issued LDevID.
+
+#### Scenario: Guest-supplied common name is ignored
+
+- **GIVEN** an authenticated caller identified as VM `100`
+- **WHEN** its signing request carries a platform identity with common name
+  `other-name`
+- **THEN** the issued certificate's subject common name is `100` and the string
+  `other-name` does not appear in the subject
+
+#### Scenario: VM ID is the common name
+
+- **GIVEN** an authenticated caller identified as VM `100`
+- **WHEN** its signing request carries no platform identity
+- **THEN** the issued certificate's subject is `CN=100`
+
+#### Scenario: Other platform identity attributes are dropped
+
+- **GIVEN** an authenticated caller identified as VM `100`
+- **WHEN** its signing request carries a platform identity with organization
+  `Example GmbH`, organizational unit `lab` and common name `other-name`
+- **THEN** the enrolment succeeds and the issued certificate's subject is
+  exactly `CN=100`, with no organization and no organizational unit
+
+#### Scenario: Platform identity does not change the serial
+
+- **GIVEN** an authenticated caller identified as VM `100` enrolling the same
+  DevID key twice
+- **WHEN** one signing request carries a platform identity with organization
+  `Example GmbH` and the other carries none
+- **THEN** both issued certificates have the same serial number
+
+#### Scenario: Certificate shape
+
+- **WHEN** a certificate is issued
+- **THEN** it has `notAfter` `9999-12-31T23:59:59Z`, key usage
+  digitalSignature, CA false, extended key usage `2.23.133.11.1.2`, and a TCG
+  SAN with a HardwareModuleName and a PermanentIdentifier
+
+#### Scenario: The TCG SAN is never critical
+
+- **WHEN** a certificate is issued to any authenticated caller
+- **THEN** its Subject Alternative Name extension is not marked critical,
+  because the subject always carries the VM ID as common name
