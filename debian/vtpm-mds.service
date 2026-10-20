@@ -25,9 +25,11 @@ LimitNOFILE=65536
 User=vtpm-mds
 Group=vtpm-mds
 SupplementaryGroups=www-data
-# The CA key is read by systemd as root and handed over as a credential; a
-# missing file stops the start (243/CREDENTIALS). Another path: a drop-in that
-# first resets the setting with an empty "LoadCredential=" line.
+# Cluster DevID intermediate private key (not the offline root). Read by
+# systemd as root and handed over as credential devid_ca.key; a missing file
+# stops the start (243/CREDENTIALS). Another path: a drop-in that first resets
+# the setting with an empty "LoadCredential=" line. Keep the credential name;
+# only the file content is the per-cluster intermediate.
 LoadCredential=devid_ca.key:/etc/ssl/private/proxmox_devid_ca.key
 
 # State directory, owned by the user; config lives in /etc/vtpm-mds.

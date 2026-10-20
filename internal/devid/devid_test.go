@@ -464,6 +464,71 @@ func mustTestCA(t *testing.T) (*x509.Certificate, *rsa.PrivateKey) {
 	return cert, key
 }
 
+// mustTwoTierTestCA returns an offline root and a pathLen=0 intermediate CA
+// loaded as *CA (what the host signs with after cut-over).
+func mustTwoTierTestCA(t *testing.T) (root *x509.Certificate, rootKey *rsa.PrivateKey, inter *CA) {
+	t.Helper()
+	var err error
+	rootKey, err = rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootTmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "test-devid-root"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		MaxPathLen:            1,
+		MaxPathLenZero:        false,
+	}
+	rootDER, err := x509.CreateCertificate(rand.Reader, rootTmpl, rootTmpl, &rootKey.PublicKey, rootKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err = x509.ParseCertificate(rootDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	interKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interTmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(2),
+		Subject:               pkix.Name{CommonName: "test-devid-intermediate"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		MaxPathLen:            0,
+		MaxPathLenZero:        true,
+	}
+	interDER, err := x509.CreateCertificate(rand.Reader, interTmpl, root, &interKey.PublicKey, rootKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interCert, err := x509.ParseCertificate(interDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: interCert.Raw})
+	keyDER, err := x509.MarshalPKCS8PrivateKey(interKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	inter, err = ParseCA(interPEM, keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root, rootKey, inter
+}
+
 func assertTCGDevIDSAN(der []byte) error {
 	// OtherName encoding is awkward to round-trip; verify the TCG otherName
 	// type OIDs are present in the SAN SEQUENCE.
@@ -574,5 +639,138 @@ func TestIssueDevIDRejectsMissingLifetimeWhenForced(t *testing.T) {
 	}
 	if !cert.NotAfter.Equal(now.Add(DefaultDevIDLifetime)) {
 		t.Fatalf("NotAfter=%v", cert.NotAfter)
+	}
+}
+
+// TestFinishLeafThenIntermediate: enroll finish returns leaf then intermediate
+// PEM; the leaf chains to an offline root only when the intermediate block is
+// present (SPIRE tpm_devid shape).
+func TestFinishLeafThenIntermediate(t *testing.T) {
+	rootCert, rootKey, interCA := mustTwoTierTestCA(t)
+	sr := mustMinimalSigningRequest(t, pkix.Name{})
+	enroller := NewEnroller(interCA, x509.NewCertPool(), NewSessionStore(time.Minute))
+	sid, err := enroller.Sessions.Put([]byte("nonce"), *sr, "100", "ekfp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemBytes, err := enroller.Finish(sid, []byte("nonce"), "100", "ekfp", "")
+	if err != nil {
+		t.Fatalf("Finish: %v", err)
+	}
+
+	var certs []*x509.Certificate
+	rest := pemBytes
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		c, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		certs = append(certs, c)
+	}
+	if len(certs) != 2 {
+		t.Fatalf("want 2 PEM certs (leaf+intermediate), got %d", len(certs))
+	}
+	leaf, inter := certs[0], certs[1]
+	if leaf.Subject.CommonName != "100" {
+		t.Fatalf("leaf CN=%q want 100", leaf.Subject.CommonName)
+	}
+	if !bytes.Equal(inter.Raw, interCA.Certificate().Raw) {
+		t.Fatal("second PEM is not the signing intermediate")
+	}
+	if bytes.Equal(inter.Raw, rootCert.Raw) {
+		t.Fatal("root must not appear in devid_cert_pem")
+	}
+
+	roots := x509.NewCertPool()
+	roots.AddCert(rootCert)
+	interPool := x509.NewCertPool()
+	interPool.AddCert(inter)
+	opts := x509.VerifyOptions{
+		Roots:         roots,
+		Intermediates: interPool,
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	}
+	if _, err := leaf.Verify(opts); err != nil {
+		t.Fatalf("chain with intermediate: %v", err)
+	}
+	optsNoInter := x509.VerifyOptions{
+		Roots:     roots,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	}
+	if _, err := leaf.Verify(optsNoInter); err == nil {
+		t.Fatal("leaf must not verify against root without intermediate")
+	}
+	if rootKey == nil {
+		t.Fatal("expected root key from helper")
+	}
+}
+
+func TestParseCARejectsKeyMismatch(t *testing.T) {
+	caCert, _ := mustTestCA(t)
+	_, otherKey := mustTestCA(t)
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})
+	keyDER, err := x509.MarshalPKCS8PrivateKey(otherKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	if _, err := ParseCA(caPEM, keyPEM); err == nil {
+		t.Fatal("expected key/cert mismatch")
+	}
+}
+
+func TestParseCARejectsNonCA(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "not-a-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	if _, err := ParseCA(certPEM, keyPEM); err == nil {
+		t.Fatal("expected non-CA rejection")
+	}
+}
+
+func TestParseCAUsesFirstCertInBundle(t *testing.T) {
+	root, _, inter := mustTwoTierTestCA(t)
+	interPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: inter.Certificate().Raw})
+	rootPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: root.Raw})
+	bundle := append(append([]byte{}, interPEM...), rootPEM...)
+	keyDER, err := x509.MarshalPKCS8PrivateKey(inter.key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	ca, err := ParseCA(bundle, keyPEM)
+	if err != nil {
+		t.Fatalf("ParseCA bundle: %v", err)
+	}
+	if !bytes.Equal(ca.Certificate().Raw, inter.Certificate().Raw) {
+		t.Fatal("ParseCA must use the first CERTIFICATE (intermediate), not the trailing root")
 	}
 }

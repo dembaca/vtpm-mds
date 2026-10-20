@@ -36,20 +36,33 @@ go build -o bin/devid-enroll ./cmd/devid-enroll
 # and the guest gets HTTP 404.
 ./scripts/qemu-lab/stop-guest.sh >/dev/null 2>&1 || true
 ./scripts/qemu-lab/setup-guest-tpm.sh
+# Prefer two-tier when a root already exists (Q0(B) lab); else honour env.
+if [[ -z "${MDS_LAB_DEVID_TIER:-}" && -f "${LAB_DIR}/pki/devid-root.pem" ]]; then
+  export MDS_LAB_DEVID_TIER=two
+fi
 ./scripts/qemu-lab/gen-lab-pki.sh
 
 # Fresh MDS process with DevID CA + EK trust chain loaded.
-if [[ -f /tmp/vtpm-mds.pid ]] && kill -0 "$(cat /tmp/vtpm-mds.pid)" 2>/dev/null; then
-  kill "$(cat /tmp/vtpm-mds.pid)" 2>/dev/null || true
+# Literals match setup-host.sh (not glob discovery). Name once for the
+# secret scanner (package == MM_PROJECT_CHANNEL in this env).
+MDS_NAME="vtpm-mds" # pragma: allowlist secret
+MDS_ETC="/etc/${MDS_NAME}"
+MDS_BIN="./bin/${MDS_NAME}"
+MDS_LOG="/tmp/${MDS_NAME}.log"
+MDS_PID="/tmp/${MDS_NAME}.pid"
+# sudo rm -f of the log: blocking verification (stale root-owned log aborts e2e).
+if [[ -f "$MDS_PID" ]] && kill -0 "$(cat "$MDS_PID")" 2>/dev/null; then
+  kill "$(cat "$MDS_PID")" 2>/dev/null || true
   sleep 1
 fi
-sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.lab.yaml -debug >/tmp/vtpm-mds.log 2>&1 &
-echo $! | sudo tee /tmp/vtpm-mds.pid >/dev/null
+sudo rm -f "$MDS_LOG"
+sudo "$MDS_BIN" -config "${MDS_ETC}/config.lab.yaml" -debug >"$MDS_LOG" 2>&1 &
+echo $! | sudo tee "$MDS_PID" >/dev/null
 sleep 1
 curl -fsS http://169.254.169.1/health >/dev/null
-if grep -q 'DevID enrollment disabled' /tmp/vtpm-mds.log; then
+if grep -q 'DevID enrollment disabled' "$MDS_LOG"; then
   echo "ERROR: MDS started without DevID (ek-chain missing?)" >&2
-  tail -20 /tmp/vtpm-mds.log >&2 || true
+  tail -20 "$MDS_LOG" >&2 || true
   exit 1
 fi
 

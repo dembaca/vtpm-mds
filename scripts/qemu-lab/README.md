@@ -105,6 +105,10 @@ Notes:
   `cloud-install.sh` when one is missing. UEFI firmware is found under
   `/usr/share/OVMF`, `/usr/share/pve-edk2-firmware` or `/usr/share/edk2/ovmf`;
   `OVMF_CODE` / `OVMF_VARS_TEMPLATE` override it.
+- `gen-lab-pki.sh` two-tier mode: `MDS_LAB_DEVID_TIER=two` mints an offline root
+  (`devid-root.pem`) for SPIRE `devid_ca_path` and a pathLen=0 intermediate as
+  host `devid-ca.pem` / `devid-ca-key.pem` (see `scripts/gen-devid-intermediate.sh`).
+  Default remains single-tier.
 - `gen-lab-pki.sh` takes the EK issuer from the swtpm CA configuration named in
   `/etc/swtpm_setup.conf` (`MDS_LAB_SWTPM_SETUP_CONF` overrides), falling back to
   `/var/lib/swtpm-localca/`. It exits non-zero when it finds no issuer.

@@ -1,6 +1,7 @@
 package devid
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/sha1"
@@ -43,6 +44,9 @@ func LoadCA(certPath, keyPath string) (*CA, error) {
 }
 
 // ParseCA parses PEM-encoded CA certificate and private key material.
+// The first CERTIFICATE block is the signing CA (extra blocks, e.g. a root
+// after an intermediate, are ignored). The certificate MUST be a CA, and the
+// private key MUST match its public key.
 func ParseCA(certPEM, keyPEM []byte) (*CA, error) {
 	var cert *x509.Certificate
 	var key crypto.PrivateKey
@@ -62,9 +66,13 @@ func ParseCA(certPEM, keyPEM []byte) (*CA, error) {
 			return nil, err
 		}
 		cert = c
+		break // first certificate only — a trailing root must not become the issuer
 	}
 	if cert == nil {
 		return nil, errors.New("no certificate in CA PEM")
+	}
+	if !cert.IsCA {
+		return nil, errors.New("DevID CA certificate is not a CA")
 	}
 
 	rest = keyPEM
@@ -92,7 +100,29 @@ func ParseCA(certPEM, keyPEM []byte) (*CA, error) {
 	if key == nil {
 		return nil, errors.New("no private key in CA PEM")
 	}
+	if err := publicKeysEqual(cert.PublicKey, key); err != nil {
+		return nil, err
+	}
 	return &CA{cert: cert, key: key}, nil
+}
+
+func publicKeysEqual(pub any, priv crypto.PrivateKey) error {
+	signer, ok := priv.(crypto.Signer)
+	if !ok {
+		return fmt.Errorf("DevID CA key type %T is not a signer", priv)
+	}
+	want, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return fmt.Errorf("marshal cert public key: %w", err)
+	}
+	got, err := x509.MarshalPKIXPublicKey(signer.Public())
+	if err != nil {
+		return fmt.Errorf("marshal CA private key's public key: %w", err)
+	}
+	if !bytes.Equal(want, got) {
+		return errors.New("DevID CA key does not match certificate")
+	}
+	return nil
 }
 
 // Certificate returns the CA certificate.

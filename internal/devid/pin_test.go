@@ -2,8 +2,6 @@ package devid
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -267,25 +265,14 @@ func TestSecondFinishDoesNotOverwritePin(t *testing.T) {
 }
 
 func TestPinWrittenWhenIssueDevIDFails(t *testing.T) {
-	caCert, _ := mustTestCA(t)
-	wrongKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})
-	keyDER, err := x509.MarshalPKCS8PrivateKey(wrongKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
-	badCA, err := ParseCA(caPEM, keyPEM)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// ParseCA now rejects a mismatched key at load; force IssueDevID to fail
+	// with a session whose DevID key is missing after the pin is written.
+	ca := mustParseTestCA(t)
 	dir := t.TempDir()
-	enroller := NewEnroller(badCA, x509.NewCertPool(), NewSessionStore(time.Minute))
+	enroller := NewEnroller(ca, x509.NewCertPool(), NewSessionStore(time.Minute))
 	enroller.PinDir = dir
 	sr := mustMinimalSigningRequest(t, pkix.Name{})
+	sr.DevIDKey = nil
 	sid, err := enroller.Sessions.Put([]byte("nonce"), *sr, "100", "ekfp")
 	if err != nil {
 		t.Fatal(err)

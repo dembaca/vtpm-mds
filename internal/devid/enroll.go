@@ -119,5 +119,14 @@ func (e *Enroller) Finish(sessionID string, challengeResponse []byte, vmid, ekFP
 	if err != nil {
 		return nil, fmt.Errorf("issue DevID: %w", err)
 	}
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}), nil
+	// Leaf then intermediate (signing CA). No root after cut-over — SPIRE
+	// tpm_devid puts DevIDCert[1:] in the Intermediates pool and trusts
+	// devid_ca_path as roots. Pre-cut-over (signing CA still the root) the
+	// second block is that root.
+	leafPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+	interPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: e.CA.Certificate().Raw})
+	out := make([]byte, 0, len(leafPEM)+len(interPEM))
+	out = append(out, leafPEM...)
+	out = append(out, interPEM...)
+	return out, nil
 }
