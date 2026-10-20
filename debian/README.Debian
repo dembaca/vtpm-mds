@@ -43,12 +43,16 @@ any other address times out without a log line. The unit is PartOf
 pve-cluster, so restarting pve-cluster restarts it too. Check the
 confinement with "systemd-analyze security vtpm-mds".
 
-The DevID CA key is not read by the daemon from disk: systemd reads
-/etc/ssl/private/proxmox_devid_ca.key as root and hands it over as the
-credential devid_ca.key, so the key keeps its owner and mode
-(root:root 0600). If that file is missing, the service does not start
-(systemctl status shows 243/CREDENTIALS). A key elsewhere needs a
-drop-in that first resets the setting:
+The DevID material on the node is the cluster *intermediate* certificate
+and key, not the offline DevID root. The root private key must never be
+installed on hypervisors; SPIRE's tpm_devid devid_ca_path needs only the
+offline root *certificate*. The intermediate key is not read by the
+daemon from disk: systemd reads /etc/ssl/private/proxmox_devid_ca.key as
+root and hands it over as the credential devid_ca.key (name unchanged),
+so the key keeps its owner and mode (root:root 0600). If that file is
+missing, the service does not start (systemctl status shows
+243/CREDENTIALS). A key elsewhere needs a drop-in that first resets the
+setting:
 
   # systemctl edit vtpm-mds
   [Service]

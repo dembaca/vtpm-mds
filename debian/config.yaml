@@ -3,8 +3,10 @@
 #
 # Host PKI is installed by Ansible role proxmox-swtpm (not this package):
 #   /etc/ssl/certs/proxmox_tpm_ca.crt
-#   /etc/ssl/certs/proxmox_devid_ca.crt
-#   /etc/ssl/private/proxmox_devid_ca.*  (key; adjust suffix if needed)
+#   /etc/ssl/certs/proxmox_devid_ca.crt   ← cluster DevID *intermediate* cert
+#   /etc/ssl/private/proxmox_devid_ca.key ← intermediate private key (not the root)
+# The offline DevID root private key MUST NOT be installed on hypervisors.
+# SPIRE (tpm_devid devid_ca_path) needs the offline *root certificate* only.
 # Inventory: empty path → Proxmox /etc/pve (correct on a Proxmox host).
 # Listen address matches vmbr_imds + nftables DNAT 169.254.169.254:80 → :80.
 
@@ -13,6 +15,7 @@ mds:
   jwks_path: "/var/lib/vtpm-mds/jwks.json"
   attestation_ca: "/etc/ssl/certs/proxmox_tpm_ca.crt"
   ek_ca_chain: "/etc/ssl/certs/proxmox_tpm_ca.crt"
+  # Cluster intermediate (signing CA). Credential name stays devid_ca.key.
   devid_ca_cert: "/etc/ssl/certs/proxmox_devid_ca.crt"
   devid_ca_key: "/etc/ssl/private/proxmox_devid_ca.key"
   # LDevID lifetime (Go duration). Default 2160h (90 days); max 8760h (1y).
