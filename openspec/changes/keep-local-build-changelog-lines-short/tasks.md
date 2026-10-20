@@ -7,16 +7,26 @@ at the maintainer's request ("ok baue den fix", confirmed 21:39). Files:
 
 ## 1. Fix
 
-- [ ] 1.1 Put the branch on its own line and shorten it past 68 characters
+- [x] 1.1 Put the branch on its own line and shorten it past 68 characters
       (D-a, D-b); verify with `bash -n scripts/deb-local.sh`
-- [ ] 1.2 Build on a branch name longer than 68 characters and on this
+      `bash -n` OK (`666a522`).
+- [x] 1.2 Build on a branch name longer than 68 characters and on this
       branch; verify that every line of the stamped entry in
       `/usr/share/doc/vtpm-mds/changelog.gz` of both packages is at most 80
       columns and `lintian --fail-on error,warning` exits 0 for both
-- [ ] 1.3 Verify `dpkg-deb -f … Version` still reads
+      Done 2026-10-20 on hogan, `666a522`: on this branch the entry's lines
+      are 68/42/50/75 columns; on an 88-character branch the branch line is
+      cut to exactly 80 (`…-builds-stays~`); `lintian --fail-on
+      error,warning` exit 0 for `vtpm-mds` and `devid-enroll` in every
+      build (before the fix: `debian-changelog-line-too-long`, exit 2).
+- [x] 1.3 Verify `dpkg-deb -f … Version` still reads
       `0.2.0+git<date>.<sha>` and that a dirty tree still gets `.dirty` and
       "dirty working tree" in the entry
-- [ ] 1.4 Run `openspec validate --all --strict`
+      `0.2.0+git20261020.666a522b45a3`; with an untracked file
+      `0.2.0+git20261020.666a522b45a3.dirty` and `* Local lab build from git
+      666a522b45a3, dirty working tree.` (62 columns), lintian exit 0.
+- [x] 1.4 Run `openspec validate --all --strict`
+      Totals: 7 passed, 0 failed (7 items)
 
 ## 2. Archive
 
