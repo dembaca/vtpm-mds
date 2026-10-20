@@ -92,10 +92,20 @@ credential name stays `devid_ca.key`), `scripts/gen-devid-intermediate.sh`,
       `ca:fingerprint` values; node alias with `subject:cn` **and** intermediate
       fingerprint matches; a leaf from a *second* intermediate does **not**
       **Verify:** `spire-server agent show` / entry create evidence in RESULT
-- [ ] 5.2 Hogan: VM 399 enroll/renew into a **scratch** directory only; do not
+- [x] 5.2 Hogan: VM 399 enroll/renew into a **scratch** directory only; do not
       overwrite live `/var/lib/spire/agent/` materials. SPIRE live materials
       unchanged. (Coordinator / hogan agent after merge readiness.)
-      **Verify:** openssl + sha1sum; journal as appropriate
+      **Verify (2026-10-20, hogan / coordinator):** package
+      `0.2.0+git20261020.fe2dad9cd8ab` installed 21:11 (dembaca 👍); try-restart
+      gap 0.42 s; `DevID enrollment routes registered` (ParseCA IsCA+key match
+      OK on real credential). VM 399 `/root/devid-enroll-71` →
+      `-out /root/devid-scratch-72`, `-spire-data` empty: start/finish 200,
+      `devid issued serial=c3f0b321… vm=399 ek=19517bd1…`. PEM **2** blocks:
+      [0] `CN=399` CA:FALSE notAfter +90 d; [1] hogan DevID CA (pathLen=0)
+      DER-identical to `/etc/ssl/certs/proxmox_devid_ca.crt`; leaf first, no
+      root. Go `x509.Verify` leaf+inter pool against that CA → OK, chain len 2.
+      Live SPIRE `/var/lib/spire/agent/devid.*` unchanged
+      (`253be3e4…`/`39679c24…`/`d8fb058d…`). Limits → 7.5 / 7.6.
 
 ## 6. OpenSpec / ship
 
@@ -108,7 +118,13 @@ credential name stays `devid_ca.key`), `scripts/gen-devid-intermediate.sh`,
 - [ ] 7.1 Ansible role that mints/distributes intermediates (Q1) — out of repo
 - [ ] 7.2 Hogan live SPIRE agent paths on 399 (only scratch in 5.2)
 - [ ] 7.3 Name Constraints / CRL / HSM (non-goals)
-- [ ] 7.4 Rebase onto `main` after #71 merges
+- [x] 7.4 Rebase onto `main` after #71 merges
+      **Done (2026-10-20):** rebased onto `main@46fbb47` → tip `fe2dad9`.
+- [ ] 7.5 Chain verify up to the **site root** on hogan — site root cert is not
+      on the host; 5.2 verified only against hogan's DevID CA (pathLen=0 inter).
+- [ ] 7.6 `openssl verify` on the LDevID leaf — rejects at parsing
+      (`v3_purp.c invalid certificate`, TCG SAN/EKU); unrelated to #72 (leaf
+      extensions unchanged since #70). Go `x509.Verify` (SPIRE path) is OK.
 
 ## Verification notes (Code-Go 2026-10-20)
 
@@ -122,7 +138,8 @@ credential name stays `devid_ca.key`), `scripts/gen-devid-intermediate.sh`,
   Node alias CN+inter → SVID `workload/ok`; alias CN+cluster2 inter → no `workload/nope`.
 - **6.1** `openspec validate --all --strict` 9/9; `go vet ./...` + `go test ./...` green.
 - **6.2** Fable pre-review still open before ready-for-review.
-- **5.2** Hogan scratch renew deferred (coordinator).
+- **5.2** see checkbox evidence above (hogan RESULT in #72 thread).
+- **7.4** rebase onto `main@46fbb47` @ `fe2dad9` (RESULT in #72 thread).
 
 - **Fable should-fix (2026-10-20):** e2e tee revert + `rm -f` log; ParseCA first-cert/CA/key-match; gen-lab-pki SPIRE `sudo`+`-d`; stale record text; nits.
 
