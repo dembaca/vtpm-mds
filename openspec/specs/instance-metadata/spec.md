@@ -146,6 +146,11 @@ inventory is loaded and, if `mds.enable_tpm_attestation` is true, the DevID CA
 certificate and key the service would use for enrollment are readable;
 otherwise `"degraded"`. The HTTP status SHALL remain `200` for both values.
 
+When the issuing CA is a cluster intermediate (see `devid-enrollment`), those
+paths are the **intermediate** cert and key. `devid_ca_readable` SHALL mean
+that signing material is readable and SHALL NOT require the offline root
+private key (or the root certificate) to be present on the node.
+
 When the caller is **bound to a VM record**, the body SHALL contain only
 `status` (no inventory counts, timestamps, CA flags, or error classes).
 
@@ -208,6 +213,14 @@ handler and receive `404`.
 - **WHEN** an unbound caller sends `GET /health`
 - **THEN** the body has `status` `ok` and does not contain the key
   `devid_ca_readable`
+
+#### Scenario: devid_ca_readable tracks the intermediate after cut-over
+
+- **GIVEN** `mds.enable_tpm_attestation` is true, inventory is loaded, and the
+  enroller is configured with a readable cluster intermediate cert and key
+- **WHEN** an unbound caller sends `GET /health`
+- **THEN** `devid_ca_readable` is true even if the offline root private key is
+  absent from the node
 
 ### Requirement: Expire Session Tokens On A Validated TTL
 

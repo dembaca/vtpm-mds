@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-19
 
-None. Five were archived on 2026-10-17, seven on 2026-10-18, seven on 2026-10-19 and one on 2026-10-20; the first two in this order:
+None. Five were archived on 2026-10-17, seven on 2026-10-18, seven on 2026-10-19 and two on 2026-10-20; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -427,6 +427,34 @@ with the same key and a new serial, SPIRE's material untouched. Not verified
 on hogan: the oneshot and timer units, `-spire-data`, renewal from the last
 third, an explicit `mds.devid_lifetime`. Certificates issued before keep
 `notAfter` 9999 until the guest enrols again.
+
+The intermediate per cluster followed as the second archive of 2026-10-20:
+`openspec/changes/archive/2026-10-20-issue-ldevids-from-an-intermediate-per-cluster/`
+(PR #72, the maintainer's Q0 B, Q1 A, Q3). The root of the DevID CA stays
+offline on a CA host; an Ansible role mints one intermediate per cluster
+(1 year, renewed with overlap, `pathLenConstraint=0`, `keyCertSign` only,
+no EKU, no Name Constraints) and puts it on that cluster's nodes under the
+**same** credential name `devid_ca.key`. The daemon now refuses to load a
+DevID CA whose certificate is not a CA or whose key does not match it (it
+takes the first certificate of a bundle), so a wrong pair shows as `DevID
+enrollment disabled` at start instead of a `500` on every finish.
+`devid_cert_pem` carries the leaf followed by the signing CA, never the
+root; SPIRE servers keep only the root in `devid_ca_path`. **SPIRE
+registrations and node aliases select `tpm_devid:subject:cn:<vmid>` AND
+`tpm_devid:ca:fingerprint:<sha1 of the cluster intermediate>`**, so a
+stolen intermediate cannot forge VMs of another cluster; within a cluster
+every node can still forge any VM of that cluster. **On hogan the DevID CA
+already is a `pathlen:0` intermediate of the site root**, so per-cluster
+intermediates must be minted from the site root, not from it. Verified in the
+lab (two-tier PKI with SPIRE `1.14.0`: an alias on CN and the intermediate
+fingerprint matches, a leaf from a second intermediate does not) and on hogan
+against `0.2.0+git20261020.fe2dad9cd8ab` (the real credential passes the new
+check; VM 399 into a scratch directory got leaf + hogan's DevID CA, Go
+`x509.Verify` OK, SPIRE's material untouched). Not verified on hogan: the
+chain up to the site root (its certificate is not on hogan), a real
+per-cluster intermediate. `openssl verify` rejects these leaves while
+parsing (the TCG extensions), Go and SPIRE accept them. **Open, the
+maintainer's:** the Ansible role and the cut-over of each cluster.
 
 Honest readiness followed as the second archive of 2026-10-19:
 `openspec/changes/archive/2026-10-19-report-readiness-honestly/` (PR #61).

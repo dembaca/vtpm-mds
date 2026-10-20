@@ -12,7 +12,7 @@ Binary: `vtpm-mds` (aliases: `qemu-mds`, `prox-mds`). Module path: `github.com/d
 | Capability | Status |
 |---|---|
 | **Cloud-compatible metadata API** — EC2-IMDSv2-compatible endpoints | implemented |
-| **TPM DevID enrollment** — LDevID certs + TPM2B blobs for SPIRE `tpm_devid`; the subject is always `CN=<VM ID>` and nothing else; valid for `mds.devid_lifetime` (default 90 days), renewed by the guest's `devid-enroll.timer` | implemented |
+| **TPM DevID enrollment** — LDevID certs + TPM2B blobs for SPIRE `tpm_devid`; the subject is always `CN=<VM ID>` and nothing else; valid for `mds.devid_lifetime` (default 90 days), renewed by the guest's `devid-enroll.timer`; issued by one intermediate per cluster, returned as leaf + intermediate | implemented |
 | **Dual enroll auth** — MAC → inventory **and** TPM EK certificate header | implemented |
 | **EK pin per VM** — the first enrolment of a VM pins its EK under `/var/lib/vtpm-mds/ek-pins/<vmid>`; a different EK is refused until an operator deletes the pin | implemented |
 | **MAC binding on the IMDS bridge** — `vtpm-mds-bind` (in the host package, own unit with `CAP_NET_ADMIN` only) keeps nftables `bridge vtpm_mds_bind` so every guest port on `vmbr_imds` admits only its configured MAC, as frame source and ARP sender; it checks `/etc/pve/local` every 5 s and restores the table after `systemctl restart nftables` | implemented |
