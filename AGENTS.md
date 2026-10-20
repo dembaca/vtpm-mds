@@ -271,7 +271,7 @@ restart. `systemd-analyze security` is **1.5 OK**. Verified on hogan against
 the maintainer's `setpriv` check that `priv/` is refused). Two review follow-ups
 wait for the next change to `debian/` or `loadDevIDEnroller` (see that design).
 **Every node holds the CA key**, so a compromised node can issue for any VM ID;
-an intermediate per node or per cluster is part of the open CA decision.
+an intermediate per cluster was decided and built on 2026-10-20 (below).
 
 The connection-map leak followed as the seventh archive of 2026-10-18:
 `openspec/changes/archive/2026-10-18-drop-the-connection-map/` (PR #52). The
