@@ -19,7 +19,20 @@ the config key.
 
 - [x] 2.1 Cloud lab: default lifetime → `notAfter ≈ now+90d`; verify with `openssl x509 -dates`.
 - [x] 2.2 Cloud lab: short lifetime + renew; verify same priv/pub blob checksums, new cert PEM, new SHA-1 fingerprint, new serial; SVID cache cleared so next agent start attests the new ID.
-- [ ] 2.3 Hogan VM 399: renew into a **scratch** output directory (do not overwrite live `/var/lib/spire/agent/` materials); verify new cert shape / serial; confirm SPIRE's live materials unchanged. Verify with `openssl` + `sha1sum` / journal as appropriate.
+- [x] 2.3 Hogan VM 399: renew into a **scratch** output directory (do not overwrite live `/var/lib/spire/agent/` materials); verify new cert shape / serial; confirm SPIRE's live materials unchanged. Verify with `openssl` + `sha1sum` / journal as appropriate.
+      **Verify (2026-10-20, hogan / coordinator):** package
+      `0.2.0+git20261020.92e44840705c` installed 20:38 (dembaca 👍); try-restart
+      gap 0.34 s; credential CA key; default lifetime (conffile kept). Guest
+      binary streamed to VM 399 as `/root/devid-enroll-71` (sha256 `e9131cbe…`);
+      guest package not installed; `-spire-data` empty. Scratch
+      `/root/devid-scratch-71`: (1) empty → enroll CN=399, notAfter +90 d,
+      serial `8634…25F5`; (2) immediately again → skip, same serial, no POST;
+      (3) PEM truncated → renew-due, new serial `BB90…C21C`, notAfter +90 d,
+      `devid.priv.blob`/`devid.pub.blob` byte-identical (`d733ec1e…`/`44bf1c0d…`).
+      Journal: two `devid issued … vm=399` (EK pin match), enroll/start+finish
+      200. Live SPIRE `/var/lib/spire/agent/devid.*` checksums unchanged
+      (`253be3e4…`/`39679c24…`/`d8fb058d…`). Not verified here: oneshot/timer,
+      `-spire-data`, last-third renew, explicit `mds.devid_lifetime`.
 - [x] 2.4 Confirm SPIRE 1.14.0 `agent evict` / `agent purge` flags still match design D-e; verify via `-help` on lab or hogan.
 
 ## 3. OpenSpec / apply order
@@ -46,6 +59,7 @@ the config key.
 - **2.1** lab guest100 @ tree of `8715182` (pre-rebase; post-rebase equivalent
   head `c45cf7e`, range-diff byte-identical): `openssl` → lifetime_hours 2160.0.
 - **2.2** lab: 3h lifetime, blob checksums identical across renew, serial/fp/PEM changed, `agent-data.json` cleared, fresh skip.
+- **2.3** see checkbox evidence above (hogan RESULT in #71 thread).
 - **2.4** SPIRE 1.14.0 `/opt/spire/bin/spire-server agent evict|purge -help` — flags match D-e.
 - **3.1** see checkbox evidence above.
 - **3.2** `openspec validate --all --strict` — 8 passed, 0 failed (after rebase onto `main@5653949`).
