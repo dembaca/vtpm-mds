@@ -1,10 +1,9 @@
 package devid
 
 import (
+	"bytes"
 	"crypto"
-	"crypto/ecdsa"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -108,19 +107,20 @@ func ParseCA(certPEM, keyPEM []byte) (*CA, error) {
 }
 
 func publicKeysEqual(pub any, priv crypto.PrivateKey) error {
-	switch k := priv.(type) {
-	case *rsa.PrivateKey:
-		want, ok := pub.(*rsa.PublicKey)
-		if !ok || k.N.Cmp(want.N) != 0 || k.E != want.E {
-			return errors.New("DevID CA key does not match certificate")
-		}
-	case *ecdsa.PrivateKey:
-		want, ok := pub.(*ecdsa.PublicKey)
-		if !ok || k.X.Cmp(want.X) != 0 || k.Y.Cmp(want.Y) != 0 || k.Curve != want.Curve {
-			return errors.New("DevID CA key does not match certificate")
-		}
-	default:
-		return fmt.Errorf("unsupported DevID CA key type %T", priv)
+	signer, ok := priv.(crypto.Signer)
+	if !ok {
+		return fmt.Errorf("DevID CA key type %T is not a signer", priv)
+	}
+	want, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return fmt.Errorf("marshal cert public key: %w", err)
+	}
+	got, err := x509.MarshalPKIXPublicKey(signer.Public())
+	if err != nil {
+		return fmt.Errorf("marshal CA private key's public key: %w", err)
+	}
+	if !bytes.Equal(want, got) {
+		return errors.New("DevID CA key does not match certificate")
 	}
 	return nil
 }

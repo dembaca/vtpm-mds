@@ -66,11 +66,13 @@ credential name stays `devid_ca.key`), `scripts/gen-devid-intermediate.sh`,
 
 - [x] 4.1 `Finish` returns leaf then intermediate PEM (no root); unit test
       decodes two certs, verifies leaf CN and chain to offline root with/without
-      intermediate block
-      **Verify:** `go test ./internal/devid/ -run 'TestFinishLeafThenIntermediate|TestIssueDevIDAndSession'`
-- [x] 4.2 `/health` `devid_ca_readable` true with intermediate cert+key and no
-      root private key on the node (one dedicated test)
-      **Verify:** `go test ./internal/server/ -run TestHealth.*Intermediate`
+      intermediate block. `ParseCA` first-cert + IsCA + key match:
+      `TestParseCARejectsKeyMismatch`, `TestParseCARejectsNonCA`,
+      `TestParseCAUsesFirstCertInBundle`.
+      **Verify:** `go test ./internal/devid/ -run 'TestFinishLeafThenIntermediate|TestParseCA|TestIssueDevIDAndSession'`
+- [x] 4.2 `/health` `devid_ca_readable` true with a real intermediate cert+key and no
+      root private key on the node (`TestHealthAttestationOnIntermediateWithoutRootKey`)
+      **Verify:** `go test ./internal/server/ -run TestHealthAttestationOnIntermediate`
 - [x] 4.3 Packaged comments: `debian/config.yaml`, unit `LoadCredential=` note,
       `README.Debian` describe cluster intermediate + SPIRE needs root cert;
       credential **name** stays `devid_ca.key`
@@ -123,3 +125,11 @@ credential name stays `devid_ca.key`), `scripts/gen-devid-intermediate.sh`,
 - **5.2** Hogan scratch renew deferred (coordinator).
 
 - **Fable should-fix (2026-10-20):** e2e tee revert + `rm -f` log; ParseCA first-cert/CA/key-match; gen-lab-pki SPIRE `sudo`+`-d`; stale record text; nits.
+
+- **e2e `sudo rm -f` of the MDS log** (kept with literal paths): blocking
+  verification — a leftover root-owned `/tmp/<pkg>.log` otherwise aborts e2e
+  before the guest boots (AGENTS.md scope: tooling that blocks verification).
+- **Fable re-check:** restored literal lab paths (e2e: `MDS_NAME` once + pragma,
+  then variables — secret scanner treats the package name as `MM_PROJECT_CHANNEL`);
+  `publicKeysEqual` via `crypto.Signer`+PKIX; design Q1/Q4 corrected for hogan
+  pathLen-0 site intermediate.

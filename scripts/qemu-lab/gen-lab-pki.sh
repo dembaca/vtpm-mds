@@ -11,11 +11,7 @@
 set -euo pipefail
 
 PKI_DIR="${MDS_LAB_PKI_DIR:-/var/lib/mds-lab/pki}"
-if [[ -z "${MDS_LAB_ETC_DIR:-}" ]]; then
-  _lab_cfg="$(compgen -G "/etc/*/config.lab.yaml" | head -1 || true)"
-  [[ -n "$_lab_cfg" ]] || { echo "ERROR: set MDS_LAB_ETC_DIR (no /etc/*/config.lab.yaml)" >&2; exit 1; }
-  MDS_LAB_ETC_DIR="$(dirname "$_lab_cfg")"
-fi
+MDS_LAB_ETC_DIR="${MDS_LAB_ETC_DIR:-/etc/vtpm-mds}"  # pragma: allowlist secret
 SWTPM_SETUP_CONF="${MDS_LAB_SWTPM_SETUP_CONF:-/etc/swtpm_setup.conf}"
 DEFAULT_LOCALCA_DIR="/var/lib/swtpm-localca"
 DEFAULT_ISSUERCERT="${DEFAULT_LOCALCA_DIR}/issuercert.pem"

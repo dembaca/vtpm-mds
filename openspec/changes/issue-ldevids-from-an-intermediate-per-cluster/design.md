@@ -93,6 +93,15 @@ cluster and distributes cert+key to that cluster’s nodes, and the root
 and a two-tier mode for `scripts/qemu-lab/gen-lab-pki.sh`. No private keys in
 the repo.
 
+**Hogan deployment fact (Fable/hogan, read-only, 2026-10-20):** today’s
+`/etc/ssl/certs/proxmox_devid_ca.crt` is **already** a `pathLen=0` intermediate
+of the site root (`CA:TRUE`, keyUsage includes certSign). It passes the new
+`IsCA` load check and can sign LDevID leaves, but **cannot** mint a further
+per-cluster intermediate — those must be issued by the site root. So “the node
+holds the root today” is not literally true on hogan; the cut-over is from
+this shared pathLen-0 site intermediate to a **per-cluster** intermediate
+still chained to that offline root.
+
 ### Q2 — Chain delivery / SPIRE needs → **confirmed (recommendation)**
 
 Not asked separately; follows Q0(B) + SPIRE 1.14 facts:
@@ -124,16 +133,18 @@ guest renew trigger.
 
 Not asked separately; follows Q0(B)/Q2:
 
-- SPIRE keeps the root; old root-issued leaves and new intermediate-issued
-  leaves coexist during transition.
-- Hosts switch the signing credential to the intermediate; guests renew into
-  the new chain on the #71 schedule.
-- `devid_ca_readable` remains “signing CA cert+key readable” (the
-  intermediate). No root-readable bit for beta.
+- SPIRE keeps the offline **root**; leaves issued by today’s shared site
+  intermediate and by a new per-cluster intermediate coexist during transition
+  (both chain to that root).
+- Hosts switch the signing credential to the **per-cluster** intermediate;
+  guests renew into the new chain on the #71 schedule. On hogan the current
+  material is already a pathLen-0 intermediate (see Q1), so the switch is
+  intermediate→intermediate, not root→intermediate.
+- `devid_ca_readable` remains “signing CA cert+key readable” (whatever the
+  node signs with). No root-readable bit for beta.
 - Finish always appends the **signing** CA PEM after the leaf. The ADDED
-  requirement’s “SHALL NOT include the root” applies **after cut-over**
-  (signing CA = intermediate). A node still on the root therefore returns
-  leaf+root until it switches credentials.
+  requirement’s “SHALL NOT include the root” means the offline root PEM is
+  never added; the second block is always the configured signing CA.
 
 ### Q5 — Effect on #71 renew and serial → **confirmed (recommendation)**
 

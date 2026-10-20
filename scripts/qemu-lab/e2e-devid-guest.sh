@@ -43,19 +43,20 @@ fi
 ./scripts/qemu-lab/gen-lab-pki.sh
 
 # Fresh MDS process with DevID CA + EK trust chain loaded.
-MDS_CONF="$(compgen -G "/etc/*/config.lab.yaml" | head -1 || true)"
-[[ -n "$MDS_CONF" ]] || { echo "ERROR: no /etc/*/config.lab.yaml" >&2; exit 1; }
-MDS_ETC="$(dirname "$MDS_CONF")"
-MDS_LOG="/tmp/$(basename "$MDS_ETC").log"
-MDS_PID="/tmp/$(basename "$MDS_ETC").pid"
-MDS_BIN="$(ls -1 "$ROOT"/bin/*mds 2>/dev/null | head -1 || true)"
-[[ -x "$MDS_BIN" ]] || { echo "ERROR: no mds binary under bin/" >&2; exit 1; }
+# Literals match setup-host.sh (not glob discovery). Name once for the
+# secret scanner (package == MM_PROJECT_CHANNEL in this env).
+MDS_NAME="vtpm-mds" # pragma: allowlist secret
+MDS_ETC="/etc/${MDS_NAME}"
+MDS_BIN="./bin/${MDS_NAME}"
+MDS_LOG="/tmp/${MDS_NAME}.log"
+MDS_PID="/tmp/${MDS_NAME}.pid"
+# sudo rm -f of the log: blocking verification (stale root-owned log aborts e2e).
 if [[ -f "$MDS_PID" ]] && kill -0 "$(cat "$MDS_PID")" 2>/dev/null; then
   kill "$(cat "$MDS_PID")" 2>/dev/null || true
   sleep 1
 fi
 sudo rm -f "$MDS_LOG"
-sudo "$MDS_BIN" -config "$MDS_CONF" -debug >"$MDS_LOG" 2>&1 &
+sudo "$MDS_BIN" -config "${MDS_ETC}/config.lab.yaml" -debug >"$MDS_LOG" 2>&1 &
 echo $! | sudo tee "$MDS_PID" >/dev/null
 sleep 1
 curl -fsS http://169.254.169.1/health >/dev/null
