@@ -43,17 +43,25 @@ fi
 ./scripts/qemu-lab/gen-lab-pki.sh
 
 # Fresh MDS process with DevID CA + EK trust chain loaded.
-if [[ -f /tmp/vtpm-mds.pid ]] && kill -0 "$(cat /tmp/vtpm-mds.pid)" 2>/dev/null; then
-  kill "$(cat /tmp/vtpm-mds.pid)" 2>/dev/null || true
+MDS_CONF="$(compgen -G "/etc/*/config.lab.yaml" | head -1 || true)"
+[[ -n "$MDS_CONF" ]] || { echo "ERROR: no /etc/*/config.lab.yaml" >&2; exit 1; }
+MDS_ETC="$(dirname "$MDS_CONF")"
+MDS_LOG="/tmp/$(basename "$MDS_ETC").log"
+MDS_PID="/tmp/$(basename "$MDS_ETC").pid"
+MDS_BIN="$(ls -1 "$ROOT"/bin/*mds 2>/dev/null | head -1 || true)"
+[[ -x "$MDS_BIN" ]] || { echo "ERROR: no mds binary under bin/" >&2; exit 1; }
+if [[ -f "$MDS_PID" ]] && kill -0 "$(cat "$MDS_PID")" 2>/dev/null; then
+  kill "$(cat "$MDS_PID")" 2>/dev/null || true
   sleep 1
 fi
-sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.lab.yaml -debug 2>&1 | sudo tee /tmp/vtpm-mds.log >/dev/null &  # pragma: allowlist secret
-echo $! | sudo tee /tmp/vtpm-mds.pid >/dev/null
+sudo rm -f "$MDS_LOG"
+sudo "$MDS_BIN" -config "$MDS_CONF" -debug >"$MDS_LOG" 2>&1 &
+echo $! | sudo tee "$MDS_PID" >/dev/null
 sleep 1
 curl -fsS http://169.254.169.1/health >/dev/null
-if grep -q 'DevID enrollment disabled' /tmp/vtpm-mds.log; then
+if grep -q 'DevID enrollment disabled' "$MDS_LOG"; then
   echo "ERROR: MDS started without DevID (ek-chain missing?)" >&2
-  tail -20 /tmp/vtpm-mds.log >&2 || true
+  tail -20 "$MDS_LOG" >&2 || true
   exit 1
 fi
 

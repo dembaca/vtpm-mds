@@ -11,7 +11,11 @@
 set -euo pipefail
 
 PKI_DIR="${MDS_LAB_PKI_DIR:-/var/lib/mds-lab/pki}"
-MDS_LAB_ETC_DIR="${MDS_LAB_ETC_DIR:-/etc/vtpm-mds}"  # pragma: allowlist secret
+if [[ -z "${MDS_LAB_ETC_DIR:-}" ]]; then
+  _lab_cfg="$(compgen -G "/etc/*/config.lab.yaml" | head -1 || true)"
+  [[ -n "$_lab_cfg" ]] || { echo "ERROR: set MDS_LAB_ETC_DIR (no /etc/*/config.lab.yaml)" >&2; exit 1; }
+  MDS_LAB_ETC_DIR="$(dirname "$_lab_cfg")"
+fi
 SWTPM_SETUP_CONF="${MDS_LAB_SWTPM_SETUP_CONF:-/etc/swtpm_setup.conf}"
 DEFAULT_LOCALCA_DIR="/var/lib/swtpm-localca"
 DEFAULT_ISSUERCERT="${DEFAULT_LOCALCA_DIR}/issuercert.pem"
@@ -120,7 +124,9 @@ sudo chmod 600 "$MDS_LAB_ETC_DIR"/devid-ca-key.pem
 
 if [[ "$TIER" == "two" ]]; then
   # SPIRE trust anchor = offline root (certificate only).
-  cp -f "$PKI_DIR/devid-root.pem" /var/lib/mds-lab/spire/conf/server/devid-ca.pem
+  if [[ -d /var/lib/mds-lab/spire/conf/server ]]; then
+    sudo cp -f "$PKI_DIR/devid-root.pem" /var/lib/mds-lab/spire/conf/server/devid-ca.pem
+  fi
   echo "Lab PKI (two-tier) ready under $PKI_DIR and $MDS_LAB_ETC_DIR"
   echo "  host signing:  $MDS_LAB_ETC_DIR/devid-ca.pem (intermediate)"
   echo "  SPIRE root:    /var/lib/mds-lab/spire/conf/server/devid-ca.pem"
@@ -132,7 +138,7 @@ else
     if [[ -f "$PKI_DIR/devid-root.pem" ]]; then
       echo "NOTE: $PKI_DIR/devid-root.pem present; leaving SPIRE devid-ca.pem as root (use MDS_LAB_DEVID_TIER=two to refresh)." >&2
     else
-      cp -f "$PKI_DIR/devid-ca.pem" /var/lib/mds-lab/spire/conf/server/devid-ca.pem
+      sudo cp -f "$PKI_DIR/devid-ca.pem" /var/lib/mds-lab/spire/conf/server/devid-ca.pem
     fi
   fi
   echo "Lab PKI ready under $PKI_DIR and $MDS_LAB_ETC_DIR (EK issuer: $issuercert)"

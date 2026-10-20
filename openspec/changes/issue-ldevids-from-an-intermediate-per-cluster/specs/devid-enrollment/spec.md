@@ -7,11 +7,12 @@ intermediate** certificate and its private key, not the offline DevID root.
 On a successful finish the service SHALL sign the LDevID with that
 intermediate.
 
-The PEM returned in `devid_cert_pem` SHALL contain the leaf certificate
-followed by the intermediate certificate (PEM concatenation, leaf first), and
-SHALL NOT include the root. A relying party that already trusts the root
-(SPIRE `tpm_devid` `devid_ca_path`) SHALL be able to verify the leaf using the
-intermediate from that PEM.
+The PEM returned in `devid_cert_pem` SHALL contain one or more PEM
+`CERTIFICATE` blocks: after cut-over, the leaf followed by the intermediate
+(leaf first) and SHALL NOT include the root. Before cut-over (signing CA still
+the root) the second block MAY be that root. A relying party that already
+trusts the offline root (SPIRE `tpm_devid` `devid_ca_path`) SHALL be able to
+verify a post-cut-over leaf using the intermediate from that PEM.
 
 The offline root private key SHALL NOT be present on the hypervisor. How the
 intermediate is minted and how the root certificate reaches SPIRE are
@@ -56,7 +57,12 @@ read or stat the configured `devid_ca_key` at all, SHALL accept an empty
 empty credential file SHALL count as absent. Without a usable credential,
 loading SHALL require both `devid_ca_cert` and `devid_ca_key` to be non-empty
 and both paths to exist. In every case the PEM material SHALL parse into a
-certificate plus a PKCS#8 or PKCS#1 private key.
+certificate plus a PKCS#8 or PKCS#1 private key. Loading SHALL use the **first**
+`CERTIFICATE` block as the signing CA (a trailing root in the same file MUST
+NOT become the issuer), SHALL require that certificate to be a CA
+(`basicConstraints` CA:TRUE), and SHALL require the private key to match that
+certificate's public key. A mismatch or non-CA certificate SHALL fail loading
+the same way as an unusable path (`Warning: DevID enrollment disabled:`).
 
 When either path is empty the service SHALL log
 `Warning: devid_ca_cert/devid_ca_key not set; skipping DevID routes` and
@@ -109,6 +115,20 @@ authentication time.
 - **THEN** it logs `Warning: DevID enrollment disabled:` with the failing path
   and the enroll paths return `404`
 
+#### Scenario: Key and certificate must match at load
+
+- **GIVEN** readable `devid_ca_cert` and `devid_ca_key` whose key does not
+  match the certificate, or whose certificate is not a CA
+- **WHEN** the daemon starts
+- **THEN** it logs `Warning: DevID enrollment disabled:` and the enroll paths
+  return `404` (no routes registered)
+
+#### Scenario: First certificate in a PEM bundle is the signing CA
+
+- **GIVEN** `devid_ca_cert` holds the intermediate PEM followed by the root PEM
+- **WHEN** the CA is loaded
+- **THEN** the service signs with the intermediate (first block), not the root
+
 #### Scenario: TPM attestation disabled
 
 - **GIVEN** `enable_tpm_attestation: false` and valid DevID CA material
@@ -128,3 +148,61 @@ authentication time.
   key is absent
 - **WHEN** systemd starts the unit
 - **THEN** the start fails (credential failure), as with today’s root key
+
+### Requirement: Serve Enrollment As Two POST JSON Legs
+
+Both legs SHALL accept `POST` with a JSON body, read at most 1 MiB of that
+body, and answer with `Content-Type: application/json` on success.
+
+`enroll/start` SHALL read `request_b64` and `signature_b64`, each standard
+base64, and on success return `200` with `session_id`,
+`credential_blob_b64` and `secret_b64`.
+
+`enroll/finish` SHALL read `session_id` and `challenge_response_b64` and on
+success return `200` with `devid_cert_pem` holding one or more PEM
+`CERTIFICATE` blocks (leaf then intermediate after cut-over; see
+"Issue LDevIDs From A Per-Cluster Intermediate").
+
+Malformed input SHALL be rejected with `400` and a plain-text reason:
+`invalid JSON` when the body does not decode, `invalid request_b64` or
+`invalid signature_b64` when a start field is not base64,
+`invalid signing request` when `request_b64` does not decode into a signing
+request, and `invalid challenge_response_b64` when the finish field is not
+base64. Unknown JSON members SHALL be ignored.
+
+Neither leg SHALL require an IMDSv2 token: the handlers never consult the
+token store, and the guest client sends no `X-Aws-Ec2-Metadata-Token` header.
+
+#### Scenario: Start returns a challenge
+
+- **GIVEN** an authenticated caller and a signing request that passes
+  verification
+- **WHEN** it posts `request_b64` and `signature_b64` to
+  `/latest/devid/enroll/start`
+- **THEN** the response is `200` with `session_id`, `credential_blob_b64` and
+  `secret_b64`
+
+#### Scenario: Finish returns the certificate
+
+- **GIVEN** a session created by `enroll/start` and the matching challenge
+  response
+- **WHEN** the caller posts `session_id` and `challenge_response_b64` to
+  `/latest/devid/enroll/finish`
+- **THEN** the response is `200` and `devid_cert_pem` contains one or more PEM
+  `CERTIFICATE` blocks
+
+#### Scenario: Body is not JSON
+
+- **WHEN** a caller posts `{` to either enroll path
+- **THEN** the response is `400` with body `invalid JSON`
+
+#### Scenario: Field is not base64
+
+- **WHEN** a caller posts `{"request_b64":"!!!"}` to the start path
+- **THEN** the response is `400` with body `invalid request_b64`
+
+#### Scenario: Enrollment without an IMDSv2 token
+
+- **GIVEN** an authenticated caller that never called `PUT /latest/api/token`
+- **WHEN** it runs both enroll legs
+- **THEN** enrollment succeeds and a certificate is issued

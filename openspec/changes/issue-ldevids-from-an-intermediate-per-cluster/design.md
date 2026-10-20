@@ -5,8 +5,9 @@
 - Host package loads a single DevID CA cert (`devid_ca_cert`) and key
   (`devid_ca_key` or systemd credential `devid_ca.key`). That material is
   today’s **root**.
-- Finish returns one PEM in `devid_cert_pem` (leaf only). Guests write it to
-  the path SPIRE agent `devid_cert_path` names.
+- Finish returns leaf then intermediate PEM in `devid_cert_pem` (after
+  cut-over; pre-cut-over the second block is still the signing root). Guests
+  write it to the path SPIRE agent `devid_cert_path` names.
 - Lab SPIRE server (`/var/lib/mds-lab/spire/conf/server/server.conf`):
 
   ```hcl
@@ -39,14 +40,15 @@ Checked against tag `v1.14.0`
 | Root vs intermediate | With an intermediate, tests expect **both** `ca:fingerprint:<intermediate>` and `ca:fingerprint:<root>`. With no intermediate, only the root fingerprint appears |
 | Multi-selector entries | `spire-server entry create -selector` “can be used more than once, to specify multiple selectors that **must** be satisfied” (AND). A node alias with `subject:cn` **and** `ca:fingerprint:<cluster intermediate>` matches only when both are present |
 
-Lab (single-tier today): agent
-`spiffe://lab.local/spire/agent/tpm_devid/6c525395…` shows
+Lab (historical single-tier): agent
+`spiffe://lab.local/spire/agent/tpm_devid/6c525395…` showed
 `tpm_devid:subject:cn:100`, `tpm_devid:issuer:cn:… Lab DevID CA`, and
-`tpm_devid:ca:fingerprint:ff923f7e3604e117041492c13554936a510d90ac`, which
-equals `sha1(DER)` of `/var/lib/mds-lab/spire/conf/server/devid-ca.pem`.
-Two-tier lab mint was not run in this pass; intermediate+root dual
-`ca:fingerprint` selectors are covered by SPIRE’s own unit tests on
-`v1.14.0`.
+`tpm_devid:ca:fingerprint:ff923f7e…` = sha1(DER) of the then single-tier CA.
+
+Lab (two-tier, Code-Go): `MDS_LAB_DEVID_TIER=two`; agent
+`…/tpm_devid/b90bb8f2…` selectors include `subject:cn:100`,
+`ca:fingerprint:<intermediate>`, and `ca:fingerprint:<root>`; node alias
+CN+intermediate matches, CN+second-intermediate does not.
 
 With a real intermediate, the **agent file must contain leaf +
 intermediate**; the **server file must contain the offline root** (not the
@@ -128,6 +130,10 @@ Not asked separately; follows Q0(B)/Q2:
   the new chain on the #71 schedule.
 - `devid_ca_readable` remains “signing CA cert+key readable” (the
   intermediate). No root-readable bit for beta.
+- Finish always appends the **signing** CA PEM after the leaf. The ADDED
+  requirement’s “SHALL NOT include the root” applies **after cut-over**
+  (signing CA = intermediate). A node still on the root therefore returns
+  leaf+root until it switches credentials.
 
 ### Q5 — Effect on #71 renew and serial → **confirmed (recommendation)**
 
@@ -157,8 +163,5 @@ Not asked separately:
   defeats Q0(B) — server must keep the offline **root** only.
 - Forgetting the intermediate in the guest PEM breaks attest while root-only
   leaves still work — confusing during migration.
-- Lab `gen-lab-pki.sh` is still single-tier until the two-tier mode lands;
-  cloud proof of dual `ca:fingerprint` selectors is owed at code-go (SPIRE
-  unit tests already cover it).
 - **Intra-cluster:** any node with the cluster intermediate can forge any VM
   ID in that cluster. Not in scope.

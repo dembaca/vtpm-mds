@@ -73,9 +73,10 @@ openssl x509 -req -in "$INTER_CSR" \
   -CA "$ROOT_CERT" -CAkey "$ROOT_KEY" -CAcreateserial \
   -out "$INTER_CERT" -days "$DAYS" -sha256 -extfile "$EXT"
 
-rm -f "$INTER_CSR" "$EXT" "${ROOT_CERT%.pem}.srl" 2>/dev/null || true
-# openssl -CAcreateserial may write next to the CA cert
-rm -f "$(dirname "$ROOT_CERT")/$(basename "${ROOT_CERT%.pem}").srl" 2>/dev/null || true
+# CSR/ext cleanup; -CAcreateserial may write <cert>.srl next to the CA cert.
+rm -f "$INTER_CSR" "$EXT" \
+  "${ROOT_CERT%.pem}.srl" \
+  "$(dirname "$ROOT_CERT")/$(basename "${ROOT_CERT%.pem}").srl" 2>/dev/null || true
 
 echo "Wrote $INTER_CERT and $INTER_KEY (${DAYS}d, pathLen=0, keyCertSign)"
 openssl x509 -in "$INTER_CERT" -noout -subject -issuer -dates

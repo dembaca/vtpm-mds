@@ -18,8 +18,8 @@ intermediate **1y** with overlap from ~9 months, `pathLen=0`,
 prior recommendations (leaf+intermediate PEM, root in `devid_ca_path`,
 `devid_ca_readable` = signing CA). See `design.md`.
 
-This change remains a **record only** until coordinator code-go. No product
-code in this PR.
+Code-Go applied (base #71). Product code, lab two-tier mode, and packaging
+comments are in this PR; Fable should-fix addressed before ready.
 
 ## What Changes
 
@@ -34,8 +34,8 @@ code in this PR.
 - **Intermediate profile (Q3):** 1y lifetime, pathLen 0, keyCertSign only.
 - **Migration:** coexistence with root-issued LDevIDs; #71 renew / serial.
 
-Exact credential filenames may still be settled at code-go (recommend keep
-`devid_ca.key` name pointing at the intermediate key).
+Credential name stays `devid_ca.key` (content = intermediate key); settled at
+code-go.
 
 ## Apply order
 

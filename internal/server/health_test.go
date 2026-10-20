@@ -2,8 +2,14 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -281,34 +287,31 @@ func TestHealthAttestationOnMissingCAAndCache(t *testing.T) {
 }
 
 // TestHealthAttestationOnIntermediateWithoutRootKey: devid_ca_readable tracks
-// the signing intermediate; the offline root private key need not be on the node.
+// a real cluster intermediate; the offline root private key need not be on the node.
 func TestHealthAttestationOnIntermediateWithoutRootKey(t *testing.T) {
 	dir := t.TempDir()
 	inv := filepath.Join(dir, "inv.yaml")
-	cert := filepath.Join(dir, "intermediate.pem")
-	key := filepath.Join(dir, "intermediate.key")
+	certPath := filepath.Join(dir, "intermediate.pem")
+	keyPath := filepath.Join(dir, "intermediate.key")
 	if err := os.WriteFile(inv, []byte("vms:\n  - id: \"100\"\n    name: g\n    macs: [\"52:54:00:00:00:01\"]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(cert, []byte("intermediate-cert"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(key, []byte("intermediate-key"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeTwoTierIntermediatePEM(t, certPath, keyPath)
 	cfg := config.DefaultConfig()
 	cfg.MDS.EnableTPMAttestation = true
 	cfg.MDS.InventoryPath = inv
-	cfg.MDS.DevIDCACert = cert
-	cfg.MDS.DevIDCAKey = key
+	cfg.MDS.DevIDCACert = certPath
+	cfg.MDS.DevIDCAKey = keyPath
 	cfg.MDS.ListenAddr = "127.0.0.1:0"
 	srv, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Enrollment loaded shape: non-nil enroller + readable intermediate paths.
-	// No root key file exists under dir.
-	srv.devid = &devid.Enroller{}
+	ca, err := devid.LoadCA(certPath, keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.devid = devid.NewEnroller(ca, x509.NewCertPool(), devid.NewSessionStore(time.Minute))
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
@@ -323,6 +326,63 @@ func TestHealthAttestationOnIntermediateWithoutRootKey(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "root.key")); !os.IsNotExist(err) {
 		t.Fatalf("root key must be absent: %v", err)
+	}
+}
+
+// writeTwoTierIntermediatePEM mints an offline root and a pathLen=0 intermediate,
+// then writes only the intermediate cert+key (root key never lands on disk).
+func writeTwoTierIntermediatePEM(t *testing.T, certPath, keyPath string) {
+	t.Helper()
+	rootKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootTmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "health-test-root"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		MaxPathLen:            1,
+	}
+	rootDER, err := x509.CreateCertificate(rand.Reader, rootTmpl, rootTmpl, &rootKey.PublicKey, rootKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := x509.ParseCertificate(rootDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interTmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(2),
+		Subject:               pkix.Name{CommonName: "health-test-intermediate"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		MaxPathLen:            0,
+		MaxPathLenZero:        true,
+	}
+	interDER, err := x509.CreateCertificate(rand.Reader, interTmpl, root, &interKey.PublicKey, rootKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: interDER}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(interKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

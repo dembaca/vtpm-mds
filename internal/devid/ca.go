@@ -2,7 +2,9 @@ package devid
 
 import (
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -43,6 +45,9 @@ func LoadCA(certPath, keyPath string) (*CA, error) {
 }
 
 // ParseCA parses PEM-encoded CA certificate and private key material.
+// The first CERTIFICATE block is the signing CA (extra blocks, e.g. a root
+// after an intermediate, are ignored). The certificate MUST be a CA, and the
+// private key MUST match its public key.
 func ParseCA(certPEM, keyPEM []byte) (*CA, error) {
 	var cert *x509.Certificate
 	var key crypto.PrivateKey
@@ -62,9 +67,13 @@ func ParseCA(certPEM, keyPEM []byte) (*CA, error) {
 			return nil, err
 		}
 		cert = c
+		break // first certificate only — a trailing root must not become the issuer
 	}
 	if cert == nil {
 		return nil, errors.New("no certificate in CA PEM")
+	}
+	if !cert.IsCA {
+		return nil, errors.New("DevID CA certificate is not a CA")
 	}
 
 	rest = keyPEM
@@ -92,7 +101,28 @@ func ParseCA(certPEM, keyPEM []byte) (*CA, error) {
 	if key == nil {
 		return nil, errors.New("no private key in CA PEM")
 	}
+	if err := publicKeysEqual(cert.PublicKey, key); err != nil {
+		return nil, err
+	}
 	return &CA{cert: cert, key: key}, nil
+}
+
+func publicKeysEqual(pub any, priv crypto.PrivateKey) error {
+	switch k := priv.(type) {
+	case *rsa.PrivateKey:
+		want, ok := pub.(*rsa.PublicKey)
+		if !ok || k.N.Cmp(want.N) != 0 || k.E != want.E {
+			return errors.New("DevID CA key does not match certificate")
+		}
+	case *ecdsa.PrivateKey:
+		want, ok := pub.(*ecdsa.PublicKey)
+		if !ok || k.X.Cmp(want.X) != 0 || k.Y.Cmp(want.Y) != 0 || k.Curve != want.Curve {
+			return errors.New("DevID CA key does not match certificate")
+		}
+	default:
+		return fmt.Errorf("unsupported DevID CA key type %T", priv)
+	}
+	return nil
 }
 
 // Certificate returns the CA certificate.

@@ -121,3 +121,5 @@ credential name stays `devid_ca.key`), `scripts/gen-devid-intermediate.sh`,
 - **6.1** `openspec validate --all --strict` 9/9; `go vet ./...` + `go test ./...` green.
 - **6.2** Fable pre-review still open before ready-for-review.
 - **5.2** Hogan scratch renew deferred (coordinator).
+
+- **Fable should-fix (2026-10-20):** e2e tee revert + `rm -f` log; ParseCA first-cert/CA/key-match; gen-lab-pki SPIRE `sudo`+`-d`; stale record text; nits.

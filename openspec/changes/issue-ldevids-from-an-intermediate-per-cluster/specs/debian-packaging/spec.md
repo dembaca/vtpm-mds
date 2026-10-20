@@ -12,10 +12,8 @@ root private key MUST NOT be installed on hypervisors.
 This is documentation and example paths only; it SHALL NOT change postinst
 reload/restart behaviour, package split, or which binary owns which path.
 
-Exact filenames and whether the intermediate key stays a systemd credential
-named `devid_ca.key` are settled with dembaca (design Q1–Q2); until then the
-recommendation is to keep the existing credential **name** and point its
-source at the intermediate key file.
+The systemd credential **name** stays `devid_ca.key`; its source file is the
+per-cluster intermediate private key (design Q2, code-go).
 
 #### Scenario: Packaged comments name intermediate not root key
 
