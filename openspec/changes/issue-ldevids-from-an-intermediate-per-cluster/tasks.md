@@ -41,10 +41,12 @@ coordinator says code-go. Prefer applying after #70 and #71 are archived
       ready for dembaca (coordinator asks singly)
       **Verify:** RESULT on ASSIGN root `pw96c7k1tpb8mpxjc56gboiqoc`
 
-## 3. After dembaca answers (not this ASSIGN)
+## 3. After dembaca answers
 
-- [ ] 3.1 Fold dembaca's answers into `design.md` (replace recommendations
+- [x] 3.1 Fold dembaca's answers into `design.md` (replace recommendations
       with decisions where they differ); retick only the deltas that change
-      **Verify:** no open "Recommendation pending" left for answered questions
+      **Verify (2026-10-20):** Q0=B, Q1=A, Q3=1y/`pathLen=0`/`keyCertSign`/
+      no EKU/NC recorded as Decisions; Q2/Q4/Q5 marked confirmed
+      recommendations; Risks for B/D8 only; `openspec validate --all --strict`
 - [ ] 3.2 Code-go on a later ASSIGN — implement task-by-task then; out of
-      scope for this record
+      scope for this record until coordinator ACK

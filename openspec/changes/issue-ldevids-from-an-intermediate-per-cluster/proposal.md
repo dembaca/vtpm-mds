@@ -10,30 +10,32 @@ mint an LDevID for any VM ID in any cluster that trusts that root. Maintainer
 beta scope (dembaca, 2026-10-19): move to an **intermediate CA per cluster** so
 nodes hold only their cluster intermediate; the root stays offline.
 
-Whether that also **stops cross-cluster forgery** depends on SPIRE selectors
-(design Q0): CN-only aliases still accept any intermediate under the root;
-adding `tpm_devid:ca:fingerprint:<cluster intermediate>` scopes trust per
-cluster. That choice gates Q2/Q4/Q5.
+**Decided (dembaca 2026-10-20):** Q0 **(B)** — SPIRE aliases also select
+`tpm_devid:ca:fingerprint:<cluster intermediate>` (AND with CN); Q1 **option
+A** — offline root on a CA host, Ansible distributes intermediates; Q3 —
+intermediate **1y** with overlap from ~9 months, `pathLen=0`,
+`keyCertSign` only, no EKU / Name Constraints. Q2/Q4/Q5 confirmed as the
+prior recommendations (leaf+intermediate PEM, root in `devid_ca_path`,
+`devid_ca_readable` = signing CA). See `design.md`.
 
-This change is a **record only** until dembaca answers the open questions
-below. No code until coordinator code-go.
+This change remains a **record only** until coordinator code-go. No product
+code in this PR.
 
 ## What Changes
 
-- **Threat model (Q0):** key-hygiene only vs cluster-scoped
-  `ca:fingerprint` selectors on node aliases / registrations.
+- **Threat model (Q0 B):** D8 / registrations use CN **and** cluster
+  intermediate `ca:fingerprint`.
 - **Issuing CA:** `IssueDevID` signs with a cluster intermediate, not the root.
-- **Trust chain to SPIRE:** guests present a chain SPIRE 1.14 `tpm_devid` can
-  verify; the server plugin's `devid_ca_path` holds the **root** (trust
-  anchors), while intermediates travel with the leaf (see design SPIRE facts).
-- **Config / packaging:** how the intermediate cert+key and the root bundle
-  are named, delivered (systemd credential vs files), and reflected in
-  `/health` `devid_ca_readable`.
-- **Migration:** coexistence of root-issued and intermediate-issued LDevIDs;
-  interaction with finite lifetime (#71) and CN-only subject (#70).
+- **Trust chain to SPIRE:** guests present leaf+intermediate; server
+  `devid_ca_path` holds the offline **root**.
+- **Config / packaging / minting (Q1):** Ansible + in-repo
+  `gen-devid-intermediate.sh` / two-tier lab; credential layout for
+  intermediate; `/health` `devid_ca_readable` = signing material.
+- **Intermediate profile (Q3):** 1y lifetime, pathLen 0, keyCertSign only.
+- **Migration:** coexistence with root-issued LDevIDs; #71 renew / serial.
 
-Concrete wire/config names, lifetimes, and the Q0 variant are
-**recommendations pending dembaca**, not settled defaults.
+Exact credential filenames may still be settled at code-go (recommend keep
+`devid_ca.key` name pointing at the intermediate key).
 
 ## Apply order
 
