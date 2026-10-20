@@ -47,7 +47,7 @@ if [[ -f /tmp/vtpm-mds.pid ]] && kill -0 "$(cat /tmp/vtpm-mds.pid)" 2>/dev/null;
   kill "$(cat /tmp/vtpm-mds.pid)" 2>/dev/null || true
   sleep 1
 fi
-sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.lab.yaml -debug >/tmp/vtpm-mds.log 2>&1 &
+sudo ./bin/vtpm-mds -config /etc/vtpm-mds/config.lab.yaml -debug 2>&1 | sudo tee /tmp/vtpm-mds.log >/dev/null &  # pragma: allowlist secret
 echo $! | sudo tee /tmp/vtpm-mds.pid >/dev/null
 sleep 1
 curl -fsS http://169.254.169.1/health >/dev/null
