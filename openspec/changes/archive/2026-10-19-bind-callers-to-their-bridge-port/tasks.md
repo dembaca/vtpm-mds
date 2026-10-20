@@ -12,7 +12,7 @@ new `internal/bridgebind/`, a NIC reader in `internal/proxmox/` (not
 
 ## 1. Decide
 
-- [ ] 1.1 **Maintainer, optional** — accept or overrule D-a to D-i in `design.md` (D-b own binary, D-f bridge as a unit argument, and fail open are the ones most likely to move), and verify the outcome is recorded there
+- [x] 1.1 **Maintainer, optional** — accept or overrule D-a to D-i in `design.md` (D-b own binary, D-f bridge as a unit argument, and fail open are the ones most likely to move), and verify the outcome is recorded there
 - [x] 1.2 **Coordinator** — ACK the record and the delta on the bus before any code is written, and verify the ACK names this change
       **Done, 2026-10-19 16:11:** `agent-mac-vtpm-mds-42d61f`, "ACK … on the
       record `bind-callers-to-their-bridge-port` @ `be6437a`", draft PR #68,
@@ -177,9 +177,16 @@ new `internal/bridgebind/`, a NIC reader in `internal/proxmox/` (not
 
 ## 5. Hand over
 
-- [ ] 5.1 Give the coordinator the `README.md` line for the new unit
+- [x] 5.1 Give the coordinator the `README.md` line for the new unit
+      **Done, 2026-10-19 19:40** (hogan-d3e6, in the #68 thread); the coordinator
+      put it into the README feature table when archiving.
 - [ ] 5.2 **Maintainer** — remove the hand-written VM 399 block from `/etc/nftables.d/vtpm-mds.nft` in the Ansible role (keep the `inet vtpm_mds` idempotency lines), and make the role install the package on every node with vTPM guests; verify on `hogan` that the file no longer names `tap399i1` and the generated table is in place
 
 ## 6. Archive
 
-- [ ] 6.1 After merge, the coordinator archives with `openspec archive bind-callers-to-their-bridge-port` and verifies `openspec validate --all --strict` stays clean
+- [x] 6.1 After merge, the coordinator archives with `openspec archive bind-callers-to-their-bridge-port` and verifies `openspec validate --all --strict` stays clean
+      **Done, 2026-10-19:** archived by the coordinator after PR #68 merged
+      (`01fd5f1`); 1.1 ticked because the maintainer overruled none of D-a to
+      D-i and merged as recorded (fail open stays). **5.2 is still open** and
+      is the maintainer's: until the Ansible role drops the VM 399 block, two
+      writers own `bridge vtpm_mds_bind` (design, Risks).
