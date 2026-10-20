@@ -24,7 +24,11 @@ the config key.
 
 ## 3. OpenSpec / apply order
 
-- [ ] 3.1 After #70 merges and archives, rebase this branch onto that `main`; verify the REMOVED title is `Issue A Non-Expiring LDevID Whose Subject Is Only The VM ID`.
+- [x] 3.1 After #70 merges and archives, rebase this branch onto that `main`; verify the REMOVED title is `Issue A Non-Expiring LDevID Whose Subject Is Only The VM ID`.
+      **Verify (2026-10-20):** rebased onto `main@5653949` (PR #70 merge); head
+      `c45cf7e`. REMOVED title matches #70's living name. Archive order #70 → #71
+      confirmed on a scratch trial archive (Fable/hogan). #70 is merged; its
+      archive PR #74 was still open at tick time.
 - [x] 3.2 Before merge, verify `openspec validate --all --strict` is green.
 
 ## 4. Not verified in this record (do not tick as done)
@@ -39,7 +43,9 @@ the config key.
 - **1.3** `go test ./internal/devid/ -run 'TestRenewDue|TestClearSPIRE|TestLoadCert'` — PASS.
 - **1.4** `make deb-local` → `dpkg-deb -I/-c` shows binary, oneshot, timer, postinst (daemon-reload + `start devid-enroll.timer`). `lintian` only W: debian-changelog-line-too-long. `systemd-analyze verify` on extracted units: missing `/usr/bin/devid-enroll` on host only.
 - **1.5** `go test ./internal/config/ -run TestLoadShippedDebianConfig` — PASS.
-- **2.1** lab guest100 @ `8715182` tree: `openssl` → lifetime_hours 2160.0 (re-run after Fable fix commit for reconfirm if needed).
+- **2.1** lab guest100 @ tree of `8715182` (pre-rebase; post-rebase equivalent
+  head `c45cf7e`, range-diff byte-identical): `openssl` → lifetime_hours 2160.0.
 - **2.2** lab: 3h lifetime, blob checksums identical across renew, serial/fp/PEM changed, `agent-data.json` cleared, fresh skip.
 - **2.4** SPIRE 1.14.0 `/opt/spire/bin/spire-server agent evict|purge -help` — flags match D-e.
-- **3.2** `openspec validate --all --strict` — 7 passed, 0 failed.
+- **3.1** see checkbox evidence above.
+- **3.2** `openspec validate --all --strict` — 8 passed, 0 failed (after rebase onto `main@5653949`).

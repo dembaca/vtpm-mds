@@ -103,10 +103,13 @@ func TestCASignAndParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Far-future NotAfter is only for this Sign-path unit test; IssueDevID
+	// uses mds.devid_lifetime (see DefaultDevIDLifetime).
+	farFuture := time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 	template := &x509.Certificate{
 		Subject:               pkix.Name{CommonName: "test-devid"},
 		NotBefore:             time.Now().Add(-time.Minute),
-		NotAfter:              NoExpiration,
+		NotAfter:              farFuture,
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		BasicConstraintsValid: true,
 		PublicKey:             &leafKey.PublicKey,
@@ -122,8 +125,8 @@ func TestCASignAndParse(t *testing.T) {
 	if parsed.Subject.CommonName != "test-devid" {
 		t.Fatalf("CN=%q", parsed.Subject.CommonName)
 	}
-	if !parsed.NotAfter.Equal(NoExpiration) {
-		t.Fatalf("NotAfter=%v want %v", parsed.NotAfter, NoExpiration)
+	if !parsed.NotAfter.Equal(farFuture) {
+		t.Fatalf("NotAfter=%v want %v", parsed.NotAfter, farFuture)
 	}
 }
 

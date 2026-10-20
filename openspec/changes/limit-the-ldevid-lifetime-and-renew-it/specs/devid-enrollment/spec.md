@@ -51,7 +51,8 @@ containing:
 - a serial number derived deterministically from the CA certificate, the
   subject, the public key, and the certificate's `notBefore` and `notAfter`,
   so two issuances that differ in validity receive different serials even when
-  the DevID key and subject are unchanged.
+  the DevID key and subject are unchanged. Whatever platform identity the
+  request carries does not enter the serial (it is not part of the subject).
 
 The certificate SHALL be returned PEM-encoded in `devid_cert_pem`. The service
 SHALL NOT publish a revocation list or offer any other way to withdraw an

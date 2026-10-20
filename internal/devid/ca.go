@@ -18,9 +18,6 @@ import (
 // OIDVerifiedTPMFixed is tcg-cap-verifiedTPMFixed (2.23.133.11.1.2).
 var OIDVerifiedTPMFixed = asn1.ObjectIdentifier{2, 23, 133, 11, 1, 2}
 
-// NoExpiration is the IEEE 802.1AR / TCG far-future NotAfter.
-var NoExpiration = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
-
 // DefaultDevIDLifetime is ninety days — the built-in mds.devid_lifetime.
 const DefaultDevIDLifetime = 2160 * time.Hour
 
