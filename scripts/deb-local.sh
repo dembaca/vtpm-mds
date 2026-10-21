@@ -34,13 +34,26 @@ fi
 local_ver="${base}+git${commit_date}.${sha}${dirty}"
 maintainer="$(dpkg-parsechangelog -S Maintainer)"
 
+# Every changelog line stays within lintian's 80 columns: the branch gets a
+# line of its own ("    Branch: " is 12 columns), cut to 67 characters plus
+# "~" when longer than 68 (keep-local-build-changelog-lines-short D-b).
+shorten_branch() {
+  # Count characters, not bytes, whatever the caller's locale.
+  local LC_ALL=C.UTF-8
+  if (( ${#branch} > 68 )); then
+    branch="${branch:0:67}~"
+  fi
+}
+shorten_branch
+
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
 cat >"$tmp" <<EOF
 vtpm-mds (${local_ver}) UNRELEASED; urgency=medium
 
-  * Local lab build from git ${sha} (${branch}${dirty:+, dirty working tree}).
+  * Local lab build from git ${sha}${dirty:+, dirty working tree}.
+    Branch: ${branch}
     Not for publication. Identify with: dpkg -l vtpm-mds; vtpm-mds -version
 
  -- ${maintainer}  $(date -R)
