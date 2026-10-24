@@ -44,3 +44,8 @@ automatic renewal leaves such a guest without a working agent.
 - Spec: `devid-enrollment` modifies "Write DevID Materials On The Guest" and
   "Guest Renews The LDevID Before SPIRE And When Due".
 - Released as 0.3.1 of the guest package; hosts can stay on 0.3.0.
+- Migration: a guest that 0.3.0 already left with root-owned DevID files
+  keeps that owner after the upgrade, because the replaced file's owner wins.
+  Hand the three files to the agent's user once, or move them aside so the
+  next run gives them the directory's owner. VM 399 was repaired by hand on
+  2026-10-24.

@@ -117,15 +117,13 @@ func stubOwner(t *testing.T, euid int) *[][2]int {
 	return &got
 }
 
-func ownerOf(t *testing.T, path string) [2]int {
-	t.Helper()
-	fi, err := os.Lstat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := fi.Sys().(*syscall.Stat_t)
-	return [2]int{int(st.Uid), int(st.Gid)}
+// ownedInfo is a FileInfo whose stat_t names the given owner.
+type ownedInfo struct {
+	os.FileInfo
+	st syscall.Stat_t
 }
+
+func (o ownedInfo) Sys() any { return &o.st }
 
 func TestWriteFileAtomicKeepsOwnerAsRoot(t *testing.T) {
 	dir := t.TempDir()
@@ -134,10 +132,29 @@ func TestWriteFileAtomicKeepsOwnerAsRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stubOwner(t, 0)
+	// The replaced file and the directory get distinct owners, so the test
+	// sees which one keepOwner takes.
+	oldLstat, oldStat := lstatPath, statPath
+	t.Cleanup(func() { lstatPath, statPath = oldLstat, oldStat })
+	lstatPath = func(p string) (os.FileInfo, error) {
+		fi, err := os.Lstat(p)
+		if err != nil {
+			return nil, err
+		}
+		return ownedInfo{fi, syscall.Stat_t{Uid: 1001, Gid: 1002}}, nil
+	}
+	statPath = func(p string) (os.FileInfo, error) {
+		fi, err := os.Stat(p)
+		if err != nil {
+			return nil, err
+		}
+		return ownedInfo{fi, syscall.Stat_t{Uid: 2001, Gid: 2002}}, nil
+	}
+
 	if err := writeFileAtomic(path, []byte("new"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if want := ownerOf(t, dir); len(*got) != 1 || (*got)[0] != want {
+	if want := [2]int{1001, 1002}; len(*got) != 1 || (*got)[0] != want {
 		t.Fatalf("chown calls = %v, want one with the replaced file's owner %v", *got, want)
 	}
 	data, err := os.ReadFile(path)
@@ -150,7 +167,7 @@ func TestWriteFileAtomicKeepsOwnerAsRoot(t *testing.T) {
 	if err := writeFileAtomic(filepath.Join(dir, "devid.pub.blob"), []byte("pub"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if want := ownerOf(t, dir); len(*got) != 1 || (*got)[0] != want {
+	if want := [2]int{2001, 2002}; len(*got) != 1 || (*got)[0] != want {
 		t.Fatalf("chown calls = %v, want one with the directory's owner %v", *got, want)
 	}
 }

@@ -81,7 +81,10 @@ Output directory (default
 .IR /var/lib/vtpm-mds/devid ).
 Run as root, the helper keeps the owner and group of each file it replaces
 and gives a new file those of the directory, so a SPIRE agent running as its
-own user can read renewed materials.
+own user can read renewed materials. Files that an earlier version left owned
+by root keep that owner; hand them to the agent's user once
+.RB ( chown )
+or move them aside so the next run gives them the directory's owner.
 .TP
 .BI \-cn " name"
 Common Name to put into the platform identity of the signing request.

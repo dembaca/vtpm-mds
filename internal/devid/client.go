@@ -182,9 +182,12 @@ func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 	return nil
 }
 
-// Seams for keepOwner's tests: only root can give a file to another user.
+// Seams for keepOwner's tests: only root can give a file to another user,
+// and only distinct owners tell the replaced file's from the directory's.
 var (
 	geteuid   = os.Geteuid
+	lstatPath = os.Lstat
+	statPath  = os.Stat
 	chownFile = func(f *os.File, uid, gid int) error { return f.Chown(uid, gid) }
 )
 
@@ -197,12 +200,12 @@ func keepOwner(f *os.File, path string) error {
 	if geteuid() != 0 {
 		return nil
 	}
-	fi, err := os.Lstat(path)
+	fi, err := lstatPath(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
 		}
-		if fi, err = os.Stat(filepath.Dir(path)); err != nil {
+		if fi, err = statPath(filepath.Dir(path)); err != nil {
 			return err
 		}
 	}

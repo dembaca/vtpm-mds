@@ -40,13 +40,37 @@ host package, not `AGENTS.md`/`README.md`.
       as 0.3.0, members `control.tar.xz`/`data.tar.xz`, lintian exit 0; the
       extracted binary reports that version, `-tpm` defaults to
       `/dev/tpmrm0` and it carries `--no-block`.
-- [ ] 2.2 Install the build in VM 399 (with the maintainer's go), move
+- [x] 2.2 Install the build in VM 399 (with the maintainer's go), move
       `devid.crt.pem` aside and start `devid-enroll.service`; verify the unit
       ends `success` within seconds, the three files are `spire:spire 0600`,
       the agent logs `Node attestation was successful`, and
       `tpm2_getcap handles-transient` lists nothing
-- [ ] 2.3 Kill a run mid-enrollment (`systemctl kill -s KILL`); verify no
+      Done 2026-10-24 19:45 on `0.3.0+git20261024.ceede3c83dc8` (the
+      maintainer's go on ask `dfg7mwar…`, sha256 checked in the guest):
+      `systemctl start devid-enroll.service` returned after 4.5 s,
+      `Result=success` (0.3.0: 120 s, `timeout`); `devid.crt.pem`,
+      `.priv.blob`, `.pub.blob` owned by `spire:spire` (UID 999), `0600`
+      (0.3.0: `root:root`); hogan logged `devid issued … vm=399` with both
+      legs `200`; the agent logged `Node attestation was successful` at
+      19:45:24; `tpm2_getcap -T device:/dev/tpm0 handles-transient` empty.
+- [x] 2.3 Kill a run mid-enrollment (`systemctl kill -s KILL`); verify no
       transient object is left and the next run enrolls
+      Certificate moved aside, `systemctl start --no-block`, `SIGKILL` after
+      0.6 s: `Result=signal`, no enroll request reached hogan, so the run was
+      killed while creating keys, before the first leg; no certificate
+      written; raw-device `handles-transient` empty (0.3.0 left two). The
+      next run: `success` in 4 s, `devid issued`, attestation at 19:45:53,
+      no transients. Not shown: a kill between the two legs.
+
+## Pre-review
+
+- Fable, 2026-10-24 (`678b246`): no must-fix. Should-fix: the ownership
+  test could not tell the replaced file's owner from the directory's (both
+  the test user) — now through `lstatPath`/`statPath` seams with distinct
+  owners; a guest already left with root-owned files by 0.3.0 keeps them —
+  migration note in the proposal and the man page. Nits taken: shorter `-tpm`
+  help, wrapped spec line; the 0.3.1 changelog entry belongs to the release.
+  These edits change only tests, help text and docs, not the code VM 399 ran.
 
 ## 3. Archive
 

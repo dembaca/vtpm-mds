@@ -51,7 +51,8 @@ persistent and SHALL NOT read, reuse, replace or evict any persistent object at
 `0x81010001` or any other persistent handle on behalf of the endorsement key.
 
 Defaults SHALL be TPM `/dev/tpmrm0` (the kernel resource manager, which
-flushes a process's transient objects when it closes the device), service base URL `http://169.254.169.254`,
+flushes a process's transient objects when it closes the device), service
+base URL `http://169.254.169.254`,
 output directory `/var/lib/vtpm-mds/devid` and an empty platform common name.
 The client SHALL check only that `devid_cert_pem` is non-empty: it does not
 verify the issued certificate against the DevID CA, nor that the certificate
