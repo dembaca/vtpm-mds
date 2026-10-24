@@ -104,6 +104,23 @@ jobs:
           dpkg-deb -I "dist/${HOST_DEB}"
           dpkg-deb -I "dist/${GUEST_DEB}"
 
+      # Ubuntu's lintian accepts zstd members, Debian's does not; check the
+      # format directly (build-release-debs-with-xz).
+      - name: Require xz members
+        run: |
+          set -euo pipefail
+          for deb in "dist/${{ steps.meta.outputs.host-deb-basename }}" \
+                     "dist/${{ steps.meta.outputs.guest-deb-basename }}"; do
+            members=$(ar t "$deb")
+            echo "$deb:" $members
+            for want in control.tar.xz data.tar.xz; do
+              if ! grep -qx "$want" <<<"$members"; then
+                echo "::error::$deb has no $want member:" $members
+                exit 1
+              fi
+            done
+          done
+
       - name: Lintian
         run: |
           lintian --fail-on error,warning \
