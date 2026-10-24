@@ -133,7 +133,7 @@ re-derived.
 
 ### Open changes as of 2026-10-19
 
-None. Five were archived on 2026-10-17, seven on 2026-10-18, seven on 2026-10-19 and two on 2026-10-20; the first two in this order:
+None. Five were archived on 2026-10-17, seven on 2026-10-18, seven on 2026-10-19, two on 2026-10-20 and one on 2026-10-21; the first two in this order:
 
 - `openspec/changes/archive/2026-10-17-serve-a-public-address-or-omit-the-key/`,
   the `public-ipv4` defect.
@@ -397,8 +397,8 @@ against `0.2.0+git20261019.e487c6bf62a6` (VM 399 got `CN=399`, SPIRE's
 material untouched). Certificates issued earlier keep their old subject until
 the guest enrols again. **`make deb-local` on a long branch name** fails
 lintian with `debian-changelog-line-too-long`, because `scripts/deb-local.sh`
-stamps the branch into the changelog line; that is a packaging defect of its
-own, not of the change being built.
+stamped the branch into the changelog line; that packaging defect was fixed
+on 2026-10-21 (below).
 
 The LDevID lifetime followed as the first archive of 2026-10-20:
 `openspec/changes/archive/2026-10-20-limit-the-ldevid-lifetime-and-renew-it/`
@@ -455,6 +455,17 @@ chain up to the site root (its certificate is not on hogan), a real
 per-cluster intermediate. `openssl verify` rejects these leaves while
 parsing (the TCG extensions), Go and SPIRE accept them. **Open, the
 maintainer's:** the Ansible role and the cut-over of each cluster.
+
+Short changelog lines for local builds followed as the first archive of
+2026-10-21:
+`openspec/changes/archive/2026-10-21-keep-local-build-changelog-lines-short/`
+(PR #77). `scripts/deb-local.sh` puts the branch on a line of its own
+(`    Branch: `) and cuts a name longer than 68 characters to 67 plus `~`,
+counting characters under `C.UTF-8` whatever the caller's locale, so every
+line the stamp adds stays within lintian's 80 columns. Verified with four
+builds, `lintian --fail-on error,warning` clean on both packages, including an
+89-character non-ASCII branch under `LC_ALL=C` (80 characters, 83 bytes,
+valid UTF-8). Product behaviour is unchanged.
 
 Honest readiness followed as the second archive of 2026-10-19:
 `openspec/changes/archive/2026-10-19-report-readiness-honestly/` (PR #61).
