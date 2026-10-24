@@ -1,3 +1,43 @@
+vtpm-mds (0.3.0) unstable; urgency=medium
+
+  * BREAKING: the daemon runs as the system user vtpm-mds (extra group
+    www-data) with only CAP_NET_BIND_SERVICE in a hardened unit: the file
+    system is read-only except /var/lib/vtpm-mds, and traffic is limited to
+    169.254.0.0/16 and localhost, so listen_addr must be link-local. The
+    DevID CA key is read by systemd from
+    /etc/ssl/private/proxmox_devid_ca.key and handed over as the credential
+    devid_ca.key; a missing file stops the start (243/CREDENTIALS). A key
+    elsewhere needs a drop-in that first resets LoadCredential=.
+  * BREAKING: config.yaml and the YAML inventory are decoded strictly; an
+    unknown config key stops the start.
+  * BREAKING: callers bound to no VM are refused (mds.require_vm_identity,
+    default true). /latest/attest, /latest/identity, /.well-known/jwks.json
+    and instance-identity/signature are removed.
+  * DevID: the EK certificate is bound to the endorsement key; the LDevID
+    subject is CN=<VM ID> only; the EK is pinned per VM on first enrolment
+    ($STATE_DIRECTORY/ek-pins; delete the VM's pin after replacing its
+    vTPM); LDevIDs expire after mds.devid_lifetime (default 2160h) and
+    guests renew them with devid-enroll.timer; the DevID CA must be a CA
+    whose key matches (one intermediate per cluster); the issued PEM
+    carries leaf + intermediate.
+  * devid-enroll derives the DevID parent from SPIRE's SRK template and no
+    longer touches or evicts persistent handles.
+  * devid-enroll now ships devid-enroll.service (before spire-agent, on
+    every boot) and a daily devid-enroll.timer, enabled on install. On a new
+    LDevID they clear SPIRE's agent SVID cache and try-restart spire-agent.
+    Output and SPIRE data directories are set in /etc/default/devid-enroll.
+  * New binary and unit vtpm-mds-bind: binds each guest NIC on vmbr_imds to
+    its configured MAC in the nftables table "bridge vtpm_mds_bind".
+  * Metadata: VM tags under tags/instance/, node topology under placement/,
+    public-ipv4 only when declared; guest configs read from this node only
+    and reloaded within 5 s of a change.
+  * Operations: per-peer throttling (429), one access line per request and
+    one line per issued LDevID, debug lines only with -debug, honest
+    /health status, a clean exit on stop, and a running daemon restarted
+    after an upgrade.
+
+ -- Andreas Dembach <andreas.dembach@dg-i.net>  Sat, 24 Oct 2026 11:06:38 +0200
+
 vtpm-mds (0.2.0) unstable; urgency=medium
 
   * Split the source into two binary packages: vtpm-mds (hypervisor daemon,
