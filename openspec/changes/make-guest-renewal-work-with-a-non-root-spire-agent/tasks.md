@@ -34,8 +34,12 @@ host package, not `AGENTS.md`/`README.md`.
 
 ## 2. Verify on VM 399
 
-- [ ] 2.1 Build with `make deb-local`; verify `dpkg-deb -c`/`-I` and
+- [x] 2.1 Build with `make deb-local`; verify `dpkg-deb -c`/`-I` and
       `lintian --fail-on error,warning` on `devid-enroll`
+      `devid-enroll_0.3.0+git20261024.ceede3c83dc8_amd64.deb`: same 13 paths
+      as 0.3.0, members `control.tar.xz`/`data.tar.xz`, lintian exit 0; the
+      extracted binary reports that version, `-tpm` defaults to
+      `/dev/tpmrm0` and it carries `--no-block`.
 - [ ] 2.2 Install the build in VM 399 (with the maintainer's go), move
       `devid.crt.pem` aside and start `devid-enroll.service`; verify the unit
       ends `success` within seconds, the three files are `spire:spire 0600`,
