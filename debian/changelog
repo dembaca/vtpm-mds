@@ -1,3 +1,21 @@
+vtpm-mds (0.3.1) unstable; urgency=medium
+
+  * devid-enroll: a run as root (the packaged oneshot) keeps the owner
+    and group of each DevID file it replaces, or gives a new file those of
+    the output directory, so a SPIRE agent running as its own user can still
+    read them. Files that 0.3.0 already left owned by root keep that owner:
+    chown them to the agent's user once, or move them aside.
+  * devid-enroll: the SPIRE agent restart after a new LDevID is queued
+    (systemctl --no-block try-restart) instead of awaited; the oneshot,
+    ordered before spire-agent, no longer waits on it until its start
+    timeout.
+  * devid-enroll: -tpm defaults to /dev/tpmrm0, so the kernel resource
+    manager flushes what a killed run left loaded in the TPM. A guest
+    without /dev/tpmrm0 passes -tpm /dev/tpm0.
+  * vtpm-mds: rebuilt, no behaviour change.
+
+ -- Andreas Dembach <andreas.dembach@dg-i.net>  Sat, 24 Oct 2026 20:49:44 +0200
+
 vtpm-mds (0.3.0) unstable; urgency=medium
 
   * BREAKING: the daemon runs as the system user vtpm-mds (extra group
