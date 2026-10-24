@@ -30,6 +30,15 @@ record. Not product code, not `AGENTS.md`/`README.md`.
       rejected the xz build as well and was replaced before commit.
 - [x] 1.4 Run `openspec validate --all --strict`
       Totals: 6 passed, 0 failed (6 items)
+## Pre-review
+
+- Fable, 2026-10-24 (`1acd593`): no must-fix, no should-fix. Confirmed the
+  override reaches `dpkg-deb` for both packages under compat 13 and
+  `Rules-Requires-Root: no`, that `make deb` is the only build entry point,
+  and that the check fails closed and runs before both uploads, so the
+  release job (`needs: build-deb`, artifacts only) cannot publish. Nit
+  taken: `grep -qxF`, so the member names are matched literally.
+
 - [ ] 1.5 The PR's CI run passes the new step on `ubuntu-24.04`
 
 ## 2. Archive

@@ -114,7 +114,7 @@ jobs:
             members=$(ar t "$deb")
             echo "$deb:" $members
             for want in control.tar.xz data.tar.xz; do
-              if ! grep -qx "$want" <<<"$members"; then
+              if ! grep -qxF "$want" <<<"$members"; then
                 echo "::error::$deb has no $want member:" $members
                 exit 1
               fi
