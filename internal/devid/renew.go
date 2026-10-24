@@ -76,10 +76,16 @@ func ClearSPIREAgentSVIDCache(dataDir string) error {
 	return nil
 }
 
-// TryRestartSPIREAgent runs systemctl try-restart spire-agent.service.
+// restartSPIREAgentArgv is the command TryRestartSPIREAgent runs; a seam for tests.
+var restartSPIREAgentArgv = []string{"systemctl", "--no-block", "try-restart", "spire-agent.service"}
+
+// TryRestartSPIREAgent queues systemctl try-restart spire-agent.service without
+// waiting for it: the packaged oneshot is ordered Before=spire-agent.service,
+// so a blocking restart from inside it waits on itself until the start timeout
+// kills it (make-guest-renewal-work-with-a-non-root-spire-agent D-b).
 // Missing systemctl or unit must not fail the renew.
 func TryRestartSPIREAgent() {
-	cmd := exec.Command("systemctl", "try-restart", "spire-agent.service")
+	cmd := exec.Command(restartSPIREAgentArgv[0], restartSPIREAgentArgv[1:]...)
 	_ = cmd.Run()
 }
 

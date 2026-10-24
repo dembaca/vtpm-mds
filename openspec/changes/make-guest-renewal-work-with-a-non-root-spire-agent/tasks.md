@@ -10,16 +10,27 @@ host package, not `AGENTS.md`/`README.md`.
 
 ## 1. Fix
 
-- [ ] 1.1 Keep owner and group on replace, from the replaced file or else the
+- [x] 1.1 Keep owner and group on replace, from the replaced file or else the
       output directory, only as root; a failing `chown` fails the write
       (D-a); verify with a unit test through a seam for `geteuid` and
       `chown`
-- [ ] 1.2 Queue the agent restart with `--no-block` (D-b); verify with a
+      `keepOwner` in `client.go`; `TestWriteFileAtomicKeepsOwnerAsRoot`
+      (replaced file's owner, then the directory's for a new file),
+      `…LeavesOwnerWhenNotRoot` (no chown) and `…FailsWhenOwnerCannotBeKept`
+      (EPERM fails the write, old content kept, no temporary left) pass.
+- [x] 1.2 Queue the agent restart with `--no-block` (D-b); verify with a
       unit test of the command line
-- [ ] 1.3 Default `-tpm` to `/dev/tpmrm0` and update the man page (D-c);
+      `TestTryRestartSPIREAgentDoesNotWait` passes (`systemctl --no-block
+      try-restart spire-agent.service`).
+- [x] 1.3 Default `-tpm` to `/dev/tpmrm0` and update the man page (D-c);
       verify `devid-enroll -h` and `man -l debian/devid-enroll.1`
-- [ ] 1.4 Run `go vet ./...` and `go test ./...`
-- [ ] 1.5 Run `openspec validate --all --strict`
+      `-h` shows `(default "/dev/tpmrm0")`; the man page renders the new
+      default, `--no-block` and the ownership paragraph.
+- [x] 1.4 Run `go vet ./...` and `go test ./...`
+      `go vet` clean; `go test ./...` ok for every package (`internal/devid`
+      103 s with the simulator tests).
+- [x] 1.5 Run `openspec validate --all --strict`
+      Totals: 6 passed, 0 failed (6 items).
 
 ## 2. Verify on VM 399
 
