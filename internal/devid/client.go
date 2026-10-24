@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/google/go-tpm/legacy/tpm2"
@@ -181,6 +182,43 @@ func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 	return nil
 }
 
+// Seams for keepOwner's tests: only root can give a file to another user,
+// and only distinct owners tell the replaced file's from the directory's.
+var (
+	geteuid   = os.Geteuid
+	lstatPath = os.Lstat
+	statPath  = os.Stat
+	chownFile = func(f *os.File, uid, gid int) error { return f.Chown(uid, gid) }
+)
+
+// keepOwner gives f, which is about to replace path, the owner and group of
+// the file at path, or of its directory when there is none, so that a SPIRE
+// agent running as its own user can still read materials a root renewal
+// wrote (make-guest-renewal-work-with-a-non-root-spire-agent D-a). A client
+// that is not root leaves the owner as created.
+func keepOwner(f *os.File, path string) error {
+	if geteuid() != 0 {
+		return nil
+	}
+	fi, err := lstatPath(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		if fi, err = statPath(filepath.Dir(path)); err != nil {
+			return err
+		}
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("owner of %s: no stat_t", path)
+	}
+	if err := chownFile(f, int(st.Uid), int(st.Gid)); err != nil {
+		return fmt.Errorf("keep owner of %s: %w", path, err)
+	}
+	return nil
+}
+
 func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
@@ -199,6 +237,10 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 		return err
 	}
 	if err := tmp.Chmod(mode); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := keepOwner(tmp, path); err != nil {
 		tmp.Close()
 		return err
 	}

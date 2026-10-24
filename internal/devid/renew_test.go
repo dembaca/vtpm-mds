@@ -4,6 +4,8 @@ import (
 	"crypto/x509"
 	"os"
 	"path/filepath"
+	"reflect"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -90,5 +92,112 @@ func TestClearSPIREAgentSVIDCache(t *testing.T) {
 	}
 	if err := ClearSPIREAgentSVIDCache(dir); err != nil {
 		t.Fatalf("idempotent clear: %v", err)
+	}
+}
+
+func TestTryRestartSPIREAgentDoesNotWait(t *testing.T) {
+	want := []string{"systemctl", "--no-block", "try-restart", "spire-agent.service"}
+	if !reflect.DeepEqual(restartSPIREAgentArgv, want) {
+		t.Fatalf("restart argv = %q, want %q", restartSPIREAgentArgv, want)
+	}
+}
+
+// stubOwner makes keepOwner believe it runs as euid and records the owner it
+// sets instead of calling chown, which only root may do.
+func stubOwner(t *testing.T, euid int) *[][2]int {
+	t.Helper()
+	var got [][2]int
+	oldEuid, oldChown := geteuid, chownFile
+	geteuid = func() int { return euid }
+	chownFile = func(_ *os.File, uid, gid int) error {
+		got = append(got, [2]int{uid, gid})
+		return nil
+	}
+	t.Cleanup(func() { geteuid, chownFile = oldEuid, oldChown })
+	return &got
+}
+
+// ownedInfo is a FileInfo whose stat_t names the given owner.
+type ownedInfo struct {
+	os.FileInfo
+	st syscall.Stat_t
+}
+
+func (o ownedInfo) Sys() any { return &o.st }
+
+func TestWriteFileAtomicKeepsOwnerAsRoot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "devid.crt.pem")
+	if err := os.WriteFile(path, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := stubOwner(t, 0)
+	// The replaced file and the directory get distinct owners, so the test
+	// sees which one keepOwner takes.
+	oldLstat, oldStat := lstatPath, statPath
+	t.Cleanup(func() { lstatPath, statPath = oldLstat, oldStat })
+	lstatPath = func(p string) (os.FileInfo, error) {
+		fi, err := os.Lstat(p)
+		if err != nil {
+			return nil, err
+		}
+		return ownedInfo{fi, syscall.Stat_t{Uid: 1001, Gid: 1002}}, nil
+	}
+	statPath = func(p string) (os.FileInfo, error) {
+		fi, err := os.Stat(p)
+		if err != nil {
+			return nil, err
+		}
+		return ownedInfo{fi, syscall.Stat_t{Uid: 2001, Gid: 2002}}, nil
+	}
+
+	if err := writeFileAtomic(path, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if want := [2]int{1001, 1002}; len(*got) != 1 || (*got)[0] != want {
+		t.Fatalf("chown calls = %v, want one with the replaced file's owner %v", *got, want)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "new" {
+		t.Fatalf("content = %q, %v", data, err)
+	}
+
+	// A new file takes the directory's owner.
+	*got = nil
+	if err := writeFileAtomic(filepath.Join(dir, "devid.pub.blob"), []byte("pub"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if want := [2]int{2001, 2002}; len(*got) != 1 || (*got)[0] != want {
+		t.Fatalf("chown calls = %v, want one with the directory's owner %v", *got, want)
+	}
+}
+
+func TestWriteFileAtomicLeavesOwnerWhenNotRoot(t *testing.T) {
+	dir := t.TempDir()
+	got := stubOwner(t, 1000)
+	if err := writeFileAtomic(filepath.Join(dir, "devid.crt.pem"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if len(*got) != 0 {
+		t.Fatalf("chown called without root: %v", *got)
+	}
+}
+
+func TestWriteFileAtomicFailsWhenOwnerCannotBeKept(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "devid.crt.pem")
+	if err := os.WriteFile(path, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stubOwner(t, 0)
+	chownFile = func(*os.File, int, int) error { return syscall.EPERM }
+	if err := writeFileAtomic(path, []byte("new"), 0o600); err == nil {
+		t.Fatal("want an error when chown fails as root")
+	}
+	if data, _ := os.ReadFile(path); string(data) != "old" {
+		t.Fatalf("file replaced despite the failed chown: %q", data)
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".devid.crt.pem.tmp-*")); len(left) != 0 {
+		t.Fatalf("temporary files left: %v", left)
 	}
 }

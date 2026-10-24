@@ -34,8 +34,9 @@ is set, the helper removes the SPIRE agent SVID cache file
 (and
 .I agent_svid.der
 if present) under that directory and runs
-.B systemctl try-restart spire-agent.service
-so the next agent start attests the new LDevID. A missing or inactive
+.B systemctl \-\-no\-block try-restart spire-agent.service
+without waiting for it, so the packaged oneshot, which is ordered before the
+agent, finishes first and the next agent start attests the new LDevID. A missing or inactive
 .B spire-agent
 unit does not fail the renew. The default for
 .B \-spire-data
@@ -65,7 +66,11 @@ on hogan VM 399).
 .TP
 .BI \-tpm " path"
 TPM device (default
-.IR /dev/tpm0 ).
+.IR /dev/tpmrm0 ,
+the kernel resource manager, which flushes whatever a killed run left loaded;
+pass
+.I /dev/tpm0
+only on a kernel without it).
 .TP
 .BI \-mds " url"
 MDS base URL (default
@@ -74,6 +79,12 @@ MDS base URL (default
 .BI \-out " dir"
 Output directory (default
 .IR /var/lib/vtpm-mds/devid ).
+Run as root, the helper keeps the owner and group of each file it replaces
+and gives a new file those of the directory, so a SPIRE agent running as its
+own user can read renewed materials. Files that an earlier version left owned
+by root keep that owner; hand them to the agent's user once
+.RB ( chown )
+or move them aside so the next run gives them the directory's owner.
 .TP
 .BI \-cn " name"
 Common Name to put into the platform identity of the signing request.
