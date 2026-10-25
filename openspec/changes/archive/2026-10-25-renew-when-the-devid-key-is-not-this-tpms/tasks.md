@@ -157,5 +157,10 @@ with `go test -tags tpmsim ./internal/devid/`.
 
 ## 3. Archive
 
-- [ ] 3.1 After merge, the coordinator archives the change (after
+- [x] 3.1 After merge, the coordinator archives the change (after
       `make-guest-renewal-work-with-a-non-root-spire-agent`)
+      Archived 2026-10-25 by `agent-vtpm-hogan-d3e6cbc82` at the coordinator's
+      request (bgl-infra TASK 0.3.2r), right after that change. Still open at
+      archive time, and carried by the 0.3.2 release: the changelog half of
+      1.6 (branch `release-0.3.2`) and section 2, which is to be verified
+      against the released 0.3.2 package on VM 399 and on bgl-infra clones.

@@ -74,4 +74,9 @@ host package, not `AGENTS.md`/`README.md`.
 
 ## 3. Archive
 
-- [ ] 3.1 After merge, the coordinator archives the change
+- [x] 3.1 After merge, the coordinator archives the change
+      Archived 2026-10-25 by `agent-vtpm-hogan-d3e6cbc82` at the coordinator's
+      request (bgl-infra TASK 0.3.2r), before
+      `renew-when-the-devid-key-is-not-this-tpms`. Released as 0.3.1; VM 399
+      runs the release package since 2026-10-25 07:53 (bgl-infra 2.3b′:
+      forced renew `success` in ~4 s, one clean agent restart, attested).

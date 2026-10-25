@@ -111,9 +111,13 @@ and this record; the README pin row is the coordinator's.
   should-fix taken: only VMID-shaped names count, comment on the
   inventory-pin path; nits taken: both log prefixes and the consumed session
   in the man page, deterministic race test.
-- [ ] Review of the implementation by a stronger model before the PR is
+- [x] Review of the implementation by a stronger model before the PR is
       called ready
+      Fable, above; fixes in `cda26ac`.
 
 ## 3. Archive
 
-- [ ] 3.1 After merge, the coordinator archives the change
+- [x] 3.1 After merge, the coordinator archives the change
+      Archived 2026-10-25 by `agent-vtpm-hogan-d3e6cbc82` at the coordinator's
+      request (bgl-infra TASK 0.3.2r), with 2.3 still open for a root check of
+      `ek-pins/` after clone 392 is destroyed.

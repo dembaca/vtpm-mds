@@ -449,6 +449,14 @@ certificate, `devid.priv.blob` with the DevID TPM2B_PRIVATE and
 `devid.pub.blob` with the DevID TPM2B_PUBLIC, as SPIRE's `tpm_devid` attestor
 consumes them. Nothing SHALL be written when a leg fails.
 
+When the client runs as root, each of those files SHALL have the owner and
+group of the file it replaces at that path, or, when there is none, of the
+output directory, so that a SPIRE agent running as another user can still
+read materials renewed by a root process. A client that cannot set the owner
+because it does not run as root SHALL leave the owner as the file was created
+with; a client running as root that fails to set it SHALL fail without
+replacing the file.
+
 That storage root key SHALL be derived as SPIRE's attestor derives it, because
 the DevID key can only be loaded under the primary key it was created under.
 The client SHALL create the parent as a transient primary key in the owner
@@ -469,7 +477,9 @@ key, the DevID key and the storage root key. It SHALL NOT make the EK
 persistent and SHALL NOT read, reuse, replace or evict any persistent object at
 `0x81010001` or any other persistent handle on behalf of the endorsement key.
 
-Defaults SHALL be TPM `/dev/tpm0`, service base URL `http://169.254.169.254`,
+Defaults SHALL be TPM `/dev/tpmrm0` (the kernel resource manager, which
+flushes a process's transient objects when it closes the device), service
+base URL `http://169.254.169.254`,
 output directory `/var/lib/vtpm-mds/devid` and an empty platform common name.
 The client SHALL check only that `devid_cert_pem` is non-empty: it does not
 verify the issued certificate against the DevID CA, nor that the certificate
@@ -482,6 +492,20 @@ matches its DevID key.
 - **WHEN** `devid-enroll` runs
 - **THEN** `devid.crt.pem`, `devid.priv.blob` and `devid.pub.blob` exist in the
   output directory with mode `0600`
+
+#### Scenario: Renewal by root keeps the SPIRE agent's ownership
+
+- **GIVEN** an output directory and DevID files owned by the SPIRE agent's
+  user, and a client running as root
+- **WHEN** a renewal replaces the files
+- **THEN** the new `devid.crt.pem`, `devid.priv.blob` and `devid.pub.blob`
+  are owned by that user and group with mode `0600`
+
+#### Scenario: A killed run leaves nothing loaded
+
+- **GIVEN** the default TPM device
+- **WHEN** a run is killed while it holds keys loaded in the TPM
+- **THEN** no transient object of that run is left loaded afterwards
 
 #### Scenario: DevID key loads under SPIRE's storage root key
 
@@ -867,33 +891,50 @@ exit non-zero and SHALL NOT start serving.
 The guest enrollment client SHALL renew the LDevID materials at its configured
 output path when any of the following holds:
 
-- no certificate file is present there;
+- no certificate file is present there, or it cannot be read or parsed;
 - the certificate's `notAfter` is not after the current time;
 - the time remaining until `notAfter` is strictly less than one third of the
-  interval from that certificate's `notBefore` to its `notAfter`.
+  interval from that certificate's `notBefore` to its `notAfter`;
+- a parseable certificate is present and its subject `CN` is not this
+  guest's VM ID, which is the service's `/latest/meta-data/instance-id`
+  without its `i-` prefix, read with a session token;
+- the DevID private or public TPM blob does not exist or is empty;
+- the certificate's public key does not equal the public key in the DevID
+  public blob;
+- the DevID blobs are foreign to the guest's TPM: a blob does not decode, or
+  the TPM refuses to load them under the storage root key derived from it
+  with an integrity, binding or sensitive-area error.
 
 Otherwise the client SHALL leave the materials unchanged and exit successfully
-without calling enroll.
+without calling enroll. When a parseable certificate is present and
+`instance-id` cannot be read after a few attempts or does not start with
+`i-`, when a blob file exists but cannot be read, or when deriving that
+storage root key or loading the blobs fails in any other way, including a
+TPM warning, the client SHALL exit non-zero,
+make no enroll request and leave the materials unchanged.
 
-When it renews and usable DevID private and public TPM blobs already exist at
-the output path, the client SHALL reuse that DevID key in the signing request
-and SHALL NOT create a new DevID key under the storage root. When those blobs
-are missing or cannot be loaded, the client SHALL create a new DevID key as in
-a first enrollment.
+When it renews and the DevID blobs at the output path load under that storage
+root key, the client SHALL reuse that DevID key in the signing request and
+SHALL NOT create a new DevID key under the storage root. When those blobs are
+missing or foreign, the client SHALL create a new DevID key as in a
+first enrollment. Each renewal SHALL log which of the conditions above caused
+it.
 
 The guest package SHALL arrange that this check runs on every boot before the
 SPIRE agent starts when that agent is installed, and at least once per day
 while the guest is up. It SHALL NOT require the SPIRE agent unit to be
 installed. When a renew replaces the certificate PEM, the guest SHALL clear
-the SPIRE agent's cached SVID under the agent data directory and then
-`try-restart` the SPIRE agent unit so the next start performs node attestation
-with the new LDevID; if the unit is absent or inactive, clearing and
+the SPIRE agent's cached SVID under the agent data directory and then queue a
+`try-restart` of the SPIRE agent unit without waiting for it, so that the next
+start performs node attestation with the new LDevID and a renewal oneshot
+ordered before that unit can finish first; if the unit is absent or inactive, clearing and
 `try-restart` SHALL NOT fail the renew.
 
 #### Scenario: Fresh certificate is left alone
 
 - **GIVEN** a certificate at the output path whose remaining lifetime is at
-  least one third of its total validity
+  least one third of its total validity, and DevID blobs that load in the
+  guest's TPM and hold the certificate's public key
 - **WHEN** the guest renewal check runs
 - **THEN** no enroll request is made and the files are unchanged
 
@@ -905,6 +946,53 @@ with the new LDevID; if the unit is absent or inactive, clearing and
 - **THEN** enroll runs using the existing DevID public key and writes a new
   certificate PEM while keeping the same private and public blobs
 
+#### Scenario: Materials from another TPM renew with a new key
+
+- **GIVEN** a fresh certificate and DevID blobs created in another TPM, as in
+  a clone of a guest that received a new vTPM
+- **WHEN** the guest renewal check runs
+- **THEN** it logs that the key does not load in this TPM, creates a new
+  DevID key, enrolls, and writes a new certificate and new blobs
+
+#### Scenario: Certificate for another key renews with the loaded key
+
+- **GIVEN** a fresh certificate whose public key differs from the key in
+  DevID blobs that load in the guest's TPM
+- **WHEN** the guest renewal check runs
+- **THEN** it logs that the certificate does not match the key and enrolls
+  with the loaded DevID key, keeping its blobs
+
+#### Scenario: Certificate for another VM renews
+
+- **GIVEN** a fresh certificate with `CN=399` and fitting blobs, on a guest
+  whose `instance-id` is `i-390`, as in a clone that kept its source's vTPM
+  state
+- **WHEN** the guest renewal check runs
+- **THEN** it logs that the certificate is for another VM and enrolls with
+  the loaded DevID key
+
+#### Scenario: Unreadable instance-id changes nothing
+
+- **GIVEN** a fresh certificate and fitting blobs, and a metadata service
+  that does not answer `instance-id`
+- **WHEN** the guest renewal check runs
+- **THEN** it exits non-zero, makes no enroll request and leaves the files
+  unchanged
+
+#### Scenario: Missing blob renews
+
+- **GIVEN** a fresh certificate and no DevID public blob
+- **WHEN** the guest renewal check runs
+- **THEN** it logs the missing blob, creates a new DevID key and enrolls
+
+#### Scenario: A TPM warning does not discard the key
+
+- **GIVEN** a fresh certificate and matching blobs, and a TPM that answers
+  the load with a warning such as `TPM_RC_RETRY`
+- **WHEN** the guest renewal check runs
+- **THEN** it exits non-zero, makes no enroll request and leaves the files
+  unchanged
+
 #### Scenario: Renew clears the SPIRE agent SVID cache
 
 - **GIVEN** a successful renew that changed the certificate PEM and a SPIRE
@@ -912,6 +1000,14 @@ with the new LDevID; if the unit is absent or inactive, clearing and
 - **WHEN** the renew finishes
 - **THEN** that cached agent SVID is removed and `try-restart` is attempted on
   the SPIRE agent unit
+
+#### Scenario: Renewal oneshot does not wait for the agent restart
+
+- **GIVEN** an active SPIRE agent unit and the packaged renewal oneshot, which
+  is ordered before it
+- **WHEN** the oneshot renews and the certificate PEM changes
+- **THEN** the oneshot finishes successfully without waiting for the restart,
+  and the SPIRE agent restarts after it
 
 #### Scenario: Missing certificate enrolls
 
@@ -966,3 +1062,73 @@ readable intermediate cert+key at enroll time.
 - **WHEN** enrollment is configured
 - **THEN** the service signs with the intermediate key and does not require
   the root private key to be readable
+
+### Requirement: Refuse An EK Pinned To Another VM
+
+On both `enroll/start` and `enroll/finish`, after the EK certificate is
+trusted and bound to the endorsement key and after the caller's own effective
+pin is enforced, the service SHALL refuse the leg when the caller's EK
+fingerprint is pinned to a **different** VM ID: when a file
+`/var/lib/<package>/ek-pins/<other>` whose name is a valid VM ID other than
+the caller's holds that fingerprint (case-insensitive), or when another VM in
+the current inventory has that fingerprint as its non-empty `ek_sha256`.
+
+A refused leg SHALL answer `401` with body
+`EK certificate is pinned to another VM`, SHALL NOT name the other VM in the
+response, SHALL NOT issue a challenge or an LDevID and SHALL NOT create a pin
+for the caller. Its log line SHALL name the caller's VM ID and the VM ID
+that holds the pin and SHALL NOT contain the fingerprint. `enroll/finish`
+SHALL, when it creates the caller's pin, repeat the check atomically with
+that create, so that two VMs presenting one EK concurrently never both
+receive a pin.
+
+A pin file SHALL count even when the same VM's inventory `ek_sha256`
+overrides it for that VM. Empty pin files and files whose name is not a VM
+ID (digits only, so a set-aside `399.old` does not count) SHALL be ignored.
+When the pin directory exists but cannot be listed, the leg SHALL answer
+`500` with body `pin store unavailable`; a missing directory SHALL count as
+an empty store. The service SHALL NOT delete or rewrite any pin because of a
+refusal.
+
+#### Scenario: A clone with its source's EK is refused
+
+- **GIVEN** `/var/lib/<package>/ek-pins/399` holding fingerprint `abc…`
+- **WHEN** either enroll leg is called by VM `390` with a trusted EK whose
+  fingerprint is `abc…`
+- **THEN** the response is `401` with body
+  `EK certificate is pinned to another VM`, no pin file for `390` exists,
+  and the log line names `vm=390` and `pinned=399`
+
+#### Scenario: Two first enrollments with one EK leave one pin
+
+- **GIVEN** no pin files and VMs `390` and `399` presenting the same EK
+- **WHEN** both call `enroll/finish` concurrently
+- **THEN** at most one of them receives an LDevID and exactly one pin file
+  holds that fingerprint
+
+#### Scenario: The VM that holds the pin still enrolls
+
+- **GIVEN** `/var/lib/<package>/ek-pins/399` holding fingerprint `abc…`
+- **WHEN** either enroll leg is called by VM `399` with that EK
+- **THEN** the leg is not refused by this requirement
+
+#### Scenario: A set-aside pin file refuses nobody
+
+- **GIVEN** `/var/lib/<package>/ek-pins/399.old` holding fingerprint `abc…`
+  and no other pin file holding it
+- **WHEN** either enroll leg is called by VM `399` with that EK
+- **THEN** the leg is not refused by this requirement
+
+#### Scenario: Another VM's inventory pin refuses
+
+- **GIVEN** VM `100` with inventory `ek_sha256` `aaa…`
+- **WHEN** either enroll leg is called by VM `101` with EK fingerprint `aaa…`
+- **THEN** the response is `401` with body
+  `EK certificate is pinned to another VM`
+
+#### Scenario: Unlistable pin store fails closed
+
+- **GIVEN** a pin directory the service cannot list
+- **WHEN** either enroll leg is called
+- **THEN** the response is `500` with body `pin store unavailable` and no
+  LDevID is issued
