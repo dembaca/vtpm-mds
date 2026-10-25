@@ -9,12 +9,15 @@ vtpm-mds (0.3.2) unstable; urgency=medium
     Each renewal logs its reason.
   * devid-enroll: every run with a certificate reads instance-id (IMDSv2
     token, three tries over about ten seconds) and fails without changing
-    anything when it cannot; it needs enable_ec2_compat on the host. A TPM
-    warning, or a blob file that exists but cannot be read, fails the run
-    and keeps the existing key.
+    anything when it cannot; with enable_ec2_compat off on the host, every
+    run with a certificate fails. A TPM warning, or a blob file that exists
+    but cannot be read, fails the run and keeps the existing key.
+  * devid-enroll: never uses a proxy from the environment; the metadata
+    service is link-local.
   * vtpm-mds: both enrollment legs refuse, with 401 "EK certificate is
-    pinned to another VM", an EK that this node has already pinned to
-    another VM ID, so a clone that kept its source's vTPM state gets no
+    pinned to another VM", an EK that this node's pin store, or another
+    VM's inventory ek_sha256, already binds to a different VM ID, so a
+    clone that kept its source's vTPM state gets no
     LDevID. Only files named by a numeric VM ID count as pins. Templates
     must ship an empty vTPM state; see vtpm-mds(8), EK PINS.
 
