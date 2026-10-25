@@ -29,3 +29,8 @@ mds:
   signing_key_path: "/var/lib/vtpm-mds/signing-key.pem"
   # Empty → parse /etc/pve. Set a YAML path only on non-Proxmox lab hosts.
   # inventory_path: "/var/lib/mds-lab/inventory/lab.yaml"
+  # Cluster EK pins (Proxmox only), written by root, read here; see
+  # vtpm-mds(8), EK PINS. Turn require_cluster_pin on only after every VM
+  # has a cluster pin.
+  # cluster_pin_dir: "/etc/pve/vtpm-ek"
+  # require_cluster_pin: false

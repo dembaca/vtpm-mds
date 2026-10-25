@@ -9,7 +9,8 @@ maintainer's decision "A" in bgl-infra `6q89czhg…`. Files:
 record; the README pin row is the coordinator's. The writer, the backfill and
 any reaper are bgl-infra P1-w.
 
-**Proposal only: implementation waits for the maintainer's go on the design.**
+Design go: the maintainer's 👍 on ask `4ocgxj1z…` (2026-10-25 20:36),
+including D-g and D-b.
 
 ## 1. Implement
 
@@ -18,43 +19,81 @@ any reaper are bgl-infra P1-w.
       can `stat` `/etc/pve/nodes/<other node>/qemu-server/<vmid>.conf` and
       `.../lxc/<vmid>.conf` of another node (P1-w or cursor, root); record
       only the result, no VM names
-- [ ] 1.2 Add `mds.cluster_pin_dir` (default `/etc/pve/vtpm-ek`) and
+      **Open, needs root (P1-w or cursor).** The agent user is not in
+      `www-data`. The design falls back safely if it fails: a config that
+      cannot be `stat`ed counts as existing, so nothing is ignored.
+- [x] 1.2 Add `mds.cluster_pin_dir` (default `/etc/pve/vtpm-ek`) and
       `mds.require_cluster_pin` (default `false`) with the load errors for
       `require_cluster_pin: true` with an empty directory or with
       `inventory_path` set (D-j, D-b); set `ClusterPinDir` and
       `GuestConfigRoot` only in the Proxmox branch of `server.go`; verify with
       config and server tests: defaults when omitted, strict decode, both load
       errors, both fields empty for the YAML backend
-- [ ] 1.3 Read the caller's cluster pin with the strict format (D-d) and put
+      **Done, 2026-10-25:** `TestLoadClusterPinDefaults`,
+      `TestLoadRejectsRequireClusterPinWithoutSource` (both conflicts), the
+      existing strict decode of `debian/config.yaml`, and
+      `TestClusterPinSeamsOnlyForProxmox` in `internal/server` pass.
+- [x] 1.3 Read the caller's cluster pin with the strict format (D-d) and put
       it between inventory and local pin (D-c); verify with unit tests on a
       constructed directory: valid pin enforced, mismatch body, upper case /
       second line / empty / non-numeric name are no pin with the
       `invalid cluster pin` line, cluster pin over a differing local pin with
       the `local pin differs` line and the local file unchanged
-- [ ] 1.4 Fallback and switch (D-e): no local pin is created when a cluster
+      **Done, 2026-10-25:** `internal/devid/clusterpin.go`
+      (`parseClusterPin`, `readClusterPin`), `enforceOwnPin` in `auth.go`.
+      `TestParseClusterPin` (9 inputs) and `TestAuthenticateClusterPin`
+      (missing dir quiet, dir without pin warns, valid pin enforced and
+      mismatch body, cluster over differing local pin with the log line, no
+      fingerprint in the log and the local file unchanged, three malformed
+      contents, required pin refuses, inventory wins) pass.
+- [x] 1.4 Fallback and switch (D-e): no local pin is created when a cluster
       pin exists; the `no cluster pin … using local pin` line once per leg
       only when `cluster_pin_dir` exists; the refusal placed after the EK
       chain and binding checks (D-b2);
+      **Done, 2026-10-25:** `Finish` reads the cluster pin before
+      `ensurePinBeforeIssue`. `TestFinishWithClusterPin`: no local pin
+      beside a cluster pin, `no cluster pin for this VM` and no local pin when
+      one is required. The refusal sits in `enforceOwnPin`, after the chain
+      and binding checks. Both legs go through `AuthenticateEnrollCaller`,
+      so the auth-level tests cover start and finish;
       `require_cluster_pin` refuses both legs with `401` and creates nothing;
       verify with handler tests
-- [ ] 1.5 Extend the cross-VM scan with the cluster directory and the
+- [x] 1.5 Extend the cross-VM scan with the cluster directory and the
       guest-config filter (D-g), inside the existing `pinCreateMu` for finish;
       verify with unit tests on a constructed `nodes/` tree: clone refused by
       a cluster pin, destroyed VM's local and cluster pins ignored, an
       `lxc` config counts, unlistable `GuestConfigRoot` ignores nothing and
       logs, empty `GuestConfigRoot` (YAML) unchanged, the concurrent-finish
       test still passes with `-race`
-- [ ] 1.6 Fail closed (D-f): unlistable cluster directory or unreadable pin
+      **Done, 2026-10-25:** `clusterPinsMatching` and `guestExists` are used in
+      `pinnedToAnotherVM`. `TestPinnedToAnotherVMClusterAndStale` (clone
+      refused by another node's cluster pin, malformed cluster pin ignored,
+      destroyed VM's local and cluster pins ignored, `lxc` counts, YAML
+      unchanged) and `TestUnlistableGuestConfigRootIgnoresNothing` pass. The
+      existing scan, race and concurrent-finish tests pass with `-race`
+      (`internal/devid` 62.6 s).
+- [x] 1.6 Fail closed (D-f): unlistable cluster directory or unreadable pin
       file answers `500` `pin store unavailable`; missing directory is empty;
       verify with unit tests (mode `0300`, skipped as uid 0)
-- [ ] 1.7 Document in `debian/vtpm-mds.8` (EK PINS: cluster pins, precedence,
+      **Done, 2026-10-25:** `TestUnusableClusterPinDirFailsClosed` ran as
+      `coding-agent`, not skipped. Both legs answer `500` `pin store
+      unavailable` for an unlistable directory, the scan returns
+      `ErrPinStore`, and an unreadable own pin (`0200`) is `ErrPinStore`.
+- [x] 1.7 Document in `debian/vtpm-mds.8` (EK PINS: cluster pins, precedence,
       the two keys, the log lines, the reused-ID remedy, writing a pin by
       hand for a VM restored under a new ID, turning on
       `require_cluster_pin` only after a clean backfill) and in
       `debian/config.yaml` (both keys, commented); verify with `man -l` and
       the strict decode of `debian/config.yaml`
-- [ ] 1.8 Run `go vet ./...`, `go test ./...` and
+      **Done, 2026-10-25:** EK PINS has a cluster-pins paragraph, the
+      stale-pin rule, the restore, reused-ID and replaced-vTPM cases, and a
+      FILES entry. `man --warnings -l` prints nothing. `config.yaml` has
+      both keys, commented, and still strict-decodes (config test).
+      `debian/changelog` is left to the release, as for 0.3.2.
+- [x] 1.8 Run `go vet ./...`, `go test ./...` and
       `openspec validate --all --strict`
+      **Done, 2026-10-25:** vet clean; every package `ok` (`internal/devid`
+      103.3 s); validate `6 passed, 0 failed`.
 
 ## 2. Verify on hogan
 
