@@ -2,9 +2,10 @@
 
 ### Requirement: Read Cluster EK Pins From pmxcfs
 
-The service SHALL read cluster EK pins from the directory
-`mds.cluster_pin_dir` (default `/etc/pve/vtpm-ek`; empty disables the
-cluster source). A cluster pin is the file `<cluster_pin_dir>/<vmid>` whose
+With the Proxmox inventory backend, the service SHALL read cluster EK pins
+from the directory `mds.cluster_pin_dir` (default `/etc/pve/vtpm-ek`; empty
+disables the cluster source). With the YAML inventory backend
+(`mds.inventory_path` set) the service SHALL NOT read cluster pins. A cluster pin is the file `<cluster_pin_dir>/<vmid>` whose
 name is a VM ID (digits only) and whose content is exactly 64 characters
 `[0-9a-f]`, optionally followed by one `\n`: the lowercase hex SHA-256 of the
 EK certificate DER, the value logged as `ek=` in `devid issued`. Any other
@@ -22,11 +23,15 @@ cannot be read, SHALL make the leg answer `500` with body
 both enroll legs answer `401` with body `no cluster pin for this VM` for a
 caller whose VM has neither a YAML inventory `ek_sha256` nor a valid cluster
 pin, before any challenge, and SHALL prevent the creation of a local pin.
-`require_cluster_pin: true` with an empty `cluster_pin_dir` SHALL fail the
-configuration load with an error naming both keys.
+`require_cluster_pin: true` with an empty `cluster_pin_dir`, or together
+with `inventory_path`, SHALL fail the configuration load with an error naming
+`require_cluster_pin` and the conflicting key. The `no cluster pin` refusal
+SHALL come after the EK certificate is trusted and bound to the endorsement
+key.
 
-When the caller has no YAML inventory `ek_sha256` and no valid cluster pin
-and `require_cluster_pin` is `false`, each leg SHALL log one line
+When `cluster_pin_dir` exists, the caller has no YAML inventory
+`ek_sha256` and no valid cluster pin, and `require_cluster_pin` is `false`,
+each leg SHALL log one line
 `devid enroll: no cluster pin vm=<id>, using local pin`. No log line of this
 requirement SHALL contain a fingerprint.
 
@@ -57,8 +62,16 @@ requirement SHALL contain a fingerprint.
 
 - **GIVEN** no directory `/etc/pve/vtpm-ek` and `require_cluster_pin: false`
 - **WHEN** VM `100` enrolls for the first time
-- **THEN** it enrolls with a local pin as without this requirement and the
-  leg logs `devid enroll: no cluster pin vm=100, using local pin`
+- **THEN** it enrolls with a local pin as without this requirement and no
+  `no cluster pin` line is logged
+
+#### Scenario: Directory without the VM's pin warns
+
+- **GIVEN** a directory `/etc/pve/vtpm-ek` without a file `100` and
+  `require_cluster_pin: false`
+- **WHEN** VM `100` enrolls for the first time
+- **THEN** it enrolls with a local pin and each leg logs
+  `devid enroll: no cluster pin vm=100, using local pin`
 
 #### Scenario: Unlistable cluster directory fails closed
 
@@ -74,6 +87,14 @@ requirement SHALL contain a fingerprint.
 - **WHEN** the configuration is loaded
 - **THEN** it exits non-zero with an error naming `require_cluster_pin` and
   `cluster_pin_dir`
+
+#### Scenario: Requiring a pin with the YAML inventory is a configuration error
+
+- **GIVEN** a configuration with `require_cluster_pin: true` and
+  `inventory_path` set
+- **WHEN** the configuration is loaded
+- **THEN** it exits non-zero with an error naming `require_cluster_pin` and
+  `inventory_path`
 
 ## MODIFIED Requirements
 
@@ -219,9 +240,12 @@ VM in the current inventory has that fingerprint as its non-empty
 `ek_sha256`.
 
 On a host whose inventory backend is Proxmox, a store file or cluster pin
-whose VM ID is not listed in the cluster's VM list (`/etc/pve/.vmlist`) SHALL
-NOT refuse anyone. When that list cannot be read or parsed, no pin SHALL be
-ignored for this reason and the leg SHALL log one line saying so.
+whose VM ID has no guest configuration on any node of the cluster (no
+`/etc/pve/nodes/*/qemu-server/<vmid>.conf` and no
+`/etc/pve/nodes/*/lxc/<vmid>.conf`) SHALL NOT refuse anyone. When
+`/etc/pve/nodes` cannot be listed, no pin SHALL be ignored for this reason
+and the leg SHALL log one line saying so. With the YAML inventory backend no
+pin SHALL be ignored for this reason.
 
 A refused leg SHALL answer `401` with body
 `EK certificate is pinned to another VM`, SHALL NOT name the other VM in the
@@ -242,7 +266,8 @@ pin because of a refusal.
 
 #### Scenario: A clone with its source's EK is refused
 
-- **GIVEN** `/var/lib/<package>/ek-pins/399` holding fingerprint `abc…`
+- **GIVEN** `/var/lib/<package>/ek-pins/399` holding fingerprint `abc…` and,
+  on a Proxmox host, a guest configuration for VM `399`
 - **WHEN** either enroll leg is called by VM `390` with a trusted EK whose
   fingerprint is `abc…`
 - **THEN** the response is `401` with body
@@ -251,9 +276,9 @@ pin because of a refusal.
 
 #### Scenario: A clone is refused on a node that never saw its source
 
-- **GIVEN** a valid cluster pin `/etc/pve/vtpm-ek/399` holding `abc…`, VM
-  `399` listed in `/etc/pve/.vmlist`, and no store file for `399` on this
-  node
+- **GIVEN** a valid cluster pin `/etc/pve/vtpm-ek/399` holding `abc…`, a
+  guest configuration for VM `399` on another node, and no store file for
+  `399` on this node
 - **WHEN** either enroll leg is called on this node by VM `390` with EK
   fingerprint `abc…`
 - **THEN** the response is `401` with body
@@ -263,9 +288,18 @@ pin because of a refusal.
 #### Scenario: A destroyed VM's pin refuses nobody
 
 - **GIVEN** a Proxmox host, a valid cluster pin and a store file for VM
-  `399` holding `abc…`, and VM `399` not listed in `/etc/pve/.vmlist`
+  `399` holding `abc…`, and no guest configuration for VM `399` on any
+  node
 - **WHEN** either enroll leg is called by VM `450` with EK fingerprint `abc…`
 - **THEN** the leg is not refused by this requirement
+
+#### Scenario: Without a guest-config tree nothing is ignored
+
+- **GIVEN** a YAML inventory host and `/var/lib/<package>/ek-pins/399`
+  holding `abc…`, with VM `399` absent from the inventory
+- **WHEN** either enroll leg is called by VM `390` with EK fingerprint `abc…`
+- **THEN** the response is `401` with body
+  `EK certificate is pinned to another VM`
 
 #### Scenario: Two first enrollments with one EK leave one pin
 

@@ -35,12 +35,19 @@ with the local pin kept as a logged fallback and a switch
   one it keeps today's local first-use pin and logs one warning line per leg.
 - `mds.require_cluster_pin` (default `false`): when `true`, a VM without a
   valid cluster pin is refused on both legs with `401`
-  `no cluster pin for this VM`, and no local pin is created.
+  `no cluster pin for this VM`, and no local pin is created. A VM restored
+  under a new ID then needs root to write its cluster pin by hand.
+- Cluster pins and the stale-pin filter apply only with the Proxmox
+  inventory backend; a YAML host is unchanged.
 - The cross-VM refusal of `refuse-an-ek-pinned-to-another-vm` also scans
-  every cluster pin, so a clone is refused on every node. Pins of a VM ID that
-  is not in the cluster's VM list (`/etc/pve/.vmlist`) no longer refuse
+  every cluster pin, so a clone is refused on every node. On Proxmox, pins of
+  a VM ID that has no guest config left in the cluster
+  (`/etc/pve/nodes/*/{qemu-server,lxc}/<vmid>.conf`) no longer refuse
   anyone, local or cluster, so a destroyed VM's stale pin cannot block a VM
-  restored from its backup.
+  restored from its backup. This supersedes that change's "never decide a
+  pin is stale" for the scan (design D-g, Risks).
+- Issue #89 is eased on the issuing side only; its SPIRE side (stale agents
+  under `cn:<vmid>`) is untouched and #89 stays open.
 
 ## Impact
 
@@ -52,6 +59,13 @@ with the local pin kept as a logged fallback and a switch
   Successful Enrollment", "Enforce The Stored EK Pin When Inventory Has None"
   and "Refuse An EK Pinned To Another VM", and adds "Read Cluster EK Pins From
   pmxcfs".
+- **Order of approval:** (1) bgl-infra P1-w, a change of its own there,
+  which also decides how the hook is attached (a hookscript per VM config
+  or node-wide) and covers VMs created before it; (2) P1-w's backfill of
+  today's local pins, with a clean report; (3) this reader, installed per
+  node; (4) `require_cluster_pin: true`, per node, last. Until (1) and (2)
+  every VM has no cluster pin and runs on fallback A, so this change alone
+  changes nothing but the scan's stale-pin filter.
 - **Depends on bgl-infra P1-w** for any effect: the hook that writes
   `/etc/pve/vtpm-ek/<vmid>` on a vTPM's first initialisation, and the one-off
   backfill of today's local pins. Without them the directory is absent, which
