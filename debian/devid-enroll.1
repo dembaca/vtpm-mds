@@ -48,7 +48,8 @@ without its
 .B i-
 prefix, read with an IMDSv2 session token. Every run that finds a readable
 certificate reads it, also when nothing is due; a first enrollment does not.
-It is tried three times over about ten seconds. When it still cannot be read,
+It is tried three times over about ten seconds (1.5 s per try, 3 s apart),
+without a proxy. When it still cannot be read,
 or does not start with
 .BR i- ,
 the run exits non-zero, makes no enroll request and changes no file. The
@@ -59,10 +60,13 @@ only with
 on; with it off, every run with a certificate fails although enrollment
 itself would work.
 .PP
-Every run also derives the storage parent and loads the DevID key, a few
-seconds of TPM work on a vTPM. When the blobs load, a renewal reuses that
-key; when they do not decode or the TPM refuses them for integrity, binding
-or sensitive-area reasons, it creates a new key, as a first enrollment does.
+Whenever both DevID blobs are present, a run derives the storage parent and
+loads the DevID key, also when nothing is due: a few seconds of TPM work on a
+vTPM. When the blobs load, a renewal reuses that key; when they do not decode
+or the TPM refuses them for integrity, binding or sensitive-area reasons, it
+creates a new key, as a first enrollment does, and the log line says
+.I "new key"
+whatever reason it names. A missing blob also gives a new key.
 Any other TPM error, including a warning such as
 .B TPM_RC_RETRY
 or

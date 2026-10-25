@@ -76,7 +76,9 @@ with `go test -tags tpmsim ./internal/devid/`.
       VM: `certificate is for another VM` in
       `TestRenewReasonsWithLoadableBlobs`. The helper sends
       `X-aws-ec2-metadata-token-ttl-seconds: 60` (the service ignores it) and
-      `X-aws-ec2-metadata-token`, 3 s per request, 5 s between tries.
+      `X-aws-ec2-metadata-token`, at most 1.5 s per try (token and read
+      together), 3 s between tries, no proxy; `TestReadVMIDTryTimesOut`
+      checks the per-try limit.
 - [x] 1.4 Fail the run on any other TPM error and leave the files unchanged
       (D-c); verify with a unit test where `TPM2_Load` answers
       `TPM_RC_RETRY`: non-zero exit, no request, files unchanged
@@ -88,20 +90,22 @@ with `go test -tags tpmsim ./internal/devid/`.
 - [x] 1.5 Log the reason once per renewal (D-d); verify in the tests' log
       output
       `LogRenewReason` writes `devid-enroll: renewing <dir>: <reason>`, with
-      the cause appended for `unreadable certificate` and `key does not load
-      in this TPM`; it replaces `LogRenewCorruptCert`. The reason tests
+      the cause in parentheses for `unreadable certificate`, and for foreign
+      blobs whatever the reason, ending `; new key)`
+      (`TestRenewForAnotherVMWithBlobsFromAnotherTPM`); it replaces `LogRenewCorruptCert`. The reason tests
       assert exactly one such line with the expected reason, and none for
       fitting materials or a failed run.
 - [ ] 1.6 Update `debian/devid-enroll.1` (including the `CN` check, that
       every run with a certificate reads `instance-id`, and the dependency on
       the host's `enable_ec2_compat`) and add the 0.3.2 entry to
-      `debian/changelog` (certificates from before the `CN`-only subject
-      renew once); verify with `man -l`
+      `debian/changelog`; verify with `man -l`
       Man page done: `man -l debian/devid-enroll.1` renders the fit checks,
       the seven reasons, the `instance-id` read on every run with a
       certificate, its three tries, the `enable_ec2_compat` dependency and
-      the TPM-warning rule. **Open:** the 0.3.2 `debian/changelog` entry is
-      written on the release branch, not here.
+      the TPM-warning rule, and that a foreign key is logged as `new key`
+      whatever the reason. **Open:** the 0.3.2 `debian/changelog` entry is
+      left to the release branch. (The CN has been the VM ID since
+      2026-10-03, so the CN check does not renew earlier certificates.)
 - [x] 1.7 Run `go vet ./...`, `go test ./...` and
       `openspec validate --all --strict`
       `go vet ./...` clean, also with `-tags tpmsim`; `go test ./...` ok for
@@ -145,7 +149,10 @@ with `go test -tags tpmsim ./internal/devid/`.
   an earlier reason. Should-fix taken: the `enable_ec2_compat` dependency,
   the read only with a parseable certificate, three tries before failing.
   Nits taken: `CN` in D-a's list; the changelog notes the one-time renewal.
-- [ ] Review of the implementation by a stronger model before the PR is
+- Fable, 2026-10-25, of the implementation (`25e7626`): no must-fix;
+  should-fix taken: foreign cause logged with any reason, retry timing;
+  nits taken: no proxy, man-page wording, 1.6 evidence.
+- [x] Review of the implementation by a stronger model before the PR is
       called ready
 
 ## 3. Archive

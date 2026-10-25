@@ -1,6 +1,7 @@
 package devid
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,15 +10,15 @@ import (
 )
 
 // instanceIDAttempts tries to read instance-id, three times over about ten
-// seconds, for the short gaps of a host upgrade
-// (renew-when-the-devid-key-is-not-this-tpms D-e).
+// seconds (at most 3 × 1.5 s per try plus 2 × 3 s between tries), for the
+// short gaps of a host upgrade (renew-when-the-devid-key-is-not-this-tpms D-e).
 const instanceIDAttempts = 3
 
-// Seams for the instance-id tests: the pause between tries and the timeout of
-// each request.
+// Seams for the instance-id tests: the pause between tries and the time one
+// try, token and instance-id together, may take.
 var (
-	instanceIDSleep   = func() { time.Sleep(5 * time.Second) }
-	instanceIDTimeout = 3 * time.Second
+	instanceIDSleep   = func() { time.Sleep(3 * time.Second) }
+	instanceIDTimeout = 1500 * time.Millisecond
 )
 
 // ReadVMID returns this guest's VM ID as the metadata service at mdsBaseURL
@@ -46,9 +47,11 @@ func ReadVMID(mdsBaseURL string) (string, error) {
 }
 
 func fetchInstanceID(mdsBaseURL string) (string, error) {
-	client := &http.Client{Timeout: instanceIDTimeout}
+	ctx, cancel := context.WithTimeout(context.Background(), instanceIDTimeout)
+	defer cancel()
+	client := &http.Client{Transport: directTransport}
 
-	req, err := http.NewRequest(http.MethodPut, mdsBaseURL+"/latest/api/token", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, mdsBaseURL+"/latest/api/token", nil)
 	if err != nil {
 		return "", err
 	}
@@ -62,7 +65,7 @@ func fetchInstanceID(mdsBaseURL string) (string, error) {
 		return "", fmt.Errorf("session token: empty answer")
 	}
 
-	req, err = http.NewRequest(http.MethodGet, mdsBaseURL+"/latest/meta-data/instance-id", nil)
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, mdsBaseURL+"/latest/meta-data/instance-id", nil)
 	if err != nil {
 		return "", err
 	}

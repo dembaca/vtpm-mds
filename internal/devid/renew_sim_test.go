@@ -268,6 +268,18 @@ func fresh() (time.Time, time.Time) {
 // that run writes then fit, and the next run makes no request. Nothing needs a
 // fourth object slot, and nothing stays loaded.
 func TestRenewWithBlobsFromAnotherTPM(t *testing.T) {
+	renewWithForeignBlobs(t, "390", ": key does not load in this TPM (DevID blobs are foreign")
+}
+
+// Task 2.3's case: the clone's certificate names its source and the blobs are
+// foreign. The earlier reason is logged, and the line still says that the key
+// does not load and is replaced.
+func TestRenewForAnotherVMWithBlobsFromAnotherTPM(t *testing.T) {
+	renewWithForeignBlobs(t, "399", ": certificate is for another VM (key does not load in this TPM: DevID blobs are foreign")
+}
+
+func renewWithForeignBlobs(t *testing.T, cn, wantLog string) {
+	t.Helper()
 	f := DefaultKeyFactory()
 
 	other, err := simulator.Get()
@@ -290,7 +302,7 @@ func TestRenewWithBlobsFromAnotherTPM(t *testing.T) {
 		t.Fatal(err)
 	}
 	nb, na := fresh()
-	writeTestCert(t, dir, foreignKey, "390", nb, na)
+	writeTestCert(t, dir, foreignKey, cn, nb, na)
 	logs := bufferLog(t)
 
 	opts := ClientOptions{MDSBaseURL: srv.URL, OutDir: dir, Factory: f}
@@ -303,8 +315,8 @@ func TestRenewWithBlobsFromAnotherTPM(t *testing.T) {
 	if sameKey(t, *srv.lastStartKey(), foreign.Public) {
 		t.Error("the request reused the foreign key")
 	}
-	if !strings.Contains(logs.String(), ": key does not load in this TPM") {
-		t.Errorf("log does not name the reason: %q", logs.String())
+	if out := logs.String(); !strings.Contains(out, wantLog) || !strings.Contains(out, "; new key)") {
+		t.Errorf("log %q: want %q and the new key", out, wantLog)
 	}
 	pubBlob, _ := os.ReadFile(filepath.Join(dir, "devid.pub.blob"))
 	if bytes.Equal(pubBlob, foreign.PublicBlob) {

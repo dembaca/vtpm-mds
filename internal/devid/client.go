@@ -124,9 +124,13 @@ func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 		devID, err = factory.LoadDevID(rw, pubBlob, privBlob)
 		switch {
 		case errors.Is(err, ErrDevIDForeign):
-			devID = nil // a new key, as in a first enrollment
+			// A new key, as in a first enrollment. The log says so whatever
+			// the reason, since an earlier one hides that the key is replaced.
+			devID = nil
 			if reason == "" {
-				reason, detail = "key does not load in this TPM", err.Error()
+				reason, detail = "key does not load in this TPM", err.Error()+"; new key"
+			} else {
+				detail = "key does not load in this TPM: " + err.Error() + "; new key"
 			}
 		case err != nil:
 			// A TPM warning or any other failure says nothing about whose
@@ -340,8 +344,17 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
+// directTransport never uses a proxy: the metadata service is link-local, and
+// http_proxy in the guest's environment must not route requests to it, nor the
+// EK certificate they carry, anywhere else.
+var directTransport = func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = nil
+	return t
+}()
+
 func httpPostJSON(url string, body []byte, ekCertHeader string) ([]byte, error) {
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second, Transport: directTransport}
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err

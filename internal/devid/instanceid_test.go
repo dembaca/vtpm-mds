@@ -309,3 +309,29 @@ func TestIsForeignLoadError(t *testing.T) {
 		}
 	}
 }
+
+// Task 1.3a: one try, token and read together, is cut off after the per-try
+// limit, so three tries stay near ten seconds.
+func TestReadVMIDTryTimesOut(t *testing.T) {
+	sleeps := noInstanceIDSleep(t)
+	old := instanceIDTimeout
+	instanceIDTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { instanceIDTimeout = old })
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	start := time.Now()
+	if _, err := ReadVMID(srv.URL); err == nil {
+		t.Fatal("ReadVMID succeeded against a service that never answers")
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("three tries took %v", d)
+	}
+	if *sleeps != 2 {
+		t.Errorf("%d pauses between tries, want 2", *sleeps)
+	}
+}

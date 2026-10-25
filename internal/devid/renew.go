@@ -93,10 +93,11 @@ func TryRestartSPIREAgent() {
 // renewed: "no certificate", "unreadable certificate", "due", "certificate is
 // for another VM", "missing blob", "certificate does not match key" or "key
 // does not load in this TPM" (renew-when-the-devid-key-is-not-this-tpms D-d).
-// detail, when set, is the error behind the reason.
+// detail, when set, follows in parentheses: the error behind the reason, and
+// whenever the blobs are foreign, that a new key replaces them.
 func LogRenewReason(dir, reason, detail string) {
 	if detail != "" {
-		log.Printf("devid-enroll: renewing %s: %s: %s", dir, reason, detail)
+		log.Printf("devid-enroll: renewing %s: %s (%s)", dir, reason, detail)
 		return
 	}
 	log.Printf("devid-enroll: renewing %s: %s", dir, reason)
