@@ -171,8 +171,11 @@ func (e *Enroller) pinnedToAnotherVM(vmid, fp string) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			if stored != "" && strings.EqualFold(stored, fp) && e.guestExists(name) {
-				return name, nil
+			if stored != "" && strings.EqualFold(stored, fp) {
+				if e.guestExists(name) {
+					return name, nil
+				}
+				logStalePin(vmid, name)
 			}
 		}
 	}
@@ -184,6 +187,7 @@ func (e *Enroller) pinnedToAnotherVM(vmid, fp string) (string, error) {
 		if e.guestExists(id) {
 			return id, nil
 		}
+		logStalePin(vmid, id)
 	}
 	if e.InventoryPins == nil {
 		return "", nil

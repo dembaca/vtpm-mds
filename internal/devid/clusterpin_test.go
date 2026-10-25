@@ -189,6 +189,9 @@ func writeGuestConfig(t *testing.T, root, node, kind, vmid string) {
 }
 
 func TestPinnedToAnotherVMClusterAndStale(t *testing.T) {
+	old := guestConfigRecheck
+	guestConfigRecheck = 0
+	t.Cleanup(func() { guestConfigRecheck = old })
 	cdir, dir, nodes := t.TempDir(), t.TempDir(), t.TempDir()
 	writeGuestConfig(t, nodes, "holger", "qemu-server", "399")
 	e := &Enroller{PinDir: dir, ClusterPinDir: cdir, GuestConfigRoot: nodes}
@@ -209,8 +212,14 @@ func TestPinnedToAnotherVMClusterAndStale(t *testing.T) {
 	if err := os.Remove(filepath.Join(cdir, "399")); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := e.pinnedToAnotherVM("450", testHexPin); err != nil || got != "" {
+	var got string
+	var err error
+	logs := captureLog(t, func() { got, err = e.pinnedToAnotherVM("450", testHexPin) })
+	if err != nil || got != "" {
 		t.Fatalf("stale pins: got %q err=%v", got, err)
+	}
+	if !strings.Contains(logs, "devid enroll: stale pin ignored vm=450 ignored_stale=500") || strings.Contains(logs, testHexPin) {
+		t.Fatalf("stale-pin log: %q", logs)
 	}
 
 	// A container config counts as existing.
@@ -359,5 +368,25 @@ func TestClusterPinVanishedAndDirectory(t *testing.T) {
 	}
 	if ids, err := e.clusterPinsMatching("390", testHexPin); err != nil || len(ids) != 0 {
 		t.Fatalf("vanished pin: ids=%v err=%v", ids, err)
+	}
+}
+
+// A config that appears between the two looks (a migration's move) still
+// counts, so the pin is not ignored.
+func TestGuestExistsRechecks(t *testing.T) {
+	nodes := t.TempDir()
+	e := &Enroller{GuestConfigRoot: nodes}
+	old := guestConfigRecheck
+	guestConfigRecheck = 200 * time.Millisecond
+	t.Cleanup(func() { guestConfigRecheck = old })
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		writeGuestConfig(t, nodes, "holger", "qemu-server", "399")
+	}()
+	if !e.guestExists("399") {
+		t.Fatal("config written during the recheck window was not found")
+	}
+	if e.guestExists("398") {
+		t.Fatal("absent VM reported as existing")
 	}
 }

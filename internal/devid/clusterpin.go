@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+	"time"
 )
 
 // Cluster pins: one file per VMID under ClusterPinDir (/etc/pve/vtpm-ek),
@@ -110,14 +111,34 @@ func (e *Enroller) clusterPinsMatching(vmid, fp string) ([]string, error) {
 	return ids, nil
 }
 
+// guestConfigRecheck is how long guestExists waits before it looks a second
+// time, so a config caught mid-move (migration, HA recovery) is not taken
+// for a destroyed VM (D-g). A variable for tests.
+var guestConfigRecheck = 250 * time.Millisecond
+
 // guestExists reports whether any node under GuestConfigRoot (/etc/pve/nodes)
 // has a qemu-server or lxc config for vmid (D-g). It answers true when
 // GuestConfigRoot is empty (YAML backend) or cannot be listed, so a pin is
-// never ignored on doubt; the latter is logged.
+// never ignored on doubt; the latter is logged. A config that is not found
+// is looked for once more after guestConfigRecheck.
 func (e *Enroller) guestExists(vmid string) bool {
 	if e == nil || e.GuestConfigRoot == "" {
 		return true
 	}
+	if e.guestConfigFound(vmid) {
+		return true
+	}
+	time.Sleep(guestConfigRecheck)
+	return e.guestConfigFound(vmid)
+}
+
+// logStalePin records that a pin of a destroyed VM did not refuse caller,
+// so reviving a destroyed VM's vTPM (a backup) shows in the journal.
+func logStalePin(caller, stale string) {
+	log.Printf("devid enroll: stale pin ignored vm=%s ignored_stale=%s", caller, stale)
+}
+
+func (e *Enroller) guestConfigFound(vmid string) bool {
 	nodes, err := os.ReadDir(e.GuestConfigRoot)
 	if err != nil {
 		log.Printf("devid enroll: cannot list %s, no pin is treated as stale: %v", e.GuestConfigRoot, err)

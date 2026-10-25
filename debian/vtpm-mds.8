@@ -154,7 +154,9 @@ configuration left on any node
 .RI ( /etc/pve/nodes/*/qemu\-server/<vmid>.conf
 or
 .IR \&.../lxc/<vmid>.conf )
-refuses nobody: a destroyed VM's vTPM may then enroll again under another ID.
+refuses nobody: a destroyed VM's vTPM may then enroll again under another ID,
+and each such leg logs
+.BR "devid enroll: stale pin ignored vm=<vmid> ignored_stale=<old vmid>" .
 .PP
 The service never deletes or rewrites a pin; each case below is the
 operator's.
@@ -181,7 +183,14 @@ value of its EK as one line to
 .RI "" /etc/pve/vtpm\-ek/ "<new vmid>" .
 .TP
 .B A reused VM ID
-A new VM under the ID of a destroyed one has a new vTPM. The hook replaces
+The new VM receives an LDevID with the same subject,
+.BR CN=<vmid> ,
+so in SPIRE it inherits the destroyed VM's agent ID, its node alias and every
+entry under them. Before reusing a VM ID, evict the old agent
+.RB ( "spire\-server agent evict" )
+and check the alias on
+.BR tpm_devid:subject:cn:<vmid> .
+The new VM has a new vTPM. The hook replaces
 the cluster pin on its first initialisation; where it did not run, the VM is
 refused with
 .IR "EK certificate does not match cluster pin" :

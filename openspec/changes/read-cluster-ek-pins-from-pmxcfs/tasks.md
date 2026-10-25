@@ -151,6 +151,18 @@ including D-g and D-b.
       (`TestEnsurePinHonoursLateClusterPin`); named subtests; both keys in
       the man page's CONFIGURATION.
 
+- [x] Fable review of D-g's rationale (coordinator, 2026-10-25,
+      `ystzzfqg…`), at the maintainer's request: keep D-g, with conditions.
+      - Must-fix taken: D-g is stated as restore convenience against a lost
+        operator touchpoint, with the rights shift in Risks; VM ID reuse is
+        unsafe for SPIRE until #89's reconciler, so the operator must evict
+        the old agent and check the alias, stated in the design, the spec
+        delta and `vtpm-mds(8)`.
+      - Should-fix taken: `guestExists` looks a second time after 250 ms,
+        with the migration window in Risks (`TestGuestExistsRechecks`); one
+        log line per ignored stale pin (`ignored_stale=`, tested).
+      - The README is the coordinator's.
+
 ## 3. Archive
 
 - [ ] 3.1 After merge, the coordinator archives the change

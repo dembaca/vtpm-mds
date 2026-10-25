@@ -244,8 +244,15 @@ whose VM ID has no guest configuration on any node of the cluster (no
 `/etc/pve/nodes/*/qemu-server/<vmid>.conf` and no
 `/etc/pve/nodes/*/lxc/<vmid>.conf`) SHALL NOT refuse anyone. When
 `/etc/pve/nodes` cannot be listed, no pin SHALL be ignored for this reason
-and the leg SHALL log one line saying so. With the YAML inventory backend no
-pin SHALL be ignored for this reason.
+and the leg SHALL log one line saying so. A configuration that is not found
+SHALL be looked for once more after a short delay before its pin is ignored.
+Each pin ignored for this reason SHALL log one line
+`devid enroll: stale pin ignored vm=<caller> ignored_stale=<id>`, without
+the fingerprint. With the YAML inventory backend no pin SHALL be ignored for
+this reason.
+
+This requirement does not make reusing a VM ID safe for SPIRE: a VM under a
+reused ID receives an LDevID with the same subject as the destroyed one.
 
 A refused leg SHALL answer `401` with body
 `EK certificate is pinned to another VM`, SHALL NOT name the other VM in the
@@ -291,7 +298,8 @@ pin because of a refusal.
   `399` holding `abc…`, and no guest configuration for VM `399` on any
   node
 - **WHEN** either enroll leg is called by VM `450` with EK fingerprint `abc…`
-- **THEN** the leg is not refused by this requirement
+- **THEN** the leg is not refused by this requirement and logs
+  `devid enroll: stale pin ignored vm=450 ignored_stale=399`
 
 #### Scenario: Without a guest-config tree nothing is ignored
 

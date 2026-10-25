@@ -120,6 +120,21 @@ pins; the YAML inventory's `ek_sha256` semantics; any guest change.
   The guest config files were chosen over `/etc/pve/.vmlist`, which holds
   the same list as JSON but is pmxcfs-internal and undocumented; the config
   paths are the interface this service already reads.
+  A config that is not found is looked for once more after 250 ms, so one
+  caught mid-move by a migration or HA recovery is not taken for a destroyed
+  VM. Each pin ignored this way logs
+  `devid enroll: stale pin ignored vm=<caller> ignored_stale=<id>`, so a
+  revived backup shows in the journal.
+  **What D-g trades, stated plainly:** it is convenience for restoring a VM
+  under a new ID, paid for with an operator touchpoint. Before, reviving a
+  destroyed VM's vTPM needed root on a node to delete its pin; now the
+  Proxmox rights to restore a backup and allocate a VM
+  (`VM.Backup`, `VM.Allocate`) are enough once the old VM is destroyed.
+  The maintainer accepted this on 2026-10-25 (`4w4xar6z…`), reasoning
+  that access policies will name roles or groups rather than a VM ID. That
+  argument is about **VM ID reuse** (D-i), not about D-g: a policy keyed to
+  a role does not follow a revived vTPM either way. A Fable review of the
+  argument (coordinator, `ystzzfqg…`) agreed to keep D-g on these terms.
 - **D-h. Migration of today's local pins is the backfill's.** The daemon
   cannot write the cluster directory (D-a), so it does not migrate. P1-w's
   one-off root run writes a cluster pin for each VM ID whose local pins agree
@@ -141,7 +156,14 @@ pins; the YAML inventory's `ek_sha256` semantics; any guest change.
   also documented in `vtpm-mds(8)`. An optional reaper for pins of VM IDs
   without a guest config is P1-w's, later. The SPIRE side of #89 (stale
   agents under `cn:<vmid>`, eight under `cn:399` on 2026-10-25) is not
-  touched by this change; #89 stays open.
+  touched by this change; #89 stays open. **Until #89's reconciler
+  exists, reusing a VM ID is unsafe on the SPIRE side:** the new VM gets
+  an LDevID with the same `CN=<vmid>`, so it inherits the old VM's agent
+  SPIFFE ID, its node alias on `tpm_devid:subject:cn:<vmid>` and every
+  entry under it. Before a VM ID is reused, the operator must run
+  `spire-server agent evict` for the old agent and check the alias. The
+  roles argument above holds only once role assignment follows the living
+  VM (for example its tags) rather than `cn:<vmid>`.
 - **D-j. Config.** Two keys under `mds`, decoded strictly like the rest:
   `cluster_pin_dir` (string, default `/etc/pve/vtpm-ek`, empty disables the
   cluster source, and then `require_cluster_pin: true` fails the load with an
@@ -164,6 +186,16 @@ pins; the YAML inventory's `ek_sha256` semantics; any guest change.
   default, pins that EK locally. Guests cannot create guest configs, so a
   guest cannot cause this; it is a deliberate narrowing of the refusal, for
   the restore case.
+- **Rights shift (D-g).** Reviving a destroyed VM's vTPM no longer needs
+  root, only the Proxmox rights to restore and allocate; and anyone with
+  `VM.Config.Disk` on a VM can give it a new vTPM, after which the hook
+  replaces its cluster pin without root (D-a, D-i). Both are visible only
+  as log lines.
+- **Migration window (D-g).** A clone that enrolls while its source's config
+  is between nodes for longer than the 250 ms recheck is not refused; it
+  then holds a pin for the clone's ID, and the source VM, enrolling
+  afterwards, is refused as `pinned to another VM` (a lockout, not an
+  identity gain). Not observed; Proxmox moves a config with one rename.
 - **Two cluster pins with one EK lock out both VMs** through the scan. That
   is a hook or backfill defect, visible as `pinned=` naming the other VM.
 - Every leg lists two pin directories and `stat`s the guest configs of the
