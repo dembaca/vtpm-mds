@@ -68,15 +68,36 @@ and this record; the README pin row is the coordinator's.
 
 ## 2. Verify on hogan
 
-- [ ] 2.1 Build with `make deb-local` from a tree rebased on `main`;
+- [x] 2.1 Build with `make deb-local` from a tree rebased on `main`;
       `dpkg-deb -c`/`-I`, `lintian --fail-on error,warning`,
       `systemd-analyze verify`
-- [ ] 2.2 Install on hogan (maintainer's go); VM 399 enrolls into a scratch
+      `vtpm-mds_0.3.1+git20261025.cda26ac97bed_amd64.deb` from `cda26ac` on
+      `main@0a3d9d3`: lintian exit 0, `systemd-analyze verify` on the
+      extracted unit clean, the extracted binary reports that version.
+- [x] 2.2 Install on hogan (maintainer's go); VM 399 enrolls into a scratch
       directory unchanged (own pin), SPIRE's material untouched
+      2026-10-25 11:03:57, the maintainer's go on ask `3e6hqhmu…`: `dpkg -i`
+      over 0.3.0, `vtpm-mds` and `vtpm-mds-bind` active, `/health` `ok`. At
+      11:19 `devid-enroll -out <scratch>` in VM 399 (over SSH, by
+      `agent-cursor-devid-4d15`): `rc=0`; hogan logged `enroll/start 200`,
+      `devid issued … vm=399`, `enroll/finish 200` and no refusal for any VM.
+      `/var/lib/spire/agent` unchanged, `spire-agent` not restarted, the
+      scratch directory removed.
 - [ ] 2.3 A clone of 399 that kept its vTPM state (bgl-infra, own ask) is
       refused on both legs with the D-c body and log line, and no pin file
       for the clone appears
-- [ ] 2.4 Time one leg with the store as it is on hogan
+      2026-10-25 13:16:24, clone 392 of 399 with its vTPM state (bgl-infra,
+      ask `a4reqfw8…`): hogan logged `devid enroll auth: EK certificate is
+      pinned to another VM vm=392 pinned=399` and `enroll/start 401`, and
+      nothing else for 392 (no `enroll/finish`, no `devid issued`). Only the
+      start leg was reached, since it refused; the finish leg is covered by
+      `TestEnrollLegsRefuseEKPinnedToAnotherVM`. No pin for 392 is inferred
+      (pins are created only in finish); left open until a root `ls` of
+      `ek-pins/` confirms it, which this user cannot read.
+- [x] 2.4 Time one leg with the store as it is on hogan
+      Access log on hogan: the refused `enroll/start` took 0.95 ms, VM 399's
+      accepted `enroll/start` 5.0 ms and `enroll/finish` 8.4 ms, with the
+      store holding the pins of this node's VMs.
 
 ## Pre-review
 
