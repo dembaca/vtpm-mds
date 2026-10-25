@@ -95,7 +95,7 @@ with `go test -tags tpmsim ./internal/devid/`.
       (`TestRenewForAnotherVMWithBlobsFromAnotherTPM`); it replaces `LogRenewCorruptCert`. The reason tests
       assert exactly one such line with the expected reason, and none for
       fitting materials or a failed run.
-- [ ] 1.6 Update `debian/devid-enroll.1` (including the `CN` check, that
+- [x] 1.6 Update `debian/devid-enroll.1` (including the `CN` check, that
       every run with a certificate reads `instance-id`, and the dependency on
       the host's `enable_ec2_compat`) and add the 0.3.2 entry to
       `debian/changelog`; verify with `man -l`
@@ -106,6 +106,8 @@ with `go test -tags tpmsim ./internal/devid/`.
       whatever the reason. **Open:** the 0.3.2 `debian/changelog` entry is
       left to the release branch. (The CN has been the VM ID since
       2026-10-03, so the CN check does not renew earlier certificates.)
+      Changelog: the 0.3.2 entry came with #86 (`release-0.3.2`, merged as
+      `538db35`, tagged `v0.3.2`).
 - [x] 1.7 Run `go vet ./...`, `go test ./...` and
       `openspec validate --all --strict`
       `go vet ./...` clean, also with `-tags tpmsim`; `go test ./...` ok for
@@ -115,13 +117,33 @@ with `go test -tags tpmsim ./internal/devid/`.
 
 ## 2. Verify on a guest
 
-- [ ] 2.1 Build with `make deb-local`; `dpkg-deb -c`/`-I` and
+- [x] 2.1 Build with `make deb-local`; `dpkg-deb -c`/`-I` and
       `lintian --fail-on error,warning` on `devid-enroll`
+      Verified on the release package instead: `devid-enroll_0.3.2_amd64.deb`
+      from the `v0.3.2` run, sha256 equal to the GitHub digest, members
+      `control.tar.xz`/`data.tar.xz`, `Version: 0.3.2`, lintian exit 0, the
+      extracted binary reports `devid-enroll 0.3.2` (2026-10-25 14:09).
 - [ ] 2.2 On VM 399 (maintainer's go), against a **scratch copy** of the
       materials via `-out`, so SPIRE's key and agent ID stay untouched: with
       fitting materials a run makes no request and leaves the files
       unchanged; with `devid.pub.blob` removed from the copy it renews with
       reason `missing blob`
+      2026-10-25, the maintainer's go on ask `sbnmr9ji…`; 0.3.2 installed in VM
+      399 at 14:10 (sha256 equal to the digest). Boot after `qm reboot` at
+      14:23: `devid-enroll.service` `success` without a renewal; hogan saw
+      only `PUT /latest/api/token 200` and `GET …/instance-id 200`. Run 1
+      over SSH by `agent-cursor-devid-4d15` at 14:43:26, `-out` a copy of
+      the materials: `rc=0`, "check done", files unchanged, on hogan token
+      and `instance-id` only, no `enroll/start`. Run 2 at 14:43:41 against an
+      **empty** scratch directory rather than the copy without
+      `devid.pub.blob`: `rc=0`, reason `no certificate`, `enroll/start 200`,
+      `devid issued … vm=399`, `enroll/finish 200`, three files with
+      `CN=399`. The `missing blob` reason itself is covered by the unit and
+      simulator tests only. SPIRE's material and agent untouched throughout.
+      Found on the way: `devid-enroll` started through the QEMU guest
+      agent's `guest-exec` leaves the agent channel unusable (twice, 14:11
+      and 14:24; as a unit and over SSH it runs normally); recorded as an
+      issue, not a defect of this change.
 - [ ] 2.3 On a clone with an empty vTPM and inherited materials (bgl-infra,
       as in 2.3c): the first boot renews with reason `certificate is for another
       VM` (it comes before the load in D-c) and a **new** key, because the
