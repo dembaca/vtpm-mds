@@ -50,6 +50,22 @@ func validateVMID(vmid string) error {
 	return nil
 }
 
+// isVMIDName reports whether a pin file name is a VM ID in the Proxmox form,
+// digits only (the YAML inventory uses the same form). validateVMID only
+// keeps a name inside the directory; this keeps renamed copies out of the
+// cross-VM scan.
+func isVMIDName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, c := range name {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func pinPath(dir, vmid string) string {
 	return filepath.Join(dir, vmid)
 }
@@ -130,9 +146,10 @@ func syncDir(dir string) {
 // pinnedToAnotherVM returns the VM ID other than vmid that fp is pinned to:
 // first a pin file in PinDir (sorted by name), then another VM's inventory
 // ek_sha256 (sorted by VM ID), or "" when none (refuse-an-ek-pinned-to-another-vm
-// D-b). Files whose name is not a valid VM ID (including the .<vmid>.tmp-*
-// of an in-flight create) and empty files are ignored. A missing PinDir is an
-// empty store; one that cannot be listed is ErrPinStore (D-d).
+// D-b). Only files named like a VM ID count (isVMIDName): a set-aside
+// "399.old" or the .<vmid>.tmp-* of an in-flight create is ignored, as are
+// empty files. A missing PinDir is an empty store; one that cannot be listed
+// is ErrPinStore (D-d).
 func (e *Enroller) pinnedToAnotherVM(vmid, fp string) (string, error) {
 	if e == nil || fp == "" {
 		return "", nil
@@ -144,7 +161,7 @@ func (e *Enroller) pinnedToAnotherVM(vmid, fp string) (string, error) {
 		}
 		for _, ent := range entries {
 			name := ent.Name()
-			if name == vmid || ent.IsDir() || validateVMID(name) != nil {
+			if name == vmid || ent.IsDir() || !isVMIDName(name) {
 				continue
 			}
 			stored, err := readStoredPin(e.PinDir, name)

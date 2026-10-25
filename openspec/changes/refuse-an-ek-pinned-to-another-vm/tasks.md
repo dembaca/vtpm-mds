@@ -86,6 +86,10 @@ and this record; the README pin row is the coordinator's.
   a pin file counts even where its own VM's inventory pin overrides it.
   Nits taken: the bounded oracle and the `/health` gap in Risks,
   `validateVMID` named, the uid-0 skip.
+- Fable, 2026-10-25, of the implementation (`e93962c`): no must-fix;
+  should-fix taken: only VMID-shaped names count, comment on the
+  inventory-pin path; nits taken: both log prefixes and the consumed session
+  in the man page, deterministic race test.
 - [ ] Review of the implementation by a stronger model before the PR is
       called ready
 

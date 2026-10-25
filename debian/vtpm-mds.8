@@ -84,6 +84,19 @@ and the journal names both VMs, never the fingerprint:
 .IP
 devid enroll auth: EK certificate is pinned to another VM vm=<vmid> pinned=<other>
 .PP
+A finish that loses a race against another VM's first enrollment with the
+same EK logs the same text with the prefix
+.B devid enroll/finish:
+instead. That finish has already consumed its enrollment session, so the guest
+starts over with
+.BR enroll/start .
+.PP
+Only pin files may live in
+.IR ek\-pins/ :
+any file whose name is a VM ID counts as that VM's pin, so a pin set aside
+must be moved out of the directory, not renamed inside it. Files whose name
+is not all digits are ignored.
+.PP
 The service never deletes or rewrites a pin; each case below is the
 operator's. Pins are per node: a node that never saw the other VM does not
 refuse.

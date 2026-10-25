@@ -35,8 +35,10 @@ any guest-side change (`renew-when-the-devid-key-is-not-this-tpms`).
   whose name is a valid VM ID other than the caller's and whose content
   equals the caller's EK fingerprint (case-insensitive), and any other VM in
   the current inventory whose non-empty `ek_sha256` equals it. "Valid VM ID"
-  is `validateVMID`, which also skips the `.<vmid>.tmp-*` files of an
-  in-flight create; empty files are ignored. A pin file counts even where
+  is digits only, the Proxmox form the YAML inventory uses too
+  (`isVMIDName`); `validateVMID` alone would let a set-aside `399.old` refuse
+  VM 399 itself. It also skips the `.<vmid>.tmp-*` files of an in-flight
+  create; empty files are ignored. A pin file counts even where
   the same VM's inventory `ek_sha256` overrides it for that VM (D-e: the
   service never decides a pin is stale). The `Enroller` sees only the
   caller's record today, so it gets a seam

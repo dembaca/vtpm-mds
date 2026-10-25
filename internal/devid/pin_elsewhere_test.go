@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -34,6 +35,8 @@ func TestPinnedToAnotherVMScan(t *testing.T) {
 	writePinFile(t, dir, "398", "\n")         // empty: ignored
 	writePinFile(t, dir, ".390.tmp-00ff", fp) // in-flight create: ignored
 	writePinFile(t, dir, "..x", fp)           // invalid VM ID: ignored
+	writePinFile(t, dir, "399.old", fp)       // set-aside copy: ignored
+	writePinFile(t, dir, "vm-a", fp)          // not VMID-shaped: ignored
 	writePinFile(t, dir, "400", "0123")       // another EK
 	if err := os.Mkdir(filepath.Join(dir, "397"), 0o750); err != nil {
 		t.Fatal(err)
@@ -44,7 +47,7 @@ func TestPinnedToAnotherVMScan(t *testing.T) {
 		t.Fatalf("other VM pinned: got %q err=%v", got, err)
 	}
 	if got, err := e.pinnedToAnotherVM("399", fp); err != nil || got != "" {
-		t.Fatalf("own pin only: got %q err=%v", got, err)
+		t.Fatalf("own pin only (399.old must not count): got %q err=%v", got, err)
 	}
 
 	// The other VM's inventory pin, through the seam.
@@ -199,28 +202,34 @@ func TestUnlistablePinDirFailsClosed(t *testing.T) {
 	}
 }
 
+// blockedOnPinLock reports whether some goroutine is waiting for pinCreateMu
+// inside ensurePinBeforeIssue.
+func blockedOnPinLock() bool {
+	buf := make([]byte, 1<<20)
+	buf = buf[:runtime.Stack(buf, true)]
+	for _, g := range strings.Split(string(buf), "\n\n") {
+		if strings.Contains(g, "sync.(*Mutex).Lock") && strings.Contains(g, "ensurePinBeforeIssue") {
+			return true
+		}
+	}
+	return false
+}
+
 // Two first finishes with one EK under two VM IDs: one pin, one LDevID (D-a2).
+// The first finish is held between scan and create until the second is
+// either waiting for pinCreateMu or, without the mutex, held at the same
+// point; no timing is involved.
 func TestConcurrentFirstFinishOneEKTwoVMs(t *testing.T) {
 	ca := mustParseTestCA(t)
-	// Hold each finish between scan and create until the other one arrives
-	// too, or 100 ms pass: without pinCreateMu both would pass the scan.
 	arrived := make(chan struct{}, 2)
+	var release chan struct{}
 	beforePinCreate = func() {
 		arrived <- struct{}{}
-		deadline := time.After(100 * time.Millisecond)
-		for len(arrived) < 2 {
-			select {
-			case <-deadline:
-				return
-			case <-time.After(time.Millisecond):
-			}
-		}
+		<-release
 	}
 	t.Cleanup(func() { beforePinCreate = nil })
 	for round := 0; round < 5; round++ {
-		for len(arrived) > 0 {
-			<-arrived
-		}
+		release = make(chan struct{})
 		dir := t.TempDir()
 		enroller := NewEnroller(ca, nil, NewSessionStore(time.Minute))
 		enroller.PinDir = dir
@@ -230,8 +239,6 @@ func TestConcurrentFirstFinishOneEKTwoVMs(t *testing.T) {
 			err error
 		}
 		vmids := []string{"390", "399"}
-		out := make(chan result, len(vmids))
-		// Both sessions exist before either finish starts.
 		sids := make([]string, len(vmids))
 		for i, vmid := range vmids {
 			sr := mustMinimalSigningRequest(t, pkix.Name{})
@@ -241,15 +248,31 @@ func TestConcurrentFirstFinishOneEKTwoVMs(t *testing.T) {
 			}
 			sids[i] = sid
 		}
+		out := make(chan result, len(vmids))
 		var wg sync.WaitGroup
-		for i, vmid := range vmids {
+		finish := func(i int) {
 			wg.Add(1)
-			go func(sid, vmid string, nonce []byte) {
+			go func() {
 				defer wg.Done()
-				pemBytes, err := enroller.Finish(sid, nonce, vmid, "same-ek", "")
+				pemBytes, err := enroller.Finish(sids[i], []byte{byte('a' + i)}, vmids[i], "same-ek", "")
 				out <- result{pem: pemBytes, err: err}
-			}(sids[i], vmid, []byte{byte('a' + i)})
+			}()
 		}
+		finish(0)
+		<-arrived // the first holds the lock, past its scan
+		finish(1)
+		for waiting := false; !waiting; {
+			select {
+			case <-arrived: // no mutex: the second passed its scan too
+				waiting = true
+			default:
+				waiting = blockedOnPinLock()
+				if !waiting {
+					runtime.Gosched()
+				}
+			}
+		}
+		close(release)
 		wg.Wait()
 		close(out)
 		var issued, refused int

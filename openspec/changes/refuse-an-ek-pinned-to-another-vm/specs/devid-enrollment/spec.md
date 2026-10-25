@@ -15,12 +15,13 @@ A refused leg SHALL answer `401` with body
 response, SHALL NOT issue a challenge or an LDevID and SHALL NOT create a pin
 for the caller. Its log line SHALL name the caller's VM ID and the VM ID
 that holds the pin and SHALL NOT contain the fingerprint. `enroll/finish`
-SHALL repeat the check atomically with creating the caller's pin, so that two
-VMs presenting one EK concurrently never both receive a pin.
+SHALL, when it creates the caller's pin, repeat the check atomically with
+that create, so that two VMs presenting one EK concurrently never both
+receive a pin.
 
 A pin file SHALL count even when the same VM's inventory `ek_sha256`
-overrides it for that VM. Empty pin files and files whose name is not a valid
-VM ID SHALL be ignored.
+overrides it for that VM. Empty pin files and files whose name is not a VM
+ID (digits only, so a set-aside `399.old` does not count) SHALL be ignored.
 When the pin directory exists but cannot be listed, the leg SHALL answer
 `500` with body `pin store unavailable`; a missing directory SHALL count as
 an empty store. The service SHALL NOT delete or rewrite any pin because of a
@@ -45,6 +46,13 @@ refusal.
 #### Scenario: The VM that holds the pin still enrolls
 
 - **GIVEN** `/var/lib/<package>/ek-pins/399` holding fingerprint `abc…`
+- **WHEN** either enroll leg is called by VM `399` with that EK
+- **THEN** the leg is not refused by this requirement
+
+#### Scenario: A set-aside pin file refuses nobody
+
+- **GIVEN** `/var/lib/<package>/ek-pins/399.old` holding fingerprint `abc…`
+  and no other pin file holding it
 - **WHEN** either enroll leg is called by VM `399` with that EK
 - **THEN** the leg is not refused by this requirement
 
