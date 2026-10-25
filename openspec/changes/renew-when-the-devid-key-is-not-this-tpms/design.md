@@ -50,9 +50,13 @@ bgl-infra; SPIRE configuration; the renewal threshold of one third.
   out-of-memory TPM would read as "not this TPM" and a not-due run would
   replace a working key. A new sentinel `ErrDevIDForeign`, wrapping the
   cause with `%w`, covers exactly: a blob that does not decode, and a
-  format-1 parameter error from `TPM2_Load` with code `TPM_RC_INTEGRITY`
-  (the private area's HMAC fails under another parent), `TPM_RC_BINDING` or
-  `TPM_RC_SENSITIVE`. Everything else, warnings such as `TPM_RC_RETRY` or
+  `TPM2_Load` answer of `TPM_RC_INTEGRITY` (the private area's HMAC fails
+  under another parent; the simulator answers it on parameter 1),
+  `TPM_RC_BINDING` (both format-1 parameter errors) or `TPM_RC_SENSITIVE`
+  (a format-0 error in the TPM specification). go-tpm returns these as
+  values; both value and pointer forms are matched. A blob file that exists
+  but cannot be read is not "missing": it fails the run like any other
+  fault. Everything else, warnings such as `TPM_RC_RETRY` or
   `TPM_RC_OBJECT_MEMORY`, other TPM errors, transport errors and a failure to
   derive the parent, fails the run with that error and changes nothing; the
   next timer run retries. The order of all checks is: certificate present

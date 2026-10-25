@@ -12,7 +12,7 @@ output path when any of the following holds:
 - a parseable certificate is present and its subject `CN` is not this
   guest's VM ID, which is the service's `/latest/meta-data/instance-id`
   without its `i-` prefix, read with a session token;
-- the DevID private or public TPM blob is missing or empty;
+- the DevID private or public TPM blob does not exist or is empty;
 - the certificate's public key does not equal the public key in the DevID
   public blob;
 - the DevID blobs are foreign to the guest's TPM: a blob does not decode, or
@@ -22,8 +22,9 @@ output path when any of the following holds:
 Otherwise the client SHALL leave the materials unchanged and exit successfully
 without calling enroll. When a parseable certificate is present and
 `instance-id` cannot be read after a few attempts or does not start with
-`i-`, or when deriving that storage root key or loading the blobs fails
-in any other way, including a TPM warning, the client SHALL exit non-zero,
+`i-`, when a blob file exists but cannot be read, or when deriving that
+storage root key or loading the blobs fails in any other way, including a
+TPM warning, the client SHALL exit non-zero,
 make no enroll request and leave the materials unchanged.
 
 When it renews and the DevID blobs at the output path load under that storage
