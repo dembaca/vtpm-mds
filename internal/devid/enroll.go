@@ -18,6 +18,10 @@ type Enroller struct {
 	// PinDir is /var/lib/<package>/ek-pins. Empty disables the TOFU store
 	// (unit tests that do not exercise pins).
 	PinDir string
+	// InventoryPins returns the current inventory's VMID -> ek_sha256 (empty
+	// when unpinned), so a leg can refuse an EK another VM is pinned to.
+	// Nil means no inventory pins are consulted.
+	InventoryPins func() map[string]string
 }
 
 // NewEnroller constructs an Enroller. sessions may be nil (a default is created).

@@ -82,6 +82,9 @@ func TestCredentialReplacesConfiguredKeyPath(t *testing.T) {
 	if enroller == nil {
 		t.Fatal("no enroller although the credential holds a valid key")
 	}
+	if enroller.InventoryPins == nil {
+		t.Error("enroller has no InventoryPins seam wired from the inventory cache")
+	}
 	if !strings.Contains(logs.String(), "DevID CA key from systemd credential") {
 		t.Errorf("log does not say the key came from the credential: %q", logs.String())
 	}
