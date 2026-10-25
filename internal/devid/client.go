@@ -2,6 +2,8 @@ package devid
 
 import (
 	"bytes"
+	"crypto"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -23,6 +25,7 @@ type ClientOptions struct {
 	OutDir       string
 	SpireDataDir string // empty skips SVID cache clear / try-restart
 	Now          func() time.Time
+	Factory      *KeyFactory // nil uses DefaultKeyFactory; a seam for tests
 }
 
 // ClientEnroll performs the full DevID enrollment against an MDS base URL.
@@ -40,10 +43,14 @@ func ClientEnroll(rw io.ReadWriter, mdsBaseURL, platformCN, outDir string) error
 	})
 }
 
-// ClientEnrollOrRenew renews when due (or materials are missing/corrupt);
-// otherwise leaves files unchanged. On a PEM change it clears the SPIRE agent
-// SVID cache (when SpireDataDir is set) before writing the new PEM, then
-// try-restarts spire-agent.
+// ClientEnrollOrRenew renews when the certificate is due or the materials do
+// not fit: a missing or unreadable certificate, a CN that is not this guest's
+// VM ID, a missing blob, a certificate over another key, or blobs foreign to
+// this TPM. Otherwise it leaves files unchanged. Any other failure on the way,
+// such as an unreadable instance-id or a TPM warning on the load, fails the
+// run without an enroll request and without touching the files. On a PEM
+// change it clears the SPIRE agent SVID cache (when SpireDataDir is set)
+// before writing the new PEM, then try-restarts spire-agent.
 func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 	if opts.MDSBaseURL == "" {
 		return fmt.Errorf("mds base URL required")
@@ -61,42 +68,100 @@ func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 	privPath := filepath.Join(opts.OutDir, "devid.priv.blob")
 	pubPath := filepath.Join(opts.OutDir, "devid.pub.blob")
 
+	// The checks run cheapest first, so the TPM is touched only when the files
+	// agree. The first condition that holds is the reason, but the load still
+	// runs after an earlier one, because it decides between the loaded key and
+	// a new one (renew-when-the-devid-key-is-not-this-tpms D-a to D-d).
+	var reason, detail string
 	existing, err := LoadCertPEMFile(certPath)
-	if err != nil {
-		LogRenewCorruptCert(certPath, err)
-		existing = nil // renew-due
-	}
-	if existing != nil && !RenewDue(existing, now) {
-		return nil
+	switch {
+	case err != nil:
+		reason, detail = "unreadable certificate", err.Error()
+	case existing == nil:
+		reason = "no certificate"
+	case RenewDue(existing, now):
+		reason = "due"
 	}
 
-	if err := os.MkdirAll(opts.OutDir, 0o700); err != nil {
+	// A first enrollment needs no CN. With a certificate, an unreadable
+	// instance-id fails the run before the TPM is touched.
+	if existing != nil {
+		vmid, err := ReadVMID(opts.MDSBaseURL)
+		if err != nil {
+			return err
+		}
+		if reason == "" && existing.Subject.CommonName != vmid {
+			reason = "certificate is for another VM"
+		}
+	}
+
+	pubBlob, err := readBlob(pubPath)
+	if err != nil {
 		return err
 	}
+	privBlob, err := readBlob(privPath)
+	if err != nil {
+		return err
+	}
+
+	factory := opts.Factory
+	if factory == nil {
+		factory = DefaultKeyFactory()
+	}
+	var devID *KeyInfo
+	if len(pubBlob) == 0 || len(privBlob) == 0 {
+		if reason == "" {
+			reason = "missing blob"
+		}
+	} else {
+		// reason is empty only with a parseable certificate. A public blob
+		// that does not decode is left to LoadDevID, which calls it foreign.
+		if reason == "" {
+			if pub, err := tpm2.DecodePublic(pubBlob); err == nil && !certHoldsKey(existing, pub) {
+				reason = "certificate does not match key"
+			}
+		}
+		devID, err = factory.LoadDevID(rw, pubBlob, privBlob)
+		switch {
+		case errors.Is(err, ErrDevIDForeign):
+			// A new key, as in a first enrollment. The log says so whatever
+			// the reason, since an earlier one hides that the key is replaced.
+			devID = nil
+			if reason == "" {
+				reason, detail = "key does not load in this TPM", err.Error()+"; new key"
+			} else {
+				detail = "key does not load in this TPM: " + err.Error() + "; new key"
+			}
+		case err != nil:
+			// A TPM warning or any other failure says nothing about whose
+			// the blobs are: change nothing and let the next run retry.
+			return err
+		}
+	}
+
+	if reason == "" {
+		// Not due and fitting. Closing /dev/tpm0 flushes nothing, so the
+		// loaded key is flushed here.
+		FlushTransient(rw, devID.Handle)
+		return nil
+	}
+	LogRenewReason(opts.OutDir, reason, detail)
 
 	var oldPEM []byte
 	if existing != nil {
 		oldPEM, _ = os.ReadFile(certPath)
 	}
 
-	pubBlob, _ := os.ReadFile(pubPath)
-	privBlob, _ := os.ReadFile(privPath)
-	reusePub, reusePriv := pubBlob, privBlob
-	if len(reusePub) == 0 || len(reusePriv) == 0 {
-		reusePub, reusePriv = nil, nil
-	}
-
-	factory := DefaultKeyFactory()
-	sr, res, err := CreateSigningRequestWithDevID(rw, factory, opts.PlatformCN, reusePub, reusePriv)
+	// The request owns devID from here, on its error path too.
+	sr, res, err := CreateSigningRequestWithKey(rw, factory, opts.PlatformCN, devID)
 	if err != nil {
-		if reusePub != nil && errors.Is(err, ErrDevIDLoad) {
-			sr, res, err = CreateSigningRequestWithDevID(rw, factory, opts.PlatformCN, nil, nil)
-		}
-		if err != nil {
-			return err
-		}
+		return err
 	}
 	defer res.Flush()
+
+	if err := os.MkdirAll(opts.OutDir, 0o700); err != nil {
+		return err
+	}
 
 	if sr.EndorsementCertificate == nil {
 		return fmt.Errorf("TPM EK certificate required for enroll authentication")
@@ -182,6 +247,27 @@ func ClientEnrollOrRenew(rw io.ReadWriter, opts ClientOptions) error {
 	return nil
 }
 
+// readBlob returns the contents of a DevID blob, nil when it does not exist.
+// Any other read error fails the run rather than counting as a missing blob.
+func readBlob(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	return data, nil
+}
+
+// certHoldsKey reports whether cert certifies the key in pub. Keys are compared
+// as keys, not as DER, so an RSA exponent of 0 in the TPM area reads as 65537.
+func certHoldsKey(cert *x509.Certificate, pub tpm2.Public) bool {
+	key, err := pub.Key()
+	if err != nil {
+		return false
+	}
+	certKey, ok := cert.PublicKey.(interface{ Equal(crypto.PublicKey) bool })
+	return ok && certKey.Equal(key)
+}
+
 // Seams for keepOwner's tests: only root can give a file to another user,
 // and only distinct owners tell the replaced file's from the directory's.
 var (
@@ -258,8 +344,17 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
+// directTransport never uses a proxy: the metadata service is link-local, and
+// http_proxy in the guest's environment must not route requests to it, nor the
+// EK certificate they carry, anywhere else.
+var directTransport = func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = nil
+	return t
+}()
+
 func httpPostJSON(url string, body []byte, ekCertHeader string) ([]byte, error) {
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second, Transport: directTransport}
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err

@@ -22,10 +22,57 @@ with MAC inventory identity and the TPM EK certificate, then writes SPIRE
 materials (PEM + TPM2B blobs).
 .PP
 On each run it renews when the certificate is missing, unreadable, expired, or
-in the last third of its validity; otherwise it exits successfully without
-calling enroll. When renewing, an existing DevID key under
-.I out
-is reused when the blobs still load under the SPIRE H-1 storage parent.
+in the last third of its validity, and also when the materials do not fit:
+the certificate's subject
+.B CN
+is not this guest's VM ID, a DevID blob is missing or empty, the
+certificate's public key is not the key in
+.IR devid.pub.blob ,
+or the blobs do not load in this TPM under the SPIRE H-1 storage parent, as
+after a clone that got a new vTPM or a replaced vTPM. Otherwise it exits
+successfully without calling enroll. Each renewal logs its reason:
+.IR "no certificate" ,
+.IR "unreadable certificate" ,
+.IR due ,
+.IR "certificate is for another VM" ,
+.IR "missing blob" ,
+.I "certificate does not match key"
+or
+.IR "key does not load in this TPM" .
+.PP
+The VM ID is
+.I /latest/meta-data/instance-id
+from the service named by
+.BR \-mds ,
+without its
+.B i-
+prefix, read with an IMDSv2 session token. Every run that finds a readable
+certificate reads it, also when nothing is due; a first enrollment does not.
+It is tried three times over about ten seconds (1.5 s per try, 3 s apart),
+without a proxy. When it still cannot be read,
+or does not start with
+.BR i- ,
+the run exits non-zero, makes no enroll request and changes no file. The
+host serves
+.I instance-id
+only with
+.B enable_ec2_compat
+on; with it off, every run with a certificate fails although enrollment
+itself would work.
+.PP
+Whenever both DevID blobs are present, a run derives the storage parent and
+loads the DevID key, also when nothing is due: a few seconds of TPM work on a
+vTPM. When the blobs load, a renewal reuses that key; when they do not decode
+or the TPM refuses them for integrity, binding or sensitive-area reasons, it
+creates a new key, as a first enrollment does, and the log line says
+.I "new key"
+whatever reason it names. A missing blob also gives a new key.
+Any other TPM error, including a warning such as
+.B TPM_RC_RETRY
+or
+.BR TPM_RC_OBJECT_MEMORY ,
+fails the run with no enroll request and the files unchanged, so a
+transient fault never discards a working key; the next run tries again.
 .PP
 When the certificate PEM bytes change and
 .B \-spire-data

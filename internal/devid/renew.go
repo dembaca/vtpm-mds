@@ -89,7 +89,16 @@ func TryRestartSPIREAgent() {
 	_ = cmd.Run()
 }
 
-// LogRenewCorruptCert records that an unreadable cert triggered renew.
-func LogRenewCorruptCert(path string, err error) {
-	log.Printf("devid-enroll: treating %s as renew-due: %v", path, err)
+// LogRenewReason records once per renewal why the materials in dir are
+// renewed: "no certificate", "unreadable certificate", "due", "certificate is
+// for another VM", "missing blob", "certificate does not match key" or "key
+// does not load in this TPM" (renew-when-the-devid-key-is-not-this-tpms D-d).
+// detail, when set, follows in parentheses: the error behind the reason, and
+// whenever the blobs are foreign, that a new key replaces them.
+func LogRenewReason(dir, reason, detail string) {
+	if detail != "" {
+		log.Printf("devid-enroll: renewing %s: %s (%s)", dir, reason, detail)
+		return
+	}
+	log.Printf("devid-enroll: renewing %s: %s", dir, reason)
 }

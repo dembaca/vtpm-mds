@@ -11,8 +11,18 @@ import (
 )
 
 // ErrDevIDLoad means existing DevID blobs could not be loaded under the
-// SPIRE H-1 parent. Callers may fall back to creating a new DevID key.
+// SPIRE H-1 parent for a reason that says nothing about whose they are: the
+// parent could not be derived, a TPM warning such as TPM_RC_RETRY or
+// TPM_RC_OBJECT_MEMORY, another TPM error, or the transport. Callers must not
+// replace the key on it; the next run tries again.
 var ErrDevIDLoad = errors.New("load existing DevID")
+
+// ErrDevIDForeign means existing DevID blobs are not this TPM's: a blob does
+// not decode, or TPM2_Load under the derived H-1 parent answers with
+// TPM_RC_INTEGRITY, TPM_RC_BINDING or TPM_RC_SENSITIVE. Only then may a caller
+// create a new DevID key in their place
+// (renew-when-the-devid-key-is-not-this-tpms D-c).
+var ErrDevIDForeign = errors.New("DevID blobs are foreign to this TPM")
 
 // KeyInfo describes a TPM key (transient or persistent).
 type KeyInfo struct {
@@ -156,26 +166,33 @@ func FlushTransient(rw io.ReadWriter, h tpmutil.Handle) {
 }
 
 // LoadDevID loads an existing DevID key under a freshly derived SRK parent.
+// Blobs that are not this TPM's fail with ErrDevIDForeign, every other failure
+// with ErrDevIDLoad or the parent's error; both wrap the cause.
 func (f *KeyFactory) LoadDevID(rw io.ReadWriter, pubBlob, privBlob []byte) (*KeyInfo, error) {
 	if len(pubBlob) == 0 || len(privBlob) == 0 {
 		return nil, fmt.Errorf("%w: missing blobs", ErrDevIDLoad)
 	}
+	// Decoded before the parent is derived: a blob that does not decode is
+	// foreign without asking the TPM.
+	pub, err := tpm2.DecodePublic(pubBlob)
+	if err != nil {
+		return nil, fmt.Errorf("%w: decode public: %w", ErrDevIDForeign, err)
+	}
 	srk, err := f.CreateSRK(rw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: derive parent: %w", ErrDevIDLoad, err)
 	}
 	defer tpm2.FlushContext(rw, srk.Handle)
 	auth := tpm2.AuthCommand{
 		Session:    tpm2.HandlePasswordSession,
 		Attributes: tpm2.AttrContinueSession,
 	}
-	pub, err := tpm2.DecodePublic(pubBlob)
-	if err != nil {
-		return nil, fmt.Errorf("%w: decode public: %v", ErrDevIDLoad, err)
-	}
 	handle, _, err := tpm2.LoadUsingAuth(rw, srk.Handle, auth, pubBlob, privBlob)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDevIDLoad, err)
+		if isForeignLoadError(err) {
+			return nil, fmt.Errorf("%w: %w", ErrDevIDForeign, err)
+		}
+		return nil, fmt.Errorf("%w: %w", ErrDevIDLoad, err)
 	}
 	return &KeyInfo{
 		Handle:      handle,
@@ -184,4 +201,34 @@ func (f *KeyFactory) LoadDevID(rw io.ReadWriter, pubBlob, privBlob []byte) (*Key
 		PublicBlob:  pubBlob,
 		PrivateBlob: privBlob,
 	}, nil
+}
+
+// isForeignLoadError reports whether a TPM2_Load error says the blobs were not
+// made under this parent: the private area's HMAC fails (TPM_RC_INTEGRITY), the
+// public and sensitive areas are not bound (TPM_RC_BINDING), both format-1
+// parameter errors, or the sensitive area does not unmarshal after decryption
+// (TPM_RC_SENSITIVE, a format-0 error). go-tpm's legacy package returns these
+// as values; pointers are matched too, so a wrapper that returns one is not
+// silently read as "not foreign".
+func isForeignLoadError(err error) bool {
+	var pv tpm2.ParameterError
+	var pp *tpm2.ParameterError
+	var code tpm2.RCFmt1
+	switch {
+	case errors.As(err, &pv):
+		code = pv.Code
+	case errors.As(err, &pp) && pp != nil:
+		code = pp.Code
+	default:
+		var ev tpm2.Error
+		var ep *tpm2.Error
+		switch {
+		case errors.As(err, &ev):
+			return ev.Code == tpm2.RCSensitive
+		case errors.As(err, &ep) && ep != nil:
+			return ep.Code == tpm2.RCSensitive
+		}
+		return false
+	}
+	return code == tpm2.RCIntegrity || code == tpm2.RCBinding
 }
