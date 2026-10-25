@@ -104,8 +104,9 @@ including D-g and D-b.
 - [x] 2.1 Build with `make deb-local` from a tree rebased on `main`;
       `dpkg-deb -c`/`-I`, `lintian --fail-on error,warning`,
       `systemd-analyze verify`
-      **Done, 2026-10-25:** `vtpm-mds_0.3.2+git20261025.eb663e01b7ac_amd64.deb`
-      from `eb663e0` on `main@e54344d`. `lintian` exit 0 on both debs;
+      **Done, 2026-10-25:** `vtpm-mds_0.3.2+git20261025.d6c40ce6070c_amd64.deb`
+      from `d6c40ce` on `main@e54344d` (rebuilt after the D-g review; the
+      first build was `eb663e0`). `lintian` exit 0 on both debs;
       `systemd-analyze verify` on both extracted units is clean; the
       extracted binary reports that version; `config.yaml` carries the two
       commented keys.
