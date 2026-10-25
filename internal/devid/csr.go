@@ -227,7 +227,29 @@ func CreateSigningRequestWithDevID(rw io.ReadWriter, factory *KeyFactory, platfo
 	if factory == nil {
 		factory = DefaultKeyFactory()
 	}
-	res := &RequestResources{rw: rw, factory: factory}
+	var devID *KeyInfo
+	if len(pubBlob) > 0 && len(privBlob) > 0 {
+		var err error
+		if devID, err = factory.LoadDevID(rw, pubBlob, privBlob); err != nil {
+			return nil, nil, err
+		}
+	}
+	return CreateSigningRequestWithKey(rw, factory, platformCN, devID)
+}
+
+// CreateSigningRequestWithKey is CreateSigningRequest for a DevID key that is
+// already loaded, or creates one when devID is nil. It takes ownership of
+// devID: the key is recorded in the resources before the EK and AK steps, so
+// it is flushed with them on any error and by the returned resources' Flush
+// otherwise. Holding it through those steps needs no fourth object slot: the
+// EK is flushed before the AK is created, CreateAK flushes its parent, and
+// Activate derives the EK again beside the AK and the DevID key
+// (renew-when-the-devid-key-is-not-this-tpms D-b).
+func CreateSigningRequestWithKey(rw io.ReadWriter, factory *KeyFactory, platformCN string, devID *KeyInfo) (*SigningRequest, *RequestResources, error) {
+	if factory == nil {
+		factory = DefaultKeyFactory()
+	}
+	res := &RequestResources{rw: rw, factory: factory, DevID: devID}
 	var err error
 	defer func() {
 		if err != nil {
@@ -261,19 +283,13 @@ func CreateSigningRequestWithDevID(rw io.ReadWriter, factory *KeyFactory, platfo
 	}
 	res.Attestation = ak
 
-	var devID *KeyInfo
-	if len(pubBlob) > 0 && len(privBlob) > 0 {
-		devID, err = factory.LoadDevID(rw, pubBlob, privBlob)
-		if err != nil {
-			return nil, nil, err
-		}
-	} else {
+	if devID == nil {
 		devID, err = factory.CreateDevID(rw)
 		if err != nil {
 			return nil, nil, fmt.Errorf("create DevID: %w", err)
 		}
+		res.DevID = devID
 	}
-	res.DevID = devID
 
 	certifyData, certifySig, err := certifyWithRetry(rw, devID.Handle, ak.Handle)
 	if err != nil {
