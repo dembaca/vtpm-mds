@@ -13,11 +13,14 @@ the current inventory has that fingerprint as its non-empty `ek_sha256`.
 A refused leg SHALL answer `401` with body
 `EK certificate is pinned to another VM`, SHALL NOT name the other VM in the
 response, SHALL NOT issue a challenge or an LDevID and SHALL NOT create a pin
-for the caller. It SHALL log one line
-`devid refused ek pinned to another vm vm=<caller> pinned=<other>` and SHALL
-NOT log the fingerprint in it.
+for the caller. Its log line SHALL name the caller's VM ID and the VM ID
+that holds the pin and SHALL NOT contain the fingerprint. `enroll/finish`
+SHALL repeat the check atomically with creating the caller's pin, so that two
+VMs presenting one EK concurrently never both receive a pin.
 
-Empty pin files and files whose name is not a valid VM ID SHALL be ignored.
+A pin file SHALL count even when the same VM's inventory `ek_sha256`
+overrides it for that VM. Empty pin files and files whose name is not a valid
+VM ID SHALL be ignored.
 When the pin directory exists but cannot be listed, the leg SHALL answer
 `500` with body `pin store unavailable`; a missing directory SHALL count as
 an empty store. The service SHALL NOT delete or rewrite any pin because of a
@@ -30,7 +33,14 @@ refusal.
   fingerprint is `abc…`
 - **THEN** the response is `401` with body
   `EK certificate is pinned to another VM`, no pin file for `390` exists,
-  and the log has one line naming `vm=390` and `pinned=399`
+  and the log line names `vm=390` and `pinned=399`
+
+#### Scenario: Two first enrollments with one EK leave one pin
+
+- **GIVEN** no pin files and VMs `390` and `399` presenting the same EK
+- **WHEN** both call `enroll/finish` concurrently
+- **THEN** at most one of them receives an LDevID and exactly one pin file
+  holds that fingerprint
 
 #### Scenario: The VM that holds the pin still enrolls
 

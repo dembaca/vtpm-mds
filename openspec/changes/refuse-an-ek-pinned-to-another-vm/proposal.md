@@ -26,7 +26,8 @@ half.
 
 ## Impact
 
-- `internal/devid/auth.go`, `internal/devid/pin.go` and their tests;
+- `internal/devid/auth.go`, `internal/devid/pin.go`,
+  `internal/server/server.go` (inventory pins for the enroller) and their tests;
   `debian/vtpm-mds.8` for the operator
   note; `debian/changelog`. Host package only.
 - Spec: `devid-enrollment` adds "Refuse An EK Pinned To Another VM".

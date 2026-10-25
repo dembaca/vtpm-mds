@@ -3,7 +3,7 @@
 Written on 2026-10-25 against `main@0a3d9d3` (v0.3.1) by
 `agent-vtpm-hogan-d3e6cbc82`, from the maintainer's decision "A" on ask
 `gox8yerp…` (bgl-infra TASK 2.3c). Files: `internal/devid/auth.go`,
-`internal/devid/pin.go`, their tests, `debian/vtpm-mds.8`, `debian/changelog`
+`internal/devid/pin.go`, `internal/server/server.go`, their tests, `debian/vtpm-mds.8`, `debian/changelog`
 and this record; the README pin row is the coordinator's.
 
 **Proposal only: implementation waits for the maintainer's go.**
@@ -13,13 +13,18 @@ and this record; the README pin row is the coordinator's.
 - [ ] 1.1 Look up the caller's EK fingerprint in the pin store and the
       inventory, excluding the caller's own VM ID (D-b); verify with unit
       tests on a constructed store: other VM pinned, only own pin, empty file,
-      file with an invalid name, inventory `ek_sha256` of another VM
+      file with an invalid name or a `.tmp-` name, inventory `ek_sha256` of
+      another VM through the `InventoryPins` seam wired in `server.go`
 - [ ] 1.2 Refuse both legs with `401` and the D-c body and log line, before
       session and request checks (D-a, D-c); verify with handler tests that
       no challenge is issued, no pin file is created and the log line names
       both VM IDs and no fingerprint
+- [ ] 1.2a Repeat the scan in `ensurePinBeforeIssue` under a mutex that covers
+      the create (D-a2); verify with a concurrent-finish test: two VM IDs, one
+      EK, one pin, at most one LDevID
 - [ ] 1.3 Answer `500` `pin store unavailable` when the directory cannot be
-      listed (D-d); verify with a unit test on an unreadable directory
+      listed (D-d); verify with a unit test on an unreadable directory,
+      skipped when run as uid 0
 - [ ] 1.4 Document the operator steps for a VM restored under a new ID and
       for a refused clone (empty `tpmstate`, proposal Impact) in
       `debian/vtpm-mds.8` (D-e); verify with `man -l`
@@ -40,7 +45,14 @@ and this record; the README pin row is the coordinator's.
 
 ## Pre-review
 
-- [ ] Review by a stronger model before the PR is called ready
+- Fable, 2026-10-25, of the proposal (`ae5b3f7`): no must-fix. Should-fix
+  taken: the race between two first finishes (D-a2, new scenario), the
+  inventory seam in `server.go`, one log line through the existing auth log,
+  a pin file counts even where its own VM's inventory pin overrides it.
+  Nits taken: the bounded oracle and the `/health` gap in Risks,
+  `validateVMID` named, the uid-0 skip.
+- [ ] Review of the implementation by a stronger model before the PR is
+      called ready
 
 ## 3. Archive
 
