@@ -44,6 +44,13 @@ type MDSConfig struct {
 	// synthesized from their peer address, which names the connection and is
 	// not an identity.
 	RequireVMIdentity bool `yaml:"require_vm_identity"`
+	// ClusterPinDir holds cluster-wide EK pins, one file per VM ID, written
+	// by root outside this service; read only with the Proxmox inventory.
+	// Empty turns the cluster source off.
+	ClusterPinDir string `yaml:"cluster_pin_dir"`
+	// RequireClusterPin refuses enrollment of a VM without a cluster pin
+	// instead of falling back to the local first-use pin.
+	RequireClusterPin bool `yaml:"require_cluster_pin"`
 }
 
 // MaxDevIDLifetime is the longest accepted mds.devid_lifetime (one year of hours).
@@ -69,6 +76,8 @@ func DefaultConfig() *Config {
 			SigningKeyPath:       "/var/lib/vtpm-mds/signing-key.pem", // pragma: allowlist secret
 			InventoryPath:        "",
 			RequireVMIdentity:    true,
+			ClusterPinDir:        "/etc/pve/vtpm-ek",
+			RequireClusterPin:    false,
 		},
 	}
 }
@@ -108,6 +117,15 @@ func Load(path string) (*Config, error) {
 	}
 	if lifetime > MaxDevIDLifetime {
 		return nil, fmt.Errorf("invalid devid_lifetime %q: must not exceed %s", cfg.MDS.DevIDLifetime, MaxDevIDLifetime)
+	}
+
+	if cfg.MDS.RequireClusterPin {
+		if cfg.MDS.ClusterPinDir == "" {
+			return nil, fmt.Errorf("require_cluster_pin needs cluster_pin_dir")
+		}
+		if cfg.MDS.InventoryPath != "" {
+			return nil, fmt.Errorf("require_cluster_pin cannot be used with inventory_path: cluster pins are read only with the Proxmox inventory")
+		}
 	}
 
 	return cfg, nil

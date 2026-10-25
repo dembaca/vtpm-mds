@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -98,14 +99,8 @@ func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certifi
 		if !strings.EqualFold(pin, fp) {
 			return "", nil, errUnauthorized(errInventoryPinMismatch)
 		}
-	} else if e.PinDir != "" {
-		stored, serr := readStoredPin(e.PinDir, vm.VMID)
-		if serr != nil {
-			return "", nil, serr
-		}
-		if stored != "" && !strings.EqualFold(stored, fp) {
-			return "", nil, errUnauthorized(errStoredPinMismatch)
-		}
+	} else if err := e.enforceOwnPin(vm.VMID, fp); err != nil {
+		return "", nil, err
 	}
 	if other, perr := e.pinnedToAnotherVM(vm.VMID, fp); perr != nil {
 		return "", nil, perr
@@ -119,6 +114,40 @@ func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certifi
 		return "", nil, errUnauthorized("EK certificate header does not match signing request")
 	}
 	return vm.VMID, ekCert, nil
+}
+
+// enforceOwnPin checks the caller's cluster pin, else its local pin, when
+// the inventory has none (read-cluster-ek-pins-from-pmxcfs D-c, D-e).
+func (e *Enroller) enforceOwnPin(vmid, fp string) error {
+	cpin, dirExists, err := e.readClusterPin(vmid)
+	if err != nil {
+		return err
+	}
+	var stored string
+	if e.PinDir != "" {
+		if stored, err = readStoredPin(e.PinDir, vmid); err != nil {
+			return err
+		}
+	}
+	if cpin != "" {
+		if !strings.EqualFold(cpin, fp) {
+			return errUnauthorized(errClusterPinMismatch)
+		}
+		if stored != "" && !strings.EqualFold(stored, cpin) {
+			log.Printf("devid enroll: local pin differs from cluster pin vm=%s", vmid)
+		}
+		return nil
+	}
+	if e.RequireClusterPin {
+		return errUnauthorized(errNoClusterPin)
+	}
+	if dirExists {
+		log.Printf("devid enroll: no cluster pin vm=%s, using local pin", vmid)
+	}
+	if stored != "" && !strings.EqualFold(stored, fp) {
+		return errUnauthorized(errStoredPinMismatch)
+	}
+	return nil
 }
 
 // unauthorizedError is a 401. msg is the response body; detail is appended
