@@ -162,5 +162,5 @@ with `go test -tags tpmsim ./internal/devid/`.
       Archived 2026-10-25 by `agent-vtpm-hogan-d3e6cbc82` at the coordinator's
       request (bgl-infra TASK 0.3.2r), right after that change. Still open at
       archive time, and carried by the 0.3.2 release: the changelog half of
-      1.6 (branch `release-0.3.2`) and section 2, which is verified against
-      the released package on VM 399 and on bgl-infra clones.
+      1.6 (branch `release-0.3.2`) and section 2, which is to be verified
+      against the released 0.3.2 package on VM 399 and on bgl-infra clones.
