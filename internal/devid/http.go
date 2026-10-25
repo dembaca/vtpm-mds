@@ -45,7 +45,7 @@ func Register(mux *http.ServeMux, e *Enroller) {
 
 func writeEnrollAuthError(w http.ResponseWriter, err error) {
 	code := http.StatusBadRequest
-	body := err.Error()
+	body := responseBody(err)
 	if isUnauthorized(err) {
 		code = http.StatusUnauthorized
 	}
@@ -132,7 +132,7 @@ func (e *Enroller) HandleFinish(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("devid enroll/finish: %v", err)
 		status := http.StatusBadRequest
-		body := err.Error()
+		body := responseBody(err)
 		if isUnauthorized(err) ||
 			err.Error() == "VM identity does not match enroll session" ||
 			err.Error() == "EK certificate does not match enroll session" {

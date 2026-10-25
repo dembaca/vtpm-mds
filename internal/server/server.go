@@ -660,7 +660,23 @@ func loadDevIDEnroller(cfg *config.Config) (*devid.Enroller, error) {
 	enroller := devid.NewEnroller(ca, ekRoots, nil)
 	// TOFU EK pins: systemd StateDirectory, else the package state dir next to JWKS.
 	enroller.PinDir = ekPinDir()
+	enroller.InventoryPins = inventoryPins
 	return enroller, nil
+}
+
+// inventoryPins returns VMID -> ek_sha256 for every VM in the current
+// inventory cache that declares one, so enrollment can refuse an EK pinned
+// to another VM.
+func inventoryPins() map[string]string {
+	vmConfigCacheMu.RLock()
+	defer vmConfigCacheMu.RUnlock()
+	pins := make(map[string]string)
+	for vmid, vm := range vmConfigCache {
+		if vm != nil && vm.EKSHA256 != "" {
+			pins[vmid] = vm.EKSHA256
+		}
+	}
+	return pins
 }
 
 // ekPinDir is $STATE_DIRECTORY/ek-pins (first entry if colon-separated), or

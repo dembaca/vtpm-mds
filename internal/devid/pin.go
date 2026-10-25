@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -18,7 +20,17 @@ const (
 	errStoredPinMismatch    = "EK certificate does not match stored pin"
 	errInventoryPinMismatch = "EK certificate does not match inventory pin"
 	errPinStoreUnavailable  = "pin store unavailable"
+	errPinnedElsewhere      = "EK certificate is pinned to another VM"
 )
+
+// pinCreateMu serialises the cross-VM scan with the exclusive create in
+// ensurePinBeforeIssue, so two VMs presenting one EK never both get a pin
+// (design D-a2). One process serves every leg on this node.
+var pinCreateMu sync.Mutex
+
+// beforePinCreate runs between the cross-VM scan and the create; tests use it
+// to hold the window open. Nil in production.
+var beforePinCreate func()
 
 // ErrPinStore indicates the pin directory or file could not be used; HTTP maps it to 500.
 var ErrPinStore = errors.New("ek pin store")
@@ -36,6 +48,22 @@ func validateVMID(vmid string) error {
 		return fmt.Errorf("%w: invalid vmid", ErrPinStore)
 	}
 	return nil
+}
+
+// isVMIDName reports whether a pin file name is a VM ID in the Proxmox form,
+// digits only (the YAML inventory uses the same form). validateVMID only
+// keeps a name inside the directory; this keeps renamed copies out of the
+// cross-VM scan.
+func isVMIDName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, c := range name {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func pinPath(dir, vmid string) string {
@@ -115,21 +143,85 @@ func syncDir(dir string) {
 	_ = d.Close()
 }
 
+// pinnedToAnotherVM returns the VM ID other than vmid that fp is pinned to:
+// first a pin file in PinDir (sorted by name), then another VM's inventory
+// ek_sha256 (sorted by VM ID), or "" when none (refuse-an-ek-pinned-to-another-vm
+// D-b). Only files named like a VM ID count (isVMIDName): a set-aside
+// "399.old" or the .<vmid>.tmp-* of an in-flight create is ignored, as are
+// empty files. A missing PinDir is an empty store; one that cannot be listed
+// is ErrPinStore (D-d).
+func (e *Enroller) pinnedToAnotherVM(vmid, fp string) (string, error) {
+	if e == nil || fp == "" {
+		return "", nil
+	}
+	if e.PinDir != "" {
+		entries, err := os.ReadDir(e.PinDir)
+		if err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("%w: list: %v", ErrPinStore, err)
+		}
+		for _, ent := range entries {
+			name := ent.Name()
+			if name == vmid || ent.IsDir() || !isVMIDName(name) {
+				continue
+			}
+			stored, err := readStoredPin(e.PinDir, name)
+			if err != nil {
+				return "", err
+			}
+			if stored != "" && strings.EqualFold(stored, fp) {
+				return name, nil
+			}
+		}
+	}
+	if e.InventoryPins == nil {
+		return "", nil
+	}
+	pins := e.InventoryPins()
+	ids := make([]string, 0, len(pins))
+	for id := range pins {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if id == vmid {
+			continue
+		}
+		if pin := strings.TrimSpace(pins[id]); pin != "" && strings.EqualFold(pin, fp) {
+			return id, nil
+		}
+	}
+	return "", nil
+}
+
 // ensurePinBeforeIssue creates the pin with an exclusive link before IssueDevID
-// when none exists yet, or checks an existing pin matches fp (D-b).
+// when none exists yet, or checks an existing pin matches fp (D-b). Under
+// pinCreateMu it first repeats the cross-VM scan, so the refusal and the
+// create are one step (refuse-an-ek-pinned-to-another-vm D-a2).
 func (e *Enroller) ensurePinBeforeIssue(vmid, fp string) error {
 	if e == nil || e.PinDir == "" {
 		return nil
 	}
+	pinCreateMu.Lock()
+	defer pinCreateMu.Unlock()
 	existing, err := readStoredPin(e.PinDir, vmid)
 	if err != nil {
 		return err
 	}
+	if existing != "" && !strings.EqualFold(existing, fp) {
+		return errUnauthorized(errStoredPinMismatch)
+	}
+	other, err := e.pinnedToAnotherVM(vmid, fp)
+	if err != nil {
+		return err
+	}
+	if other != "" {
+		return errPinnedToAnotherVM(vmid, other)
+	}
 	if existing != "" {
-		if !strings.EqualFold(existing, fp) {
-			return errUnauthorized(errStoredPinMismatch)
-		}
 		return nil
+	}
+	if beforePinCreate != nil {
+		beforePinCreate()
 	}
 	err = createStoredPinExclusive(e.PinDir, vmid, fp)
 	if err == nil {

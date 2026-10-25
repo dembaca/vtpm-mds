@@ -18,6 +18,10 @@ type Enroller struct {
 	// PinDir is /var/lib/<package>/ek-pins. Empty disables the TOFU store
 	// (unit tests that do not exercise pins).
 	PinDir string
+	// InventoryPins returns the current inventory's VMID -> ek_sha256 (empty
+	// when unpinned), so a leg can refuse an EK another VM is pinned to.
+	// Nil means no inventory pins are consulted.
+	InventoryPins func() map[string]string
 }
 
 // NewEnroller constructs an Enroller. sessions may be nil (a default is created).
@@ -110,6 +114,8 @@ func (e *Enroller) Finish(sessionID string, challengeResponse []byte, vmid, ekFP
 	if !bytes.Equal(sess.Nonce, challengeResponse) {
 		return nil, errors.New("challenge verification failed")
 	}
+	// An inventory pin creates no pin file, so there is nothing to make atomic;
+	// the cross-VM scan already ran in AuthenticateEnrollCaller on this leg.
 	if strings.TrimSpace(inventoryPin) == "" {
 		if err := e.ensurePinBeforeIssue(vmid, ekFP); err != nil {
 			return nil, err

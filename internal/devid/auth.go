@@ -107,6 +107,11 @@ func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certifi
 			return "", nil, errUnauthorized(errStoredPinMismatch)
 		}
 	}
+	if other, perr := e.pinnedToAnotherVM(vm.VMID, fp); perr != nil {
+		return "", nil, perr
+	} else if other != "" {
+		return "", nil, errPinnedToAnotherVM(vm.VMID, other)
+	}
 	if expectedFP != "" && !strings.EqualFold(expectedFP, fp) {
 		return "", nil, errUnauthorized("EK certificate does not match enroll session")
 	}
@@ -116,11 +121,34 @@ func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certifi
 	return vm.VMID, ekCert, nil
 }
 
-type unauthorizedError struct{ msg string }
+// unauthorizedError is a 401. msg is the response body; detail is appended
+// for the host log only (it may name another VM, which a guest must not see).
+type unauthorizedError struct{ msg, detail string }
 
-func (e unauthorizedError) Error() string { return e.msg }
+func (e unauthorizedError) Error() string {
+	if e.detail == "" {
+		return e.msg
+	}
+	return e.msg + " " + e.detail
+}
 
 func errUnauthorized(msg string) error { return unauthorizedError{msg: msg} }
+
+// errPinnedToAnotherVM names both VMs in the log line, neither in the body
+// and never the fingerprint.
+func errPinnedToAnotherVM(vmid, other string) error {
+	return unauthorizedError{msg: errPinnedElsewhere, detail: fmt.Sprintf("vm=%s pinned=%s", vmid, other)}
+}
+
+// responseBody is the text a guest gets for err: the bare message of a 401,
+// without the log-only detail.
+func responseBody(err error) string {
+	var u unauthorizedError
+	if errors.As(err, &u) {
+		return u.msg
+	}
+	return err.Error()
+}
 
 func isUnauthorized(err error) bool {
 	var u unauthorizedError

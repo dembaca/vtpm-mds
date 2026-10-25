@@ -64,6 +64,69 @@ is a migration aid for a deployment whose inventory is incomplete: unbound
 callers are then served an instance id synthesized from their peer address.
 That id names the connection, not an instance, and is not an identity. Add the
 missing guests to the inventory and remove the setting.
+.SH EK PINS
+On the first successful DevID enrollment of a VM without an inventory
+.BR ek_sha256 ,
+the service writes the SHA\-256 fingerprint of that VM's EK certificate to
+.IR /var/lib/vtpm\-mds/ek\-pins/<vmid> .
+Later enrollments of that VM with another EK are refused, and so is any
+enrollment whose EK is pinned to a
+.B different
+VM ID, in this node's pin store or in another VM's inventory
+.BR ek_sha256 .
+The guest's
+.B devid\-enroll
+then fails with
+.IP
+HTTP 401: EK certificate is pinned to another VM
+.PP
+and the journal names both VMs, never the fingerprint:
+.IP
+devid enroll auth: EK certificate is pinned to another VM vm=<vmid> pinned=<other>
+.PP
+A finish that loses a race against another VM's first enrollment with the
+same EK logs the same text with the prefix
+.B devid enroll/finish:
+instead. That finish has already consumed its enrollment session, so the guest
+starts over with
+.BR enroll/start .
+.PP
+Only pin files may live in
+.IR ek\-pins/ :
+any file whose name is a VM ID counts as that VM's pin, so a pin set aside
+must be moved out of the directory, not renamed inside it. Files whose name
+is not all digits are ignored.
+.PP
+The service never deletes or rewrites a pin; each case below is the
+operator's. Pins are per node: a node that never saw the other VM does not
+refuse.
+.TP
+.B A clone that kept its source's vTPM state
+.B qm clone
+copies the vTPM, so the clone presents its source's EK and is refused. Stop
+the clone, remove its
+.B tpmstate0
+and create an empty one
+.RB ( "qm set <vmid> \-\-tpmstate0 <storage>:1,version=v2.0" ),
+then boot it; it gets its own EK and enrolls. A template that clones are made
+from should carry an empty
+.BR tpmstate .
+.TP
+.B A VM restored under a new VM ID
+The restore keeps the vTPM, so the new ID is refused while the old ID's pin
+exists. When the old VM is gone, delete
+.I /var/lib/vtpm\-mds/ek\-pins/<old vmid>
+and enroll again.
+.TP
+.B A replaced vTPM
+The VM's own pin no longer matches. Delete
+.I /var/lib/vtpm\-mds/ek\-pins/<vmid>
+and enroll again.
+.PP
+A pin directory that exists but cannot be listed makes every enrollment
+answer
+.B 500
+.IR "pin store unavailable" .
 .SH FILES
 .TP
 .I /etc/vtpm-mds/config.yaml
@@ -71,6 +134,10 @@ Daemon configuration (dpkg conffile).
 .TP
 .I /var/lib/vtpm-mds
 Runtime state (JWKS, signing key).
+.TP
+.I /var/lib/vtpm-mds/ek-pins
+EK pins, one file per enrolled VM ID (see
+.BR "EK PINS" ).
 .TP
 .I /lib/systemd/system/vtpm-mds.service
 systemd unit.
