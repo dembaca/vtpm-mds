@@ -20,9 +20,10 @@ any guest-side change (`renew-when-the-devid-key-is-not-this-tpms`).
 ## Decisions
 
 - **D-a. Where the check sits.** In `authenticateEnrollLeg`, after the EK
-  certificate is trusted and bound and after the caller's own pin check, so
-  a caller with its own matching pin is never slowed down by it, and before
-  the session and request checks. Both legs, like the own-pin check, so a
+  certificate is trusted and bound and after the caller's own pin check, and
+  before the session and request checks. The scan runs for every caller, as
+  the spec requires: a VM whose own pin matches is refused only if another
+  VM ID also holds that EK. Both legs, like the own-pin check, so a
   clone is refused before it costs a credential challenge.
 - **D-a2. No race between two first enrollments.** The auth-time check is
   the cheap early refusal, but two VMs with one EK and no pins could both
@@ -49,8 +50,12 @@ any guest-side change (`renew-when-the-devid-key-is-not-this-tpms`).
   `devid enroll auth: EK certificate is pinned to another VM vm=<caller>
   pinned=<other>` instead of a second line.
 - **D-d. An unreadable store fails closed.** If the pin directory cannot be
-  listed, the leg answers `500` `pin store unavailable`, as finish already
-  does when it cannot create a pin. A missing directory is an empty store.
+  listed, or a listed pin file cannot be read (as `readStoredPin` already
+  treats it), the leg answers `500` `pin store unavailable`, as finish
+  already does when it cannot create a pin. A missing directory is an empty
+  store. The response body never carries the other VM ID: the refusal keeps
+  it in a log-only detail that `writeEnrollAuthError` and `HandleFinish`
+  strip from the body.
 - **D-e. A legitimate move is the operator's.** Restoring a VM under a new
   ID keeps its vTPM; the old ID's pin must be deleted first. The service
   never decides that a pin is stale.

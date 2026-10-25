@@ -42,7 +42,8 @@ half.
   must therefore ship an **empty** `tpmstate`, so each clone gets its own EK
   on first boot. Operations note for `debian/vtpm-mds.8`: the guest's
   `devid-enroll` fails with `HTTP 401: EK certificate is pinned to another
-  VM`, and the host logs `devid refused ek pinned to another vm`; the remedy
+  VM`, and the host logs `devid enroll auth: EK certificate is pinned to
+  another VM vm=<clone> pinned=<source>`; the remedy
   is to stop the clone, delete its `tpmstate0` and create an empty one
   (`qm set <vmid> --tpmstate0 <storage>:1,version=v2.0`), then boot it.
 - Each leg reads the pin directory once (one small file per enrolled VM on
