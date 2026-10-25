@@ -119,7 +119,7 @@ func (e *Enroller) AuthenticateEnrollCaller(r *http.Request, csrEK *x509.Certifi
 // enforceOwnPin checks the caller's cluster pin, else its local pin, when
 // the inventory has none (read-cluster-ek-pins-from-pmxcfs D-c, D-e).
 func (e *Enroller) enforceOwnPin(vmid, fp string) error {
-	cpin, dirExists, err := e.readClusterPin(vmid)
+	cpin, dirExists, err := e.readClusterPin(vmid, false)
 	if err != nil {
 		return err
 	}

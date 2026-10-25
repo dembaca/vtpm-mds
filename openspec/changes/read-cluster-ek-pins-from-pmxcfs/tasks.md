@@ -14,14 +14,18 @@ including D-g and D-b.
 
 ## 1. Implement
 
-- [ ] 1.1 Confirm on one node that a `systemd-run` unit with the daemon's
+- [x] 1.1 Confirm on one node that a `systemd-run` unit with the daemon's
       `User=`, `SupplementaryGroups=www-data` and `ProtectSystem=strict`
       can `stat` `/etc/pve/nodes/<other node>/qemu-server/<vmid>.conf` and
       `.../lxc/<vmid>.conf` of another node (P1-w or cursor, root); record
       only the result, no VM names
-      **Open, needs root (P1-w or cursor).** The agent user is not in
-      `www-data`. The design falls back safely if it fails: a config that
-      cannot be `stat`ed counts as existing, so nothing is ignored.
+      **Done, 2026-10-25, by `agent-cursor-devid-6741` on hogan as root
+      (post `dtpnzt8gwjrtmqit8689o6a9ma`):** as `vtpm-mds`, `stat` of a
+      local and of another node's `qemu-server` config exits 0, and a
+      nonexistent VM ID gives `ENOENT` locally, remotely and under `lxc`.
+      There was no `EACCES`, even with `--clear-groups`, because `stat`
+      needs only search permission on the directories. Reading a config's
+      content still needs `www-data`.
 - [x] 1.2 Add `mds.cluster_pin_dir` (default `/etc/pve/vtpm-ek`) and
       `mds.require_cluster_pin` (default `false`) with the load errors for
       `require_cluster_pin: true` with an empty directory or with
@@ -126,8 +130,21 @@ including D-g and D-b.
       one EK in Risks. Nits taken. Not taken: P1-a's probe directory, which
       no longer exists on hogan. The coordinator's two points (#89 stays
       open for SPIRE, approval order) are in the proposal.
-- [ ] Review of the implementation by a stronger model before the PR is
+- [x] Review of the implementation by a stronger model before the PR is
       called ready
+      **Fable, 2026-10-25, of `bbf6c80..1291692`:** no must-fix.
+      Should-fix taken:
+      - `Finish` re-read the cluster pin outside `pinCreateMu` and logged
+        `invalid cluster pin` twice. The cluster branch now sits under the
+        lock in `ensurePinBeforeIssue` and reads quietly.
+      - A pin removed between listing and read answered `500`; it is now
+        skipped.
+
+      Nits taken: `gofmt` on `config.go`; a directory under a VM ID's name
+      is no pin; handler tests for both legs (`TestClusterPinHandlers`); the
+      late-cluster-pin and finish-mismatch test
+      (`TestEnsurePinHonoursLateClusterPin`); named subtests; both keys in
+      the man page's CONFIGURATION.
 
 ## 3. Archive
 

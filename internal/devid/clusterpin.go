@@ -1,10 +1,12 @@
 package devid
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"syscall"
 )
 
 // Cluster pins: one file per VMID under ClusterPinDir (/etc/pve/vtpm-ek),
@@ -36,9 +38,10 @@ func parseClusterPin(b []byte) (string, bool) {
 // readClusterPin returns the caller's valid cluster pin, or "" when there is
 // none. dirExists reports whether ClusterPinDir exists, which decides the
 // "no cluster pin" warning (D-e). A directory or a pin file that exists but
-// cannot be read is ErrPinStore (D-f); a malformed file is logged and is no
-// pin (D-d).
-func (e *Enroller) readClusterPin(vmid string) (pin string, dirExists bool, err error) {
+// cannot be read is ErrPinStore (D-f); a malformed file, or a directory under
+// the VM ID's name, is no pin (D-d) and is logged unless quiet, so a leg that
+// reads the pin twice logs it once.
+func (e *Enroller) readClusterPin(vmid string, quiet bool) (pin string, dirExists bool, err error) {
 	if e == nil || e.ClusterPinDir == "" {
 		return "", false, nil
 	}
@@ -56,11 +59,16 @@ func (e *Enroller) readClusterPin(vmid string) (pin string, dirExists bool, err 
 		if os.IsNotExist(err) {
 			return "", true, nil
 		}
-		return "", true, fmt.Errorf("%w: cluster pin: %v", ErrPinStore, err)
+		if !errors.Is(err, syscall.EISDIR) {
+			return "", true, fmt.Errorf("%w: cluster pin: %v", ErrPinStore, err)
+		}
+		b = nil
 	}
 	pin, ok := parseClusterPin(b)
 	if !ok {
-		log.Printf("devid enroll: invalid cluster pin vm=%s", vmid)
+		if !quiet {
+			log.Printf("devid enroll: invalid cluster pin vm=%s", vmid)
+		}
 		return "", true, nil
 	}
 	return pin, true, nil
@@ -89,6 +97,10 @@ func (e *Enroller) clusterPinsMatching(vmid, fp string) ([]string, error) {
 		}
 		b, err := os.ReadFile(filepath.Join(e.ClusterPinDir, name))
 		if err != nil {
+			// Removed since the listing (root's remedy, the hook's rename).
+			if os.IsNotExist(err) {
+				continue
+			}
 			return nil, fmt.Errorf("%w: cluster pin: %v", ErrPinStore, err)
 		}
 		if pin, ok := parseClusterPin(b); ok && pin == fp {

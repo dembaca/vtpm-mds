@@ -126,24 +126,9 @@ func (e *Enroller) Finish(sessionID string, challengeResponse []byte, vmid, ekFP
 	}
 	// An inventory pin creates no pin file, so there is nothing to make atomic;
 	// the cross-VM scan already ran in AuthenticateEnrollCaller on this leg.
-	// A cluster pin is the record too: no local pin is created beside it,
-	// and without one require_cluster_pin creates none either (D-e).
 	if strings.TrimSpace(inventoryPin) == "" {
-		cpin, _, err := e.readClusterPin(vmid)
-		if err != nil {
+		if err := e.ensurePinBeforeIssue(vmid, ekFP); err != nil {
 			return nil, err
-		}
-		switch {
-		case cpin != "":
-			if !strings.EqualFold(cpin, ekFP) {
-				return nil, errUnauthorized(errClusterPinMismatch)
-			}
-		case e.RequireClusterPin:
-			return nil, errUnauthorized(errNoClusterPin)
-		default:
-			if err := e.ensurePinBeforeIssue(vmid, ekFP); err != nil {
-				return nil, err
-			}
 		}
 	}
 	cert, err := e.CA.IssueDevID(&sess.Request, sess.VMID, time.Now().UTC())

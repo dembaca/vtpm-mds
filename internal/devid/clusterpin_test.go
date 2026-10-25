@@ -109,8 +109,8 @@ func TestAuthenticateClusterPin(t *testing.T) {
 			t.Fatalf("local pin changed: %q", got)
 		}
 	})
-	for _, bad := range []string{strings.ToUpper(fp), fp + "\nx", ""} {
-		t.Run("malformed is no pin", func(t *testing.T) {
+	for name, bad := range map[string]string{"upper case": strings.ToUpper(fp), "second line": fp + "\nx", "empty": ""} {
+		t.Run("malformed is no pin: "+name, func(t *testing.T) {
 			e, dir, cdir := newEnroller()
 			_ = os.Mkdir(cdir, 0o755)
 			writePinFile(t, cdir, "100", bad)
@@ -281,8 +281,83 @@ func TestUnusableClusterPinDirFailsClosed(t *testing.T) {
 		if err := os.Chmod(filepath.Join(e.ClusterPinDir, "100"), 0o200); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := e.readClusterPin("100"); !errors.Is(err, ErrPinStore) {
+		if _, _, err := e.readClusterPin("100", false); !errors.Is(err, ErrPinStore) {
 			t.Fatalf("want ErrPinStore, got %v", err)
 		}
 	})
+}
+
+// Both legs, through the HTTP handlers: a required pin refuses with 401, and
+// a malformed pin logs one "invalid cluster pin" line per leg.
+func TestClusterPinHandlers(t *testing.T) {
+	ekCert, ekKey, roots := testEKMaterial(t)
+	requestData, sig, _ := fakeSignedEnrollRequest(t, ekCert, rsaKeyToEKPub(ekKey))
+	legs := func(e *Enroller) (map[string]*httptest.ResponseRecorder, string) {
+		var start, finish *httptest.ResponseRecorder
+		logs := captureLog(t, func() {
+			start = postEnrollStart(t, e, ekCert, requestData, sig) // as VM 100
+			finish = postEnrollFinishAs(t, e, "100", EncodeEKCertHeader(ekCert))
+		})
+		return map[string]*httptest.ResponseRecorder{"start": start, "finish": finish}, logs
+	}
+
+	e := NewEnroller(mustTestDevIDCA(t), roots, NewSessionStore(time.Minute))
+	e.PinDir = t.TempDir()
+	e.ClusterPinDir = t.TempDir()
+	e.RequireClusterPin = true
+	rrs, _ := legs(e)
+	for leg, rr := range rrs {
+		if rr.Code != http.StatusUnauthorized || strings.TrimSpace(rr.Body.String()) != errNoClusterPin {
+			t.Fatalf("%s: got %d %q", leg, rr.Code, rr.Body.String())
+		}
+	}
+	if _, err := os.Stat(pinPath(e.PinDir, "100")); !os.IsNotExist(err) {
+		t.Fatalf("local pin created: %v", err)
+	}
+
+	e.RequireClusterPin = false
+	writePinFile(t, e.ClusterPinDir, "100", "not a pin")
+	_, logs := legs(e)
+	if n := strings.Count(logs, "devid enroll: invalid cluster pin vm=100"); n != 2 {
+		t.Fatalf("want one invalid-pin line per leg (2), got %d: %q", n, logs)
+	}
+}
+
+// Finish re-reads the cluster pin under pinCreateMu: a pin written after
+// the auth check still prevents the local create, and a mismatching one
+// refuses.
+func TestEnsurePinHonoursLateClusterPin(t *testing.T) {
+	e := &Enroller{PinDir: t.TempDir(), ClusterPinDir: t.TempDir()}
+	writePinFile(t, e.ClusterPinDir, "100", testHexPin)
+	if err := e.ensurePinBeforeIssue("100", testHexPin); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(pinPath(e.PinDir, "100")); !os.IsNotExist(err) {
+		t.Fatalf("local pin created beside a cluster pin: %v", err)
+	}
+	if err := e.ensurePinBeforeIssue("100", strings.Repeat("1", 64)); !isUnauthorized(err) || err.Error() != errClusterPinMismatch {
+		t.Fatalf("want %q, got %v", errClusterPinMismatch, err)
+	}
+}
+
+// A pin removed between the listing and the read is skipped, and a
+// directory under a VM ID's name is no pin.
+func TestClusterPinVanishedAndDirectory(t *testing.T) {
+	e := &Enroller{ClusterPinDir: t.TempDir()}
+	if err := os.Mkdir(filepath.Join(e.ClusterPinDir, "100"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var pin string
+	var err error
+	logs := captureLog(t, func() { pin, _, err = e.readClusterPin("100", false) })
+	if err != nil || pin != "" || !strings.Contains(logs, "invalid cluster pin vm=100") {
+		t.Fatalf("directory: pin=%q err=%v logs=%q", pin, err, logs)
+	}
+	// Dangling symlink: listed by ReadDir, ENOENT on read.
+	if err := os.Symlink(filepath.Join(e.ClusterPinDir, "gone"), filepath.Join(e.ClusterPinDir, "399")); err != nil {
+		t.Fatal(err)
+	}
+	if ids, err := e.clusterPinsMatching("390", testHexPin); err != nil || len(ids) != 0 {
+		t.Fatalf("vanished pin: ids=%v err=%v", ids, err)
+	}
 }

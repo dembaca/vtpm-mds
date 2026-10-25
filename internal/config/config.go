@@ -16,15 +16,15 @@ type Config struct {
 
 // MDSConfig holds the metadata service specific configuration
 type MDSConfig struct {
-	ListenAddr           string `yaml:"listen_addr"`
-	JWKSPath             string `yaml:"jwks_path"`      // pragma: allowlist secret
-	AttestationCA        string `yaml:"attestation_ca"` // pragma: allowlist secret
-	EKCAChain            string `yaml:"ek_ca_chain"`    // pragma: allowlist secret
-	DevIDCACert          string `yaml:"devid_ca_cert"`  // pragma: allowlist secret
-	DevIDCAKey           string `yaml:"devid_ca_key"`   // pragma: allowlist secret
+	ListenAddr    string `yaml:"listen_addr"`
+	JWKSPath      string `yaml:"jwks_path"`      // pragma: allowlist secret
+	AttestationCA string `yaml:"attestation_ca"` // pragma: allowlist secret
+	EKCAChain     string `yaml:"ek_ca_chain"`    // pragma: allowlist secret
+	DevIDCACert   string `yaml:"devid_ca_cert"`  // pragma: allowlist secret
+	DevIDCAKey    string `yaml:"devid_ca_key"`   // pragma: allowlist secret
 	// DevIDLifetime is the LDevID certificate lifetime (Go duration string).
 	// Default 2160h (90 days); values greater than 8760h (one year) are refused.
-	DevIDLifetime         string `yaml:"devid_lifetime"`
+	DevIDLifetime        string `yaml:"devid_lifetime"`
 	TokenTTL             string `yaml:"token_ttl"`
 	JWTTTL               string `yaml:"jwt_ttl"`
 	EnableEC2Compat      bool   `yaml:"enable_ec2_compat"`
@@ -66,7 +66,7 @@ func DefaultConfig() *Config {
 			EKCAChain:            "/etc/vtpm-mds/ek-chain.pem",       // pragma: allowlist secret
 			DevIDCACert:          "/etc/vtpm-mds/devid-ca.pem",       // pragma: allowlist secret
 			DevIDCAKey:           "/etc/vtpm-mds/devid-ca-key.pem",   // pragma: allowlist secret
-			DevIDLifetime:         "2160h",
+			DevIDLifetime:        "2160h",
 			TokenTTL:             "60s",
 			JWTTTL:               "5m",
 			EnableEC2Compat:      true,

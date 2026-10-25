@@ -64,6 +64,24 @@ is a migration aid for a deployment whose inventory is incomplete: unbound
 callers are then served an instance id synthesized from their peer address.
 That id names the connection, not an instance, and is not an identity. Add the
 missing guests to the inventory and remove the setting.
+.TP
+.B cluster_pin_dir
+Default
+.IR /etc/pve/vtpm\-ek .
+Directory of cluster EK pins, read only with the Proxmox inventory (no
+.BR inventory_path );
+empty turns cluster pins off. See
+.BR "EK PINS" .
+.TP
+.B require_cluster_pin
+Default
+.BR false .
+When true, a VM without a cluster pin is refused enrollment instead of using
+its local pin. Setting it with an empty
+.B cluster_pin_dir
+or together with
+.B inventory_path
+stops the start with an error naming both keys.
 .SH EK PINS
 On the first successful DevID enrollment of a VM without an inventory
 .BR ek_sha256 ,
