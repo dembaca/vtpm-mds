@@ -33,6 +33,14 @@ certificate with a missing blob.
   reasons counts. Any other TPM error, including warnings such as retry or
   object memory, fails the run and leaves the materials unchanged, so a
   transient fault never discards a working key.
+- The client also renews when the certificate's `CN` is not this guest's VM
+  ID, read from `/latest/meta-data/instance-id` (`i-<vmid>`). That catches a
+  clone that kept its source's vTPM state, which an ordinary `qm clone`
+  does: there the key loads and fits, but the certificate names the source
+  (the maintainer's decision A, 2026-10-25). The server half of that
+  decision, refusing an EK already pinned to another VM, is the separate
+  change `refuse-an-ek-pinned-to-another-vm`; without it the check here
+  trusts the metadata service, which is the issuer anyway.
 - Because a renewal changes the certificate PEM, the existing behaviour
   clears the SPIRE agent's cached SVID and queues its restart; an agent
   that inherited another guest's SVID therefore attests afresh.
@@ -46,7 +54,7 @@ certificate with a missing blob.
   nothing on the host side changes.
 - Spec: `devid-enrollment` modifies "Guest Renews The LDevID Before SPIRE
   And When Due".
-- Every run, including the daily timer's, now derives the storage root key
+- Every run, including the daily timer's, now reads `instance-id` and derives the storage root key
   and loads the DevID key once even when nothing is due: a few seconds of TPM
   work per day on a vTPM.
 - **Apply order:** `make-guest-renewal-work-with-a-non-root-spire-agent`

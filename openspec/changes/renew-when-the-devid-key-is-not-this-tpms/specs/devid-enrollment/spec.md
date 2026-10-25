@@ -9,6 +9,8 @@ output path when any of the following holds:
 - the certificate's `notAfter` is not after the current time;
 - the time remaining until `notAfter` is strictly less than one third of the
   interval from that certificate's `notBefore` to its `notAfter`;
+- the certificate's subject `CN` is not this guest's VM ID, which is the
+  service's `/latest/meta-data/instance-id` without its `i-` prefix;
 - the DevID private or public TPM blob is missing or empty;
 - the certificate's public key does not equal the public key in the DevID
   public blob;
@@ -17,9 +19,10 @@ output path when any of the following holds:
   with an integrity, binding or sensitive-area error.
 
 Otherwise the client SHALL leave the materials unchanged and exit successfully
-without calling enroll. When deriving that storage root key or loading the
-blobs fails in any other way, including a TPM warning, the client SHALL exit
-non-zero, make no enroll request and leave the materials unchanged.
+without calling enroll. When `instance-id` cannot be read or does not start
+with `i-`, or when deriving that storage root key or loading the blobs fails
+in any other way, including a TPM warning, the client SHALL exit non-zero,
+make no enroll request and leave the materials unchanged.
 
 When it renews and the DevID blobs at the output path load under that storage
 root key, the client SHALL reuse that DevID key in the signing request and
@@ -69,6 +72,23 @@ ordered before that unit can finish first; if the unit is absent or inactive, cl
 - **WHEN** the guest renewal check runs
 - **THEN** it logs that the certificate does not match the key and enrolls
   with the loaded DevID key, keeping its blobs
+
+#### Scenario: Certificate for another VM renews
+
+- **GIVEN** a fresh certificate with `CN=399` and fitting blobs, on a guest
+  whose `instance-id` is `i-390`, as in a clone that kept its source's vTPM
+  state
+- **WHEN** the guest renewal check runs
+- **THEN** it logs that the certificate is for another VM and enrolls with
+  the loaded DevID key
+
+#### Scenario: Unreadable instance-id changes nothing
+
+- **GIVEN** a fresh certificate and fitting blobs, and a metadata service
+  that does not answer `instance-id`
+- **WHEN** the guest renewal check runs
+- **THEN** it exits non-zero, makes no enroll request and leaves the files
+  unchanged
 
 #### Scenario: Missing blob renews
 

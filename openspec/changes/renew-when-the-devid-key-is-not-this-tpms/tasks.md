@@ -27,13 +27,16 @@ record. Not the host package, not `AGENTS.md`/`README.md`.
       simulator test: blobs from another simulator instance plus a fresh
       certificate give a new key and a request, fitting blobs no request, and
       no command fails for object memory with three slots
+- [ ] 1.3a Read `instance-id` and renew when the certificate's `CN` differs;
+      fail the run when it cannot be read (D-e); verify with unit tests
+      against an `httptest` server: same VM, other VM, `404`, no `i-`
 - [ ] 1.4 Fail the run on any other TPM error and leave the files unchanged
       (D-c); verify with a unit test where `TPM2_Load` answers
       `TPM_RC_RETRY`: non-zero exit, no request, files unchanged
 - [ ] 1.5 Log the reason once per renewal (D-d); verify in the tests' log
       output
-- [ ] 1.6 Update `debian/devid-enroll.1` (including that a clone with the same
-      vTPM state is not detected) and add the 0.3.2 entry to
+- [ ] 1.6 Update `debian/devid-enroll.1` (including the `CN` check and that
+      every run reads `instance-id`) and add the 0.3.2 entry to
       `debian/changelog`; verify with `man -l`
 - [ ] 1.7 Run `go vet ./...`, `go test ./...` and
       `openspec validate --all --strict`
@@ -51,6 +54,10 @@ record. Not the host package, not `AGENTS.md`/`README.md`.
       as in 2.3c): the first boot renews with reason `key does not load in
       this TPM` before `spire-agent` starts, the new certificate has the
       clone's CN, and the agent attests with a new agent ID
+- [ ] 2.4 On a clone that **kept** the source's vTPM state (bgl-infra): the
+      first boot renews with reason `certificate is for another VM`; with
+      `refuse-an-ek-pinned-to-another-vm` installed on that node the
+      enrollment is refused and the files stay unchanged
 
 ## Pre-review
 

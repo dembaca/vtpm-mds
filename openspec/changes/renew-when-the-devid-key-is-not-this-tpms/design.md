@@ -15,9 +15,9 @@ blobs only once a renewal is already due (falling back to a new key on
 belong together, renews on the next run of the oneshot or the timer, before
 the SPIRE agent starts on boot; a guest whose materials fit keeps them.
 
-**Non-Goals:** checking the certificate against the DevID CA or the subject
-against this VM's ID (the client still does not verify what the service
-issued; see Open Questions); the server and its EK pin; template cleanup in
+**Non-Goals:** checking the certificate against the DevID CA (the client
+still does not verify what the service issued); the server and its EK pin,
+which `refuse-an-ek-pinned-to-another-vm` changes; template cleanup in
 bgl-infra; SPIRE configuration; the renewal threshold of one third.
 
 ## Decisions
@@ -54,10 +54,20 @@ bgl-infra; SPIRE configuration; the renewal threshold of one third.
   `TPM_RC_SENSITIVE`. Everything else, warnings such as `TPM_RC_RETRY` or
   `TPM_RC_OBJECT_MEMORY`, other TPM errors, transport errors and a failure to
   derive the parent, fails the run with that error and changes nothing; the
-  next timer run retries.
+  next timer run retries. The order of all checks is: certificate present
+  and parseable, lifetime, `CN` (D-e), blobs present, key equality, load.
+- **D-e. The subject must name this VM.** Before touching the TPM, the
+  client reads `/latest/meta-data/instance-id` from the service it enrolls
+  with and renews when the certificate's subject `CN` is not the part after
+  `i-`. The service issues `CN=<vmid>` and nothing else, so this compares
+  like with like. When the read fails or the answer does not start with
+  `i-`, the run fails and changes nothing, as in D-c; enrolling needs the
+  service anyway. The metadata request goes through the session token like
+  any other read, if the service requires one.
 - **D-d. Log the reason.** One line per renewal names why: `no certificate`,
   `unreadable certificate` (the existing line), `due`, `missing blob`,
-  `certificate does not match key`, or `key does not load in this TPM`. A
+  `certificate is for another VM`, `certificate does not match key`, or
+  `key does not load in this TPM`. A
   not-due run with fitting materials stays silent apart from the existing
   summary line.
 
@@ -68,19 +78,20 @@ bgl-infra; SPIRE configuration; the renewal threshold of one third.
 - A guest whose TPM is unavailable at that moment now fails a run it used to
   pass silently when nothing was due (D-c). The unit shows `failed`, the
   agent still starts (no `Requires=`), and the timer retries.
-- A clone that kept its source's **vTPM state** (full clone without a new
-  `tpmstate`) has the same EK and loadable blobs: this change does not
-  detect it, and the certificate keeps the source's CN until it is due.
-  Not detected; covered only by the Open Question below and by template
-  cleanup, and the man page says so.
+- A clone that kept its source's **vTPM state** has the same EK and loadable
+  blobs; D-e renews its certificate, and with
+  `refuse-an-ek-pinned-to-another-vm` the service then refuses it on a node
+  where the source is pinned. Such a clone gets no DevID until it has a new
+  vTPM, which is the intended outcome.
+- Every run now needs the metadata service, also when nothing is due (D-e).
+  A guest that boots while the IMDS is down fails its oneshot; the agent
+  still starts with its existing materials, and the timer retries.
 - Found on the way, outside this scope: `isTPMRetry` in
   `internal/devid/csr.go` matches `*tpm2.Warning`, while go-tpm may return
   warnings as values. Check whether it ever matches before reusing the
   pattern for D-c; if it does not, that is a separate change.
 
-## Open Questions
+## Decided
 
-- Should the client also renew when the certificate's `CN` is not this
-  guest's VM ID, read from the service's `instance-id`? It would catch the
-  case above, at the cost of a metadata request on every run. Left to the
-  maintainer; not part of this change.
+- The `CN` check (D-e) and the server-side refusal as a separate change:
+  the maintainer's answer "A" to ask `gox8yerp…`, 2026-10-25.
