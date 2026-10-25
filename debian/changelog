@@ -1,3 +1,25 @@
+vtpm-mds (0.3.2) unstable; urgency=medium
+
+  * devid-enroll: a renewal now also runs when the DevID materials do not
+    fit, not only when the certificate is due: when a blob is missing, when
+    the certificate's key is not the key in devid.pub.blob, when the blobs
+    do not load in this TPM (a new key is created), or when the
+    certificate's CN is not this guest's VM ID from instance-id. A clone
+    that inherited another guest's files therefore renews on its first run.
+    Each renewal logs its reason.
+  * devid-enroll: every run with a certificate reads instance-id (IMDSv2
+    token, three tries over about ten seconds) and fails without changing
+    anything when it cannot; it needs enable_ec2_compat on the host. A TPM
+    warning, or a blob file that exists but cannot be read, fails the run
+    and keeps the existing key.
+  * vtpm-mds: both enrollment legs refuse, with 401 "EK certificate is
+    pinned to another VM", an EK that this node has already pinned to
+    another VM ID, so a clone that kept its source's vTPM state gets no
+    LDevID. Only files named by a numeric VM ID count as pins. Templates
+    must ship an empty vTPM state; see vtpm-mds(8), EK PINS.
+
+ -- Andreas Dembach <andreas.dembach@dg-i.net>  Sun, 25 Oct 2026 13:27:46 +0100
+
 vtpm-mds (0.3.1) unstable; urgency=medium
 
   * devid-enroll: a run as root (the packaged oneshot) keeps the owner
