@@ -35,7 +35,14 @@ half.
   guest's `CN` check still renews it there, so it holds a certificate
   for its own VM ID, but on a second TPM-sharing VM.
 - A clone that kept its source's vTPM state gets no DevID on a node where the
-  source is pinned, until it has a new vTPM. That is the intended outcome;
-  the bgl-infra template creates a new vTPM per VM anyway.
+  source is pinned, until it has a new vTPM. That is the intended outcome.
+- **Prerequisite:** every `qm clone` of a VM with an initialised vTPM state
+  fails its enrollment from now on, on purpose. The bgl-infra template (3.1)
+  must therefore ship an **empty** `tpmstate`, so each clone gets its own EK
+  on first boot. Operations note for `debian/vtpm-mds.8`: the guest's
+  `devid-enroll` fails with `HTTP 401: EK certificate is pinned to another
+  VM`, and the host logs `devid refused ek pinned to another vm`; the remedy
+  is to stop the clone, delete its `tpmstate0` and create an empty one
+  (`qm set <vmid> --tpmstate0 <storage>:1,version=v2.0`), then boot it.
 - Each leg reads the pin directory once (one small file per enrolled VM on
   the node); enrollment is rare and rate-limited.

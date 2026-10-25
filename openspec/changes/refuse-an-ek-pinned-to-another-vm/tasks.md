@@ -20,7 +20,8 @@ and this record; the README pin row is the coordinator's.
       both VM IDs and no fingerprint
 - [ ] 1.3 Answer `500` `pin store unavailable` when the directory cannot be
       listed (D-d); verify with a unit test on an unreadable directory
-- [ ] 1.4 Document the operator step for a VM restored under a new ID in
+- [ ] 1.4 Document the operator steps for a VM restored under a new ID and
+      for a refused clone (empty `tpmstate`, proposal Impact) in
       `debian/vtpm-mds.8` (D-e); verify with `man -l`
 - [ ] 1.5 Run `go vet ./...`, `go test ./...` and
       `openspec validate --all --strict`
