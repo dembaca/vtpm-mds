@@ -39,8 +39,14 @@ record. Not product code, not `AGENTS.md`/`README.md`.
   release job (`needs: build-deb`, artifacts only) cannot publish. Nit
   taken: `grep -qxF`, so the member names are matched literally.
 
-- [ ] 1.5 The PR's CI run passes the new step on `ubuntu-24.04`
+- [x] 1.5 The PR's CI run passes the new step on `ubuntu-24.04`
+      "Debian package" passed on the merge `a3f33bc` (#81) and on every later
+      `main` commit; the tag run for `v0.3.1` published both `.deb` with
+      members `control.tar.xz` and `data.tar.xz`, lintian exit 0, checked from
+      the release assets on 2026-10-25.
 
 ## 2. Archive
 
-- [ ] 2.1 After merge, the coordinator archives the change
+- [x] 2.1 After merge, the coordinator archives the change
+      Archived 2026-10-25 by `agent-vtpm-hogan-d3e6cbc82` at the coordinator's
+      request (bgl-infra TASK 0.3.2r).
