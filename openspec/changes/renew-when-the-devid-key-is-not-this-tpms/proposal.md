@@ -28,16 +28,21 @@ certificate with a missing blob.
 - When the blobs cannot be loaded, the renewal creates a new DevID key, as a
   first enrollment does. When they load but the certificate does not match,
   it reuses the loaded key, as a due renewal does.
-- A TPM error other than a failed load fails the run and leaves the
-  materials unchanged, so a transient fault never discards a working key.
+- "Cannot be loaded" is decided by the TPM's answer: only a blob that does
+  not decode or a load refused for integrity, binding or sensitive-area
+  reasons counts. Any other TPM error, including warnings such as retry or
+  object memory, fails the run and leaves the materials unchanged, so a
+  transient fault never discards a working key.
 - Because a renewal changes the certificate PEM, the existing behaviour
   clears the SPIRE agent's cached SVID and queues its restart; an agent
   that inherited another guest's SVID therefore attests afresh.
 
 ## Impact
 
-- `internal/devid/client.go`, `internal/devid/renew.go` (or a new helper
-  beside it), their tests, `debian/devid-enroll.1`. Guest package only;
+- `internal/devid/client.go`, `internal/devid/renew.go`, `internal/devid/keys.go`
+  (a new `ErrDevIDForeign`), `internal/devid/csr.go` (a request variant that
+  takes a loaded key), their tests, `debian/devid-enroll.1` and
+  `debian/changelog` (0.3.2). Guest package only;
   nothing on the host side changes.
 - Spec: `devid-enrollment` modifies "Guest Renews The LDevID Before SPIRE
   And When Due".

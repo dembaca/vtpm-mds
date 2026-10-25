@@ -23,23 +23,43 @@ bgl-infra; SPIRE configuration; the renewal threshold of one third.
 ## Decisions
 
 - **D-a. Fit is part of "due".** The client renews when the lifetime rule
-  says so **or** the materials do not fit. "Do not fit" means: a blob is
-  missing or empty; the certificate's `SubjectPublicKeyInfo` differs from
-  the public key decoded from `devid.pub.blob`; or `LoadDevID` fails with
-  `ErrDevIDLoad` under the H-1 parent derived from this TPM. The order is
-  cheapest first, so the TPM is touched only when the files agree.
-- **D-b. Which key the renewal uses.** Unloadable blobs: a new key, exactly
-  the existing fallback. Loadable blobs with a mismatched certificate: the
-  loaded key, as a due renewal reuses it today. The check loads the key once
-  and the signing request uses that handle, so a run never loads it twice.
-- **D-c. Only a failed load counts.** A TPM error other than `ErrDevIDLoad`
-  (device busy, deriving the parent fails) fails the run with that error and
-  changes nothing. Renewing on such an error would replace a working key
-  because of a transient fault, and the next timer run retries anyway.
-- **D-d. Log the reason.** One line per renewal names why: `due`,
-  `missing blob`, `certificate does not match key`, or `key does not load
-  in this TPM`. A not-due run with fitting materials stays silent apart from
-  the existing summary line.
+  says so **or** the materials do not fit. "Do not fit" means: the certificate
+  is missing or cannot be parsed (as today); a blob is missing or empty; the
+  certificate's public key does not equal the key in `devid.pub.blob`
+  (compared as keys, `cert.PublicKey` against `tpm2.Public.Key()`, not as
+  raw DER, so an exponent of 0 reads as 65537); or the blobs are **foreign**
+  to this TPM (D-c). The order is cheapest first, so the TPM is touched only
+  when the files agree.
+- **D-b. Which key the renewal uses, and when it is loaded.** Foreign blobs:
+  a new key. Blobs that load with a mismatched certificate: the loaded key,
+  as a due renewal reuses it today. The check derives the H-1 parent, loads
+  the DevID key and flushes the parent (two objects at most). A not-due run
+  flushes the DevID handle itself, because with `-tpm /dev/tpm0` closing the
+  device flushes nothing. A renewal hands the loaded `KeyInfo` to a variant
+  of `CreateSigningRequestWithDevID` that records it in its resources
+  **before** the EK and AK steps, so the error path's `Flush` owns it. The
+  sequence then is EK read and flush, `CreateAK` (DevID, parent, AK: three,
+  parent flushed), certify, activate (EK, AK, DevID: three): the same peak as
+  today, so "Four keys are never loaded at once" still holds. `CreateAK`
+  derives the parent again, so a renewal derives it twice, as today; the
+  check only avoids a third derivation and a second load. The `ErrDevIDLoad`
+  retry in `ClientEnrollOrRenew` becomes unreachable and is removed.
+- **D-c. Foreign is defined by the TPM's answer.** `LoadDevID` today wraps
+  every `TPM2_Load` error in `ErrDevIDLoad` with `%v`, so a busy or
+  out-of-memory TPM would read as "not this TPM" and a not-due run would
+  replace a working key. A new sentinel `ErrDevIDForeign`, wrapping the
+  cause with `%w`, covers exactly: a blob that does not decode, and a
+  format-1 parameter error from `TPM2_Load` with code `TPM_RC_INTEGRITY`
+  (the private area's HMAC fails under another parent), `TPM_RC_BINDING` or
+  `TPM_RC_SENSITIVE`. Everything else, warnings such as `TPM_RC_RETRY` or
+  `TPM_RC_OBJECT_MEMORY`, other TPM errors, transport errors and a failure to
+  derive the parent, fails the run with that error and changes nothing; the
+  next timer run retries.
+- **D-d. Log the reason.** One line per renewal names why: `no certificate`,
+  `unreadable certificate` (the existing line), `due`, `missing blob`,
+  `certificate does not match key`, or `key does not load in this TPM`. A
+  not-due run with fitting materials stays silent apart from the existing
+  summary line.
 
 ## Risks / Trade-offs
 
@@ -51,7 +71,12 @@ bgl-infra; SPIRE configuration; the renewal threshold of one third.
 - A clone that kept its source's **vTPM state** (full clone without a new
   `tpmstate`) has the same EK and loadable blobs: this change does not
   detect it, and the certificate keeps the source's CN until it is due.
-  Covered only by the Open Question below and by template cleanup.
+  Not detected; covered only by the Open Question below and by template
+  cleanup, and the man page says so.
+- Found on the way, outside this scope: `isTPMRetry` in
+  `internal/devid/csr.go` matches `*tpm2.Warning`, while go-tpm may return
+  warnings as values. Check whether it ever matches before reusing the
+  pattern for D-c; if it does not, that is a separate change.
 
 ## Open Questions
 

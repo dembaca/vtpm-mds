@@ -5,25 +5,26 @@
 The guest enrollment client SHALL renew the LDevID materials at its configured
 output path when any of the following holds:
 
-- no certificate file is present there;
+- no certificate file is present there, or it cannot be read or parsed;
 - the certificate's `notAfter` is not after the current time;
 - the time remaining until `notAfter` is strictly less than one third of the
   interval from that certificate's `notBefore` to its `notAfter`;
 - the DevID private or public TPM blob is missing or empty;
-- the certificate's public key is not the public key in the DevID public
-  blob;
-- the DevID blobs cannot be loaded under the storage root key derived from
-  the guest's TPM.
+- the certificate's public key does not equal the public key in the DevID
+  public blob;
+- the DevID blobs are foreign to the guest's TPM: a blob does not decode, or
+  the TPM refuses to load them under the storage root key derived from it
+  with an integrity, binding or sensitive-area error.
 
 Otherwise the client SHALL leave the materials unchanged and exit successfully
-without calling enroll. When checking whether the blobs load fails for any
-other reason than the blobs themselves, the client SHALL exit non-zero and
-leave the materials unchanged.
+without calling enroll. When deriving that storage root key or loading the
+blobs fails in any other way, including a TPM warning, the client SHALL exit
+non-zero, make no enroll request and leave the materials unchanged.
 
 When it renews and the DevID blobs at the output path load under that storage
 root key, the client SHALL reuse that DevID key in the signing request and
 SHALL NOT create a new DevID key under the storage root. When those blobs are
-missing or cannot be loaded, the client SHALL create a new DevID key as in a
+missing or foreign, the client SHALL create a new DevID key as in a
 first enrollment. Each renewal SHALL log which of the conditions above caused
 it.
 
@@ -75,10 +76,10 @@ ordered before that unit can finish first; if the unit is absent or inactive, cl
 - **WHEN** the guest renewal check runs
 - **THEN** it logs the missing blob, creates a new DevID key and enrolls
 
-#### Scenario: A TPM fault does not discard the key
+#### Scenario: A TPM warning does not discard the key
 
-- **GIVEN** a fresh certificate and matching blobs, and a TPM that fails to
-  derive the storage root key
+- **GIVEN** a fresh certificate and matching blobs, and a TPM that answers
+  the load with a warning such as `TPM_RC_RETRY`
 - **WHEN** the guest renewal check runs
 - **THEN** it exits non-zero, makes no enroll request and leaves the files
   unchanged
