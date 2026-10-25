@@ -24,7 +24,8 @@ bgl-infra; SPIRE configuration; the renewal threshold of one third.
 
 - **D-a. Fit is part of "due".** The client renews when the lifetime rule
   says so **or** the materials do not fit. "Do not fit" means: the certificate
-  is missing or cannot be parsed (as today); a blob is missing or empty; the
+  is missing or cannot be parsed (as today); its `CN` is not this VM's ID
+  (D-e); a blob is missing or empty; the
   certificate's public key does not equal the key in `devid.pub.blob`
   (compared as keys, `cert.PublicKey` against `tpm2.Public.Key()`, not as
   raw DER, so an exponent of 0 reads as 65537); or the blobs are **foreign**
@@ -56,14 +57,23 @@ bgl-infra; SPIRE configuration; the renewal threshold of one third.
   derive the parent, fails the run with that error and changes nothing; the
   next timer run retries. The order of all checks is: certificate present
   and parseable, lifetime, `CN` (D-e), blobs present, key equality, load.
+  The first condition that holds is the logged reason, but the load still
+  runs after a `CN` or lifetime reason, because it decides between the
+  loaded key and a new one (D-b).
 - **D-e. The subject must name this VM.** Before touching the TPM, the
   client reads `/latest/meta-data/instance-id` from the service it enrolls
   with and renews when the certificate's subject `CN` is not the part after
   `i-`. The service issues `CN=<vmid>` and nothing else, so this compares
-  like with like. When the read fails or the answer does not start with
-  `i-`, the run fails and changes nothing, as in D-c; enrolling needs the
-  service anyway. The metadata request goes through the session token like
-  any other read, if the service requires one.
+  like with like. The service always requires an IMDSv2 session token for
+  `instance-id`, so a new helper does `PUT /latest/api/token` and then the
+  `GET` with `X-aws-ec2-metadata-token`; `client.go` has only
+  `httpPostJSON` today. The read is tried three times over about ten
+  seconds, for the short gaps of a host upgrade; when it still fails, or the
+  answer does not start with `i-`, the run fails and changes nothing, as in
+  D-c. The check runs only when a parseable certificate is present: a first
+  enrollment needs no `CN`. It depends on `enable_ec2_compat` on the host:
+  with it off, `instance-id` is not served and every run with a certificate
+  fails, although enrollment itself would work; the man page says so.
 - **D-d. Log the reason.** One line per renewal names why: `no certificate`,
   `unreadable certificate` (the existing line), `due`, `missing blob`,
   `certificate is for another VM`, `certificate does not match key`, or

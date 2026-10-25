@@ -27,17 +27,22 @@ record. Not the host package, not `AGENTS.md`/`README.md`.
       simulator test: blobs from another simulator instance plus a fresh
       certificate give a new key and a request, fitting blobs no request, and
       no command fails for object memory with three slots
-- [ ] 1.3a Read `instance-id` and renew when the certificate's `CN` differs;
-      fail the run when it cannot be read (D-e); verify with unit tests
-      against an `httptest` server: same VM, other VM, `404`, no `i-`
+- [ ] 1.3a Read `instance-id` with an IMDSv2 token (PUT, then GET), three
+      tries over ~10 s, only when a parseable certificate is present, and
+      renew when the certificate's `CN` differs; fail the run when it cannot
+      be read (D-e); verify with unit tests against an `httptest` server that
+      serves both requests: same VM, other VM, `404`, no `i-`, token refused,
+      no certificate (no metadata request)
 - [ ] 1.4 Fail the run on any other TPM error and leave the files unchanged
       (D-c); verify with a unit test where `TPM2_Load` answers
       `TPM_RC_RETRY`: non-zero exit, no request, files unchanged
 - [ ] 1.5 Log the reason once per renewal (D-d); verify in the tests' log
       output
-- [ ] 1.6 Update `debian/devid-enroll.1` (including the `CN` check and that
-      every run reads `instance-id`) and add the 0.3.2 entry to
-      `debian/changelog`; verify with `man -l`
+- [ ] 1.6 Update `debian/devid-enroll.1` (including the `CN` check, that
+      every run with a certificate reads `instance-id`, and the dependency on
+      the host's `enable_ec2_compat`) and add the 0.3.2 entry to
+      `debian/changelog` (certificates from before the `CN`-only subject
+      renew once); verify with `man -l`
 - [ ] 1.7 Run `go vet ./...`, `go test ./...` and
       `openspec validate --all --strict`
 
@@ -51,8 +56,9 @@ record. Not the host package, not `AGENTS.md`/`README.md`.
       unchanged; with `devid.pub.blob` removed from the copy it renews with
       reason `missing blob`
 - [ ] 2.3 On a clone with an empty vTPM and inherited materials (bgl-infra,
-      as in 2.3c): the first boot renews with reason `key does not load in
-      this TPM` before `spire-agent` starts, the new certificate has the
+      as in 2.3c): the first boot renews with reason `certificate is for another
+      VM` (it comes before the load in D-c) and a **new** key, because the
+      inherited blobs do not load, before `spire-agent` starts, the new certificate has the
       clone's CN, and the agent attests with a new agent ID
 - [ ] 2.4 On a clone that **kept** the source's vTPM state (bgl-infra): the
       first boot renews with reason `certificate is for another VM`; with
@@ -69,6 +75,13 @@ record. Not the host package, not `AGENTS.md`/`README.md`.
   reasons in D-d and "cannot be parsed" in the spec, named test seams, the
   dead retry. Nits taken: keys compared as keys, changelog and man-page
   items. Its note on `isTPMRetry` is recorded as outside scope.
+- Fable, 2026-10-25, of D-e (`70bb7c6`). Must-fix: `instance-id` always
+  needs an IMDSv2 token — the helper and its test now do PUT and GET; task
+  2.3 expected the wrong reason for the clone — it now expects `certificate
+  is for another VM` with a new key, and D-c says the load still runs after
+  an earlier reason. Should-fix taken: the `enable_ec2_compat` dependency,
+  the read only with a parseable certificate, three tries before failing.
+  Nits taken: `CN` in D-a's list; the changelog notes the one-time renewal.
 - [ ] Review of the implementation by a stronger model before the PR is
       called ready
 

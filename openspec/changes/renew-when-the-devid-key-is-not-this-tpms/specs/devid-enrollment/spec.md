@@ -9,8 +9,9 @@ output path when any of the following holds:
 - the certificate's `notAfter` is not after the current time;
 - the time remaining until `notAfter` is strictly less than one third of the
   interval from that certificate's `notBefore` to its `notAfter`;
-- the certificate's subject `CN` is not this guest's VM ID, which is the
-  service's `/latest/meta-data/instance-id` without its `i-` prefix;
+- a parseable certificate is present and its subject `CN` is not this
+  guest's VM ID, which is the service's `/latest/meta-data/instance-id`
+  without its `i-` prefix, read with a session token;
 - the DevID private or public TPM blob is missing or empty;
 - the certificate's public key does not equal the public key in the DevID
   public blob;
@@ -19,8 +20,9 @@ output path when any of the following holds:
   with an integrity, binding or sensitive-area error.
 
 Otherwise the client SHALL leave the materials unchanged and exit successfully
-without calling enroll. When `instance-id` cannot be read or does not start
-with `i-`, or when deriving that storage root key or loading the blobs fails
+without calling enroll. When a parseable certificate is present and
+`instance-id` cannot be read after a few attempts or does not start with
+`i-`, or when deriving that storage root key or loading the blobs fails
 in any other way, including a TPM warning, the client SHALL exit non-zero,
 make no enroll request and leave the materials unchanged.
 
