@@ -111,8 +111,9 @@ including D-g and D-b.
       extracted binary reports that version; `config.yaml` carries the two
       commented keys.
 - [ ] 2.2 Install on hogan (maintainer's go) with no `/etc/pve/vtpm-ek`: VM
-      399 enrolls into a scratch directory as before, the journal shows
-      `no cluster pin vm=399, using local pin`, SPIRE's material untouched
+      399 enrolls into a scratch directory as before against its local pin,
+      the journal shows no cluster-pin line (D-e: `no cluster pin … using
+      local pin` only when the directory exists), SPIRE's material untouched
 - [ ] 2.3 After P1-w's backfill has written `/etc/pve/vtpm-ek/399`: VM 399
       enrolls into a scratch directory, no warning line. A mismatching
       cluster pin is covered by the unit tests only; the live file is not
