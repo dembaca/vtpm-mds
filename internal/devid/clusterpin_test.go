@@ -193,23 +193,23 @@ func TestPinnedToAnotherVMClusterAndStale(t *testing.T) {
 	guestConfigRecheck = 0
 	t.Cleanup(func() { guestConfigRecheck = old })
 	cdir, dir, nodes := t.TempDir(), t.TempDir(), t.TempDir()
-	writeGuestConfig(t, nodes, "holger", "qemu-server", "399")
+	writeGuestConfig(t, nodes, "node-b", "qemu-server", "101")
 	e := &Enroller{PinDir: dir, ClusterPinDir: cdir, GuestConfigRoot: nodes}
 
 	// A clone is refused by a cluster pin of a VM on another node.
-	writePinFile(t, cdir, "399", testHexPin+"\n")
-	writePinFile(t, cdir, "398", strings.ToUpper(testHexPin)) // malformed: ignored
-	if got, err := e.pinnedToAnotherVM("390", testHexPin); err != nil || got != "399" {
+	writePinFile(t, cdir, "101", testHexPin+"\n")
+	writePinFile(t, cdir, "103", strings.ToUpper(testHexPin)) // malformed: ignored
+	if got, err := e.pinnedToAnotherVM("102", testHexPin); err != nil || got != "101" {
 		t.Fatalf("cluster pin: got %q err=%v", got, err)
 	}
-	if got, _ := e.pinnedToAnotherVM("399", testHexPin); got != "" {
+	if got, _ := e.pinnedToAnotherVM("101", testHexPin); got != "" {
 		t.Fatalf("own cluster pin: got %q", got)
 	}
 
 	// A destroyed VM's cluster and local pins refuse nobody.
 	writePinFile(t, dir, "500", testHexPin+"\n")
 	writePinFile(t, cdir, "500", testHexPin+"\n")
-	if err := os.Remove(filepath.Join(cdir, "399")); err != nil {
+	if err := os.Remove(filepath.Join(cdir, "101")); err != nil {
 		t.Fatal(err)
 	}
 	var got string
@@ -223,7 +223,7 @@ func TestPinnedToAnotherVMClusterAndStale(t *testing.T) {
 	}
 
 	// A container config counts as existing.
-	writeGuestConfig(t, nodes, "horst", "lxc", "500")
+	writeGuestConfig(t, nodes, "node-c", "lxc", "500")
 	if got, _ := e.pinnedToAnotherVM("450", testHexPin); got != "500" {
 		t.Fatalf("lxc counts: got %q", got)
 	}
@@ -246,11 +246,11 @@ func TestUnlistableGuestConfigRootIgnoresNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(nodes, 0o755) })
-	writePinFile(t, dir, "399", "abc\n")
+	writePinFile(t, dir, "101", "abc\n")
 	e := &Enroller{PinDir: dir, GuestConfigRoot: nodes}
 	var got string
-	logs := captureLog(t, func() { got, _ = e.pinnedToAnotherVM("390", "abc") })
-	if got != "399" || !strings.Contains(logs, "no pin is treated as stale") {
+	logs := captureLog(t, func() { got, _ = e.pinnedToAnotherVM("102", "abc") })
+	if got != "101" || !strings.Contains(logs, "no pin is treated as stale") {
 		t.Fatalf("got %q logs=%q", got, logs)
 	}
 }
@@ -280,7 +280,7 @@ func TestUnusableClusterPinDirFailsClosed(t *testing.T) {
 				t.Fatalf("%s: got %d %q", leg, rr.Code, rr.Body.String())
 			}
 		}
-		if _, err := e.clusterPinsMatching("390", testHexPin); !errors.Is(err, ErrPinStore) {
+		if _, err := e.clusterPinsMatching("102", testHexPin); !errors.Is(err, ErrPinStore) {
 			t.Fatalf("scan: want ErrPinStore, got %v", err)
 		}
 	})
@@ -363,10 +363,10 @@ func TestClusterPinVanishedAndDirectory(t *testing.T) {
 		t.Fatalf("directory: pin=%q err=%v logs=%q", pin, err, logs)
 	}
 	// Dangling symlink: listed by ReadDir, ENOENT on read.
-	if err := os.Symlink(filepath.Join(e.ClusterPinDir, "gone"), filepath.Join(e.ClusterPinDir, "399")); err != nil {
+	if err := os.Symlink(filepath.Join(e.ClusterPinDir, "gone"), filepath.Join(e.ClusterPinDir, "101")); err != nil {
 		t.Fatal(err)
 	}
-	if ids, err := e.clusterPinsMatching("390", testHexPin); err != nil || len(ids) != 0 {
+	if ids, err := e.clusterPinsMatching("102", testHexPin); err != nil || len(ids) != 0 {
 		t.Fatalf("vanished pin: ids=%v err=%v", ids, err)
 	}
 }
@@ -381,12 +381,12 @@ func TestGuestExistsRechecks(t *testing.T) {
 	t.Cleanup(func() { guestConfigRecheck = old })
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		writeGuestConfig(t, nodes, "holger", "qemu-server", "399")
+		writeGuestConfig(t, nodes, "node-b", "qemu-server", "101")
 	}()
-	if !e.guestExists("399") {
+	if !e.guestExists("101") {
 		t.Fatal("config written during the recheck window was not found")
 	}
-	if e.guestExists("398") {
+	if e.guestExists("103") {
 		t.Fatal("absent VM reported as existing")
 	}
 }

@@ -148,7 +148,7 @@ func syncDir(dir string) {
 // ClusterPinDir (sorted by name), then another VM's inventory ek_sha256
 // (sorted by VM ID), or "" when none (refuse-an-ek-pinned-to-another-vm
 // D-b, read-cluster-ek-pins-from-pmxcfs D-g). Only files named like a VM ID
-// count (isVMIDName): a set-aside "399.old" or the .<vmid>.tmp-* of an
+// count (isVMIDName): a set-aside "101.old" or the .<vmid>.tmp-* of an
 // in-flight create is ignored, as are empty files. A store or cluster pin
 // whose VM has no guest config left in the cluster is ignored (guestExists).
 // A missing PinDir is an empty store; one that cannot be listed is
