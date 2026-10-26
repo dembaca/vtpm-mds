@@ -121,9 +121,10 @@ including D-g and D-b.
       `devid issued … vm=399 ek=19517bd1…` and `enroll/finish 200` from
       `169.254.225.141`, and no cluster-pin, pin, `401` or `500` line. In the
       guest `/var/lib/spire/agent/devid.*` still date from 2026-10-25 07:54
-      and `spire-agent` has not restarted since 2026-10-25 14:53. The
-      guest-side `rc` and the scratch path were not reported on the bus and
-      are not recorded here.
+      and `spire-agent` has not restarted since 2026-10-25 14:53. In the
+      guest `devid-enroll` exited `0` (08:11:26Z–08:11:31Z) into the scratch
+      directory `/tmp/devid-scratch.HDKRWg` (cursor's RESULT in ~bgl-infra,
+      post `59mcbwo84fnz5gxw8g5rt1nwwo`, relayed by the maintainer).
 - [ ] 2.3 After P1-w's backfill has written `/etc/pve/vtpm-ek/399`: VM 399
       enrolls into a scratch directory, no warning line. A mismatching
       cluster pin is covered by the unit tests only; the live file is not
