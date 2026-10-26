@@ -39,7 +39,7 @@ neutralised itself.
       archive applies the deltas.
 - [x] 1.6 Verify with the grep of 1.5 after reducing `AGENTS.md` to rules and
       still-valid pitfalls (D-d)
-      `AGENTS.md` is 142 lines instead of 810; the removed lines 110–810 went
+      `AGENTS.md` is 147 lines instead of 810; the removed lines 110–810 went
       to the operator as a file for their infrastructure repository.
 
 ## Pre-review
