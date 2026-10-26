@@ -22,14 +22,14 @@ neutralised itself.
 - [x] 1.3 Verify with the grep of 1.5 after rewriting the README's E2E cheat
       sheet with placeholders (`<vmid>`, `<guest>`, and `<DevID CA>` for the
       CA's subject)
-- [ ] 1.4 Write the spec deltas per D-b; verify with
+- [x] 1.4 Write the spec deltas per D-b; verify with
       `openspec validate --all --strict` on the lab host
-      Written: each requirement block extracted from `openspec/specs/` with
-      the substitutions of D-a and nothing else. On the Mac,
-      `openspec validate keep-site-names-out-of-the-product --strict` (CLI
-      1.14.3) reports the change valid; `--all` fails there on `main` too,
-      because 1.14.3 warns on long requirement texts in the existing specs.
-      The run on the lab host is still open.
+      Each requirement block extracted from `openspec/specs/` with the
+      substitutions of D-a and nothing else. On the lab host (OpenSpec
+      1.13.1, worktree of `ccf1d6a`): `Totals: 6 passed, 0 failed (6 items)`,
+      only INFO notes on long requirements; `go test ./...` all `ok`. On the
+      Mac, OpenSpec 1.14.3 reports the change valid but fails `--all` on
+      `main` as well, because it warns on long requirement texts.
 - [x] 1.5 Verify the grep is empty outside D-c's exceptions and the two files
       PR #90 owns:
       `git grep -nIiwE 'hogan|holger|bgl|bgl-cluster|DUS[0-9]?|keller(01)?|vtpm-pilot|399' -- ':!openspec/changes' ':!debian/changelog' ':!openspec/specs' ':!internal/devid/clusterpin_test.go' ':!internal/devid/pin.go'`
