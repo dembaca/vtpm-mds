@@ -2,14 +2,10 @@
 
 ### Requirement: Name No Particular Operator's Site In The Product
 
-The product (code, tests, `openspec/specs/`, man pages, `debian/` files
-other than the changelog, shipped configuration, `README.md`,
-`ARCHITECTURE.md` and the scripts) SHALL NOT name a host, cluster, location,
-VM ID, MAC address or certificate authority of a particular operator. It SHALL
-NOT make behaviour depend on any such name. Examples and test fixtures SHALL
-use neutral names. The project's own records (`AGENTS.md`, archived changes,
-`debian/changelog` and the verification notes of a change's `tasks.md`) MAY
-name the hosts and VMs they were verified on.
+Code, tests, specs, man pages, shipped configuration, the README and the
+scripts SHALL NOT name a host, cluster, location, VM ID, MAC address or
+certificate authority of a particular operator, and no behaviour SHALL depend
+on such a name. Examples and test fixtures SHALL use neutral names.
 
 #### Scenario: A test needs a Proxmox node and a guest
 
@@ -23,3 +19,11 @@ name the hosts and VMs they were verified on.
 - **GIVEN** a man page that shows an override or a path
 - **WHEN** it gives an example
 - **THEN** the example names no particular operator's host or VM
+
+#### Scenario: The project's own records name the lab
+
+- **GIVEN** `AGENTS.md`, an archived change, `debian/changelog` or the
+  verification notes in a change's `tasks.md`
+- **WHEN** it records where something was verified
+- **THEN** it may name that host and VM, because it records the project's
+  history rather than describing the product
