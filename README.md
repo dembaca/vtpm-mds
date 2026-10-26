@@ -298,7 +298,7 @@ devid-enroll -version
 
 ```bash
 # guest; default MDS URL is http://169.254.169.254
-sudo devid-enroll -cn <guest> -tpm /dev/tpmrm0 -out /tmp/devid-e2e
+sudo devid-enroll -tpm /dev/tpmrm0 -out /tmp/devid-e2e
 openssl x509 -in /tmp/devid-e2e/devid.crt.pem -noout -subject -issuer -dates
 ```
 
@@ -352,7 +352,7 @@ spire-server agent list
 MDS enroll logs on the host while a guest enroll runs:
 
 ```bash
-journalctl -u vtpm-mds -f --no-pager | grep -E 'enroll/|VMID=<vmid>'
+journalctl -u vtpm-mds -f --no-pager | grep -E 'enroll/|vm=<vmid>| <vmid>$'
 # POST /latest/devid/enroll/start 200
 # POST /latest/devid/enroll/finish 200
 ```

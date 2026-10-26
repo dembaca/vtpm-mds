@@ -22,10 +22,6 @@ neutralised itself.
 - [x] 1.3 Verify with the grep of 1.5 after rewriting the README's E2E cheat
       sheet with placeholders (`<vmid>`, `<guest>`, and `<DevID CA>` for the
       CA's subject)
-- [x] 1.6 Verify with the grep of 1.5 after reducing `AGENTS.md` to rules and
-      still-valid pitfalls (D-d)
-      `AGENTS.md` is 142 lines instead of 810; the removed lines 110–810 went
-      to the operator as a file for their infrastructure repository.
 - [ ] 1.4 Write the spec deltas per D-b; verify with
       `openspec validate --all --strict` on the lab host
       Written: each requirement block extracted from `openspec/specs/` with
@@ -41,10 +37,24 @@ neutralised itself.
       `git grep -niE 'bc:24:11:(75:da:c0|06:1d:b2)' -- ':!openspec/changes'`
       Both print nothing. `openspec/specs/` keeps the old names until the
       archive applies the deltas.
+- [x] 1.6 Verify with the grep of 1.5 after reducing `AGENTS.md` to rules and
+      still-valid pitfalls (D-d)
+      `AGENTS.md` is 142 lines instead of 810; the removed lines 110–810 went
+      to the operator as a file for their infrastructure repository.
 
 ## Pre-review
 
-- [ ] Verify with a review by a stronger model before the PR is called ready
+- [x] Verify with a review by a stronger model before the PR is called ready
+      **Fable, 2026-10-26, of `51cfb21`:** no must-fix; spec deltas are pure
+      renames (scenario counts unchanged), tests faithful, vet/test green.
+      Should-fix taken: `gofmt` on `fingerprint_test.go`; `ARCHITECTURE.md`
+      named in the requirement. Should-fix 3 (the `qm guest exec` ASCII rule
+      is new in `AGENTS.md`) goes to the maintainer with the merge ask. Nits
+      taken: D-a rows for `bgl` as region and the third MAC; task order; the
+      README's journal grep and the ignored `-cn`; two still-valid pitfalls
+      back in `AGENTS.md` (`e2e-netns.sh` needs the YAML inventory; `301`/`307`
+      by Go version). Not taken: `169.254.169.10` in the README (an address,
+      not a site name).
 
 ## 2. Archive
 

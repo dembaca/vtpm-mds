@@ -92,6 +92,11 @@ Tests and vet must pass: `go vet ./...` and `go test ./...`.
   a production IMDS.** Its `setup-host.sh` claims `169.254.169.1/16` and
   `169.254.169.254/16`; on such a host there are two connected routes for
   `169.254.0.0/16` and replies leave through the production bridge.
+  `scripts/qemu-lab/e2e-netns.sh` likewise expects the lab's YAML inventory
+  (`i-100`) and cannot run against a Proxmox-backed inventory.
+- Redirect codes depend on the Go version: `/latest/meta-data` without a slash
+  answers `301` with go1.24 and `307` with newer Go; only `placement` has an
+  explicit redirect. Do not pin a test or spec to the implicit one.
 
 ## TPM and SPIRE pitfalls
 

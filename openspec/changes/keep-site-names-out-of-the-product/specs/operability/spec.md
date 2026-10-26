@@ -2,8 +2,8 @@
 
 ### Requirement: Name No Particular Operator's Site In The Product
 
-Code, tests, specs, man pages, shipped configuration, the README and the
-scripts SHALL NOT name a host, cluster, location, VM ID, MAC address or
+Code, tests, specs, man pages, shipped configuration, the README,
+`ARCHITECTURE.md` and the scripts SHALL NOT name a host, cluster, location, VM ID, MAC address or
 certificate authority of a particular operator, and no behaviour SHALL depend
 on such a name. Examples and test fixtures SHALL use neutral names.
 

@@ -15,12 +15,13 @@ the node description. They are fixture values and prose.
 | Site name | Neutral name |
 |---|---|
 | node `hogan` / `holger` (and `hogan-a`, `Hogan`) | `node-a` / `node-b` (`node-x`, `Node-A`) |
-| cluster `bgl-cluster`, `bgl`, `BGL-Cluster` | `cluster-1`, `Cluster-1` |
+| cluster `bgl-cluster`, `bgl` (as cluster name), `BGL-Cluster` | `cluster-1`, `Cluster-1` |
+| `bgl` as a region value | `region-1` |
 | region `bgl-1`, `bgl-x`, `DUS` | `region-1`, `region-x`, `region-a` |
 | zone `DUS4`, `DUS3`, `keller` | `AZ4`, `AZ3`, `room-a` |
 | rack `keller01` | `rack-01` |
 | VM `399` (`vtpm-pilot`, `pilot`) | `350` (`<guest>`, `guest-p`) |
-| MACs `bc:24:11:75:da:c0`, `bc:24:11:06:1d:b2` | `bc:24:11:00:01:99`, `bc:24:11:00:02:99` |
+| MACs `bc:24:11:75:da:c0`, `bc:24:11:06:1d:b2`, `BC:24:11:06:1D:B3` | `bc:24:11:00:01:99`, `bc:24:11:00:02:99`, `BC:24:11:00:02:9A` |
 | `CN=BGL Proxmox DevID CA` | `CN=Example DevID CA` |
 
 The table is fixed instead of renaming case by case, so a reviewer can check

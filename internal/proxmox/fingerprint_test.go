@@ -12,7 +12,7 @@ const fpGuest = "name: g\nnet0: virtio=BC:24:11:00:02:99,bridge=vmbr_imds\n"
 // nothing else does.
 func TestSourceFingerprintFollowsWhatTheLoaderReads(t *testing.T) {
 	root := pveTree(t, "node-a", map[string]map[string]string{
-		"node-a":  {"350.conf": fpGuest},
+		"node-a": {"350.conf": fpGuest},
 		"node-b": {"500.conf": fpGuest},
 	})
 	base := SourceFingerprint(root)
@@ -76,7 +76,7 @@ func TestSourceFingerprintFollowsWhatTheLoaderReads(t *testing.T) {
 // even when both nodes hold identical files.
 func TestSourceFingerprintFollowsTheLinkTarget(t *testing.T) {
 	root := pveTree(t, "node-a", map[string]map[string]string{
-		"node-a":  {"350.conf": fpGuest},
+		"node-a": {"350.conf": fpGuest},
 		"node-b": {"350.conf": fpGuest},
 	})
 	before := SourceFingerprint(root)
