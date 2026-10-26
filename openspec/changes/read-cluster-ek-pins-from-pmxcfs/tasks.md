@@ -110,16 +110,29 @@ including D-g and D-b.
       `systemd-analyze verify` on both extracted units is clean; the
       extracted binary reports that version; `config.yaml` carries the two
       commented keys.
-- [ ] 2.2 Install on hogan (maintainer's go) with no `/etc/pve/vtpm-ek`: VM
+- [x] 2.2 Install on hogan (maintainer's go) with no `/etc/pve/vtpm-ek`: VM
       399 enrolls into a scratch directory as before against its local pin,
       the journal shows no cluster-pin line (D-e: `no cluster pin … using
       local pin` only when the directory exists), SPIRE's material untouched
+      2026-10-26 07:41:15, the maintainer's go on ask `1dkqzeeb…`: `dpkg -i`
+      of `0.3.2+git20261025.d6c40ce6070c`, both units active, `/health` `ok`,
+      `/etc/pve/vtpm-ek` absent. At 09:11 an enrolment of VM 399 over SSH
+      (`agent-cursor-devid-6741`): hogan logged `enroll/start 200`,
+      `devid issued … vm=399 ek=19517bd1…` and `enroll/finish 200` from
+      `169.254.225.141`, and no cluster-pin, pin, `401` or `500` line. In the
+      guest `/var/lib/spire/agent/devid.*` still date from 2026-10-25 07:54
+      and `spire-agent` has not restarted since 2026-10-25 14:53. The
+      guest-side `rc` and the scratch path were not reported on the bus and
+      are not recorded here.
 - [ ] 2.3 After P1-w's backfill has written `/etc/pve/vtpm-ek/399`: VM 399
       enrolls into a scratch directory, no warning line. A mismatching
       cluster pin is covered by the unit tests only; the live file is not
       altered for it
-- [ ] 2.4 Time one leg with the cluster directory and guest configs as they are
+- [x] 2.4 Time one leg with the cluster directory and guest configs as they are
       on hogan, from the access log
+      Access log on hogan, 2026-10-26 09:11, no `/etc/pve/vtpm-ek`: VM 399's
+      `enroll/start` 2.2 ms and `enroll/finish` 5.8 ms. With the directory
+      present not yet measured (after 2.3).
 - [ ] 2.5 Read the same pin from holger's view (P1-w or cursor, read-only):
       the file is the same on every node
 
