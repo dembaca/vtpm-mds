@@ -29,8 +29,8 @@ daemon from the installed package rather than `make build`. Drive the guest
 through the guest agent, for example:
 
 ```bash
-sudo hogan-lab qm config 399 | grep -E '^(name|net[0-9]|tpmstate)'
-sudo hogan-lab qm guest exec 399 -- /usr/bin/python3 -c '...'
+qm config <vmid> | grep -E '^(name|net[0-9]|tpmstate)'
+qm guest exec <vmid> -- /usr/bin/python3 -c '...'
 ```
 
 The reason this warning exists is that the checkout lives on the Proxmox host,

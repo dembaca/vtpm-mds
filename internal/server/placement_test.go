@@ -77,7 +77,7 @@ func TestTagsPathsAreRegisteredNotTheIndex(t *testing.T) {
 // (serve-node-topology-under-placement, task 2.2).
 func TestPlacementPathsAreRegisteredNotTheIndex(t *testing.T) {
 	srv, token := signatureTestServer(t)
-	inventory.SetHostTopology(inventory.Topology{"availability-zone": "keller", "region": "bgl", "rack": "keller01"})
+	inventory.SetHostTopology(inventory.Topology{"availability-zone": "room-a", "region": "region-1", "rack": "rack-01"})
 	t.Cleanup(func() { inventory.SetHostTopology(inventory.DefaultTopology()) })
 	do := func(path string) (int, string, string) {
 		req := httptest.NewRequest("GET", path, nil)
@@ -86,8 +86,8 @@ func TestPlacementPathsAreRegisteredNotTheIndex(t *testing.T) {
 		got := serve(srv, req)
 		return got.status, got.body, got.contentType
 	}
-	if status, body, _ := do("/latest/meta-data/placement/rack"); status != http.StatusOK || body != "keller01" {
-		t.Errorf("placement/rack: got %d %q, want 200 \"keller01\"", status, body)
+	if status, body, _ := do("/latest/meta-data/placement/rack"); status != http.StatusOK || body != "rack-01" {
+		t.Errorf("placement/rack: got %d %q, want 200 \"rack-01\"", status, body)
 	}
 	if status, body, _ := do("/latest/meta-data/placement/"); status != http.StatusOK || body != "availability-zone\nrack\nregion\n" {
 		t.Errorf("placement/: got %d %q, want the key list", status, body)
@@ -95,8 +95,8 @@ func TestPlacementPathsAreRegisteredNotTheIndex(t *testing.T) {
 	if status, body, ct := do("/latest/meta-data/placement/nothing"); status != http.StatusNotFound || body != "" || ct != "text/plain" {
 		t.Errorf("placement/nothing: got %d %q (%s), want an empty text/plain 404", status, body, ct)
 	}
-	if status, body, _ := do("/latest/meta-data/placement/availability-zone"); status != http.StatusOK || body != "keller" {
-		t.Errorf("placement/availability-zone: got %d %q, want 200 \"keller\"", status, body)
+	if status, body, _ := do("/latest/meta-data/placement/availability-zone"); status != http.StatusOK || body != "room-a" {
+		t.Errorf("placement/availability-zone: got %d %q, want 200 \"room-a\"", status, body)
 	}
 	req := httptest.NewRequest("GET", "/latest/meta-data/placement", nil)
 	req.RemoteAddr = "10.0.0.5:5000"

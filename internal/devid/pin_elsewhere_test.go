@@ -31,11 +31,11 @@ func writePinFile(t *testing.T, dir, name, content string) {
 func TestPinnedToAnotherVMScan(t *testing.T) {
 	const fp = "abcdef"
 	dir := t.TempDir()
-	writePinFile(t, dir, "399", "ABCDEF\n")   // case-insensitive match
+	writePinFile(t, dir, "350", "ABCDEF\n")   // case-insensitive match
 	writePinFile(t, dir, "398", "\n")         // empty: ignored
 	writePinFile(t, dir, ".390.tmp-00ff", fp) // in-flight create: ignored
 	writePinFile(t, dir, "..x", fp)           // invalid VM ID: ignored
-	writePinFile(t, dir, "399.old", fp)       // set-aside copy: ignored
+	writePinFile(t, dir, "350.old", fp)       // set-aside copy: ignored
 	writePinFile(t, dir, "vm-a", fp)          // not VMID-shaped: ignored
 	writePinFile(t, dir, "400", "0123")       // another EK
 	if err := os.Mkdir(filepath.Join(dir, "397"), 0o750); err != nil {
@@ -43,11 +43,11 @@ func TestPinnedToAnotherVMScan(t *testing.T) {
 	}
 	e := &Enroller{PinDir: dir}
 
-	if got, err := e.pinnedToAnotherVM("390", fp); err != nil || got != "399" {
+	if got, err := e.pinnedToAnotherVM("390", fp); err != nil || got != "350" {
 		t.Fatalf("other VM pinned: got %q err=%v", got, err)
 	}
-	if got, err := e.pinnedToAnotherVM("399", fp); err != nil || got != "" {
-		t.Fatalf("own pin only (399.old must not count): got %q err=%v", got, err)
+	if got, err := e.pinnedToAnotherVM("350", fp); err != nil || got != "" {
+		t.Fatalf("own pin only (350.old must not count): got %q err=%v", got, err)
 	}
 
 	// The other VM's inventory pin, through the seam.
@@ -61,10 +61,10 @@ func TestPinnedToAnotherVMScan(t *testing.T) {
 
 	// Store order before inventory order.
 	e.InventoryPins = func() map[string]string { return map[string]string{"200": fp} }
-	if got, _ := e.pinnedToAnotherVM("390", fp); got != "399" {
+	if got, _ := e.pinnedToAnotherVM("390", fp); got != "350" {
 		t.Fatalf("store first: got %q", got)
 	}
-	if got, _ := e.pinnedToAnotherVM("399", fp); got != "200" {
+	if got, _ := e.pinnedToAnotherVM("350", fp); got != "200" {
 		t.Fatalf("then inventory: got %q", got)
 	}
 
@@ -78,9 +78,9 @@ func TestPinnedToAnotherVMScan(t *testing.T) {
 // A pin file counts even where its VM's own inventory pin overrides it.
 func TestPinFileCountsBesideInventoryOverride(t *testing.T) {
 	dir := t.TempDir()
-	writePinFile(t, dir, "399", "abc\n")
-	e := &Enroller{PinDir: dir, InventoryPins: func() map[string]string { return map[string]string{"399": "def"} }}
-	if got, _ := e.pinnedToAnotherVM("390", "abc"); got != "399" {
+	writePinFile(t, dir, "350", "abc\n")
+	e := &Enroller{PinDir: dir, InventoryPins: func() map[string]string { return map[string]string{"350": "def"} }}
+	if got, _ := e.pinnedToAnotherVM("390", "abc"); got != "350" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -114,9 +114,9 @@ func TestEnrollLegsRefuseEKPinnedToAnotherVM(t *testing.T) {
 			dir := t.TempDir()
 			enroller.PinDir = dir
 			if source == "store" {
-				writePinFile(t, dir, "399", fp+"\n")
+				writePinFile(t, dir, "350", fp+"\n")
 			} else {
-				enroller.InventoryPins = func() map[string]string { return map[string]string{"399": fp} }
+				enroller.InventoryPins = func() map[string]string { return map[string]string{"350": fp} }
 			}
 
 			var start, finish *httptest.ResponseRecorder
@@ -141,7 +141,7 @@ func TestEnrollLegsRefuseEKPinnedToAnotherVM(t *testing.T) {
 			if _, err := os.Stat(pinPath(dir, "100")); !os.IsNotExist(err) {
 				t.Fatalf("pin file for caller created: %v", err)
 			}
-			want := "devid enroll auth: EK certificate is pinned to another VM vm=100 pinned=399"
+			want := "devid enroll auth: EK certificate is pinned to another VM vm=100 pinned=350"
 			lines := strings.Split(strings.TrimSpace(logs), "\n")
 			if len(lines) != 2 {
 				t.Fatalf("want one line per leg, got %q", logs)
@@ -238,7 +238,7 @@ func TestConcurrentFirstFinishOneEKTwoVMs(t *testing.T) {
 			pem []byte
 			err error
 		}
-		vmids := []string{"390", "399"}
+		vmids := []string{"390", "350"}
 		sids := make([]string, len(vmids))
 		for i, vmid := range vmids {
 			sr := mustMinimalSigningRequest(t, pkix.Name{})

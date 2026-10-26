@@ -52,11 +52,11 @@ type rig struct {
 func newRig(t *testing.T, confs map[string]string) *rig {
 	t.Helper()
 	r := &rig{t: t, root: t.TempDir(), nft: &fakeNFT{}}
-	dir := filepath.Join(r.root, "nodes", "hogan", "qemu-server")
+	dir := filepath.Join(r.root, "nodes", "node-a", "qemu-server")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join("nodes", "hogan"), filepath.Join(r.root, "local")); err != nil {
+	if err := os.Symlink(filepath.Join("nodes", "node-a"), filepath.Join(r.root, "local")); err != nil {
 		t.Fatal(err)
 	}
 	for name, content := range confs {
@@ -69,7 +69,7 @@ func newRig(t *testing.T, confs map[string]string) *rig {
 
 func (r *rig) write(name, content string) {
 	r.t.Helper()
-	path := filepath.Join(r.root, "nodes", "hogan", "qemu-server", name)
+	path := filepath.Join(r.root, "nodes", "node-a", "qemu-server", name)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		r.t.Fatal(err)
 	}
@@ -85,15 +85,15 @@ func (r *rig) count(substr string) int {
 	return n
 }
 
-const vm399 = "net1: virtio=BC:24:11:06:1D:B2,bridge=vmbr_imds\n"
+const vm350 = "net1: virtio=BC:24:11:00:02:99,bridge=vmbr_imds\n"
 
 func TestStartAppliesTheTable(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	if !r.b.Tick() {
 		t.Fatal("the first check did not apply")
 	}
-	if !strings.Contains(r.nft.table, `iifname "tap399i1" ether saddr != bc:24:11:06:1d:b2`) {
-		t.Fatalf("applied table lacks VM 399:\n%s", r.nft.table)
+	if !strings.Contains(r.nft.table, `iifname "tap350i1" ether saddr != bc:24:11:00:02:99`) {
+		t.Fatalf("applied table lacks VM 350:\n%s", r.nft.table)
 	}
 	if r.count("Applied table bridge vtpm_mds_bind: 1 guest ports on vmbr_imds") != 1 {
 		t.Fatalf("logs: %q", r.logs)
@@ -101,7 +101,7 @@ func TestStartAppliesTheTable(t *testing.T) {
 }
 
 func TestNothingChangesNothingIsAppliedOrLogged(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	r.b.Tick()
 	r.logs = nil
 	for i := 0; i < 3; i++ {
@@ -115,29 +115,29 @@ func TestNothingChangesNothingIsAppliedOrLogged(t *testing.T) {
 }
 
 func TestAChangedConfigIsApplied(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	r.b.Tick()
 	r.write("400.conf", "net0: virtio=52:54:00:00:04:00,bridge=vmbr_imds\n")
 	if !r.b.Tick() || !strings.Contains(r.nft.table, `"tap400i0"`) {
 		t.Fatalf("an added guest was not applied:\n%s", r.nft.table)
 	}
-	r.write("399.conf", "net1: virtio=BC:24:11:06:1D:B3,bridge=vmbr_imds\n")
-	if !r.b.Tick() || !strings.Contains(r.nft.table, "bc:24:11:06:1d:b3") {
+	r.write("350.conf", "net1: virtio=BC:24:11:00:02:9A,bridge=vmbr_imds\n")
+	if !r.b.Tick() || !strings.Contains(r.nft.table, "bc:24:11:00:02:9a") {
 		t.Fatalf("a changed MAC was not applied:\n%s", r.nft.table)
 	}
 }
 
 func TestAChangeThatBindsNothingNewIsNotApplied(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	r.b.Tick()
-	r.write("399.conf", "name: renamed\n"+vm399+"net0: virtio=52:54:00:00:00:01,bridge=vmbr0\n")
+	r.write("350.conf", "name: renamed\n"+vm350+"net0: virtio=52:54:00:00:00:01,bridge=vmbr0\n")
 	if r.b.Tick() || r.nft.applies != 1 {
 		t.Fatalf("a change outside the IMDS bridge re-applied (applies %d)", r.nft.applies)
 	}
 }
 
 func TestAMissingOrAlteredTableIsRestoredAndLoggedOnce(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	r.b.Tick()
 	want := r.nft.table
 
@@ -145,7 +145,7 @@ func TestAMissingOrAlteredTableIsRestoredAndLoggedOnce(t *testing.T) {
 	if !r.b.Tick() || r.nft.table != want {
 		t.Fatal("a missing table was not restored")
 	}
-	r.nft.table = "table bridge vtpm_mds_bind { only the hand-written VM 399 block }"
+	r.nft.table = "table bridge vtpm_mds_bind { only the hand-written VM 350 block }"
 	if !r.b.Tick() || r.nft.table != want {
 		t.Fatal("an altered table was not restored")
 	}
@@ -156,7 +156,7 @@ func TestAMissingOrAlteredTableIsRestoredAndLoggedOnce(t *testing.T) {
 }
 
 func TestAFailedApplyIsRetriedEveryTickAndLoggedOnce(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	r.nft.failing = true
 	for i := 0; i < 4; i++ {
 		if r.b.Tick() {
@@ -188,7 +188,7 @@ func TestAFailedApplyIsRetriedEveryTickAndLoggedOnce(t *testing.T) {
 }
 
 func TestRunFailsWhenTheFirstApplyFails(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	r.nft.failing = true
 	err := r.b.Run(context.Background(), time.Hour)
 	if err == nil || !strings.Contains(err.Error(), "Operation not permitted") {
@@ -197,7 +197,7 @@ func TestRunFailsWhenTheFirstApplyFails(t *testing.T) {
 }
 
 func TestRunFailsWhenTheFirstReadFails(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	if err := os.Remove(filepath.Join(r.root, "local")); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestRunFailsWhenTheFirstReadFails(t *testing.T) {
 }
 
 func TestUnreadableConfigsKeepTheTableAndAreLoggedOnce(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	r.b.Tick()
 	want := r.nft.table
 	if err := os.Remove(filepath.Join(r.root, "local")); err != nil {
@@ -234,7 +234,7 @@ func TestUnreadableConfigsKeepTheTableAndAreLoggedOnce(t *testing.T) {
 }
 
 func TestRunDirReceivesTheScript(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	r.b.RunDir = t.TempDir()
 	r.b.Tick()
 	got, err := os.ReadFile(filepath.Join(r.b.RunDir, "vtpm_mds_bind.nft"))
@@ -244,7 +244,7 @@ func TestRunDirReceivesTheScript(t *testing.T) {
 }
 
 func TestRunChecksAtOnceAndUntilCancelled(t *testing.T) {
-	r := newRig(t, map[string]string{"399.conf": vm399})
+	r := newRig(t, map[string]string{"350.conf": vm350})
 	applied := make(chan struct{})
 	r.b.Logf = func(f string, a ...any) {
 		if strings.HasPrefix(f, "Applied") {

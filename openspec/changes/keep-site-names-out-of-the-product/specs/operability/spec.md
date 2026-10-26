@@ -11,7 +11,7 @@ on such a name. Examples and test fixtures SHALL use neutral names.
 
 - **GIVEN** a test that builds an `/etc/pve` tree
 - **WHEN** it names the node, the cluster and a guest's VM ID and MAC
-- **THEN** it uses neutral names such as `pve-a`, `cluster-1`, `199` and a
+- **THEN** it uses neutral names such as `node-a`, `cluster-1`, `350` and a
   `bc:24:11` address that belongs to no real NIC
 
 #### Scenario: A man page gives an example

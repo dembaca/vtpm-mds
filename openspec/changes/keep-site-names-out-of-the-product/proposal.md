@@ -30,6 +30,19 @@ into a spec.
 - The README's E2E cheat sheet uses placeholders (`<vmid>`, `<guest>`) instead
   of the lab's host, guest and CA.
 
+## Capabilities
+
+### New Capabilities
+
+None.
+
+### Modified Capabilities
+
+- `operability`: add a requirement that the product names no particular
+  operator's site.
+- `vm-inventory`, `instance-metadata`: restate two requirements each with
+  neutral names in their scenarios; behaviour unchanged.
+
 ## Non-goals
 
 - No behaviour change: no flag, default, endpoint, status code or wire format.
@@ -46,7 +59,7 @@ into a spec.
 
 - **Code and docs:**
   - tests under `imds/` and `internal/`
-  - comments in `internal/devid/pin.go` and `internal/proxmox/vmconfig.go`
+  - comments in `internal/proxmox/vmconfig.go` and the TPM simulator tests
   - `debian/devid-enroll.1` and `README.md`
   - comments and prose only in `scripts/deb-local.sh`,
     `scripts/openspec-validate.py` and `scripts/qemu-lab/README.md`

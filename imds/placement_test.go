@@ -49,10 +49,10 @@ func placementOfRequest(t *testing.T, req *http.Request) (zone, region string) {
 // bound to any VM record.
 func TestTheHostsZoneAndRegionAreServed(t *testing.T) {
 	setupTestStore()
-	withHostTopology(t, inventory.Topology{"availability-zone": "DUS4", "region": "DUS"})
+	withHostTopology(t, inventory.Topology{"availability-zone": "AZ4", "region": "region-a"})
 	zone, region := placementOfRequest(t, declaring(t, "/latest/meta-data/placement/region", map[string]string{"name": "x"}))
-	if zone != "DUS4" || region != "DUS" {
-		t.Fatalf("got zone %q, region %q; want DUS4 and DUS", zone, region)
+	if zone != "AZ4" || region != "region-a" {
+		t.Fatalf("got zone %q, region %q; want AZ4 and region-a", zone, region)
 	}
 }
 
@@ -60,32 +60,32 @@ func TestTheHostsZoneAndRegionAreServed(t *testing.T) {
 // configuration and its tags are never read for a placement.
 func TestAVMLevelPlacementIsNotServed(t *testing.T) {
 	setupTestStore()
-	withHostTopology(t, inventory.Topology{"availability-zone": "hogan", "region": "bgl-cluster"})
+	withHostTopology(t, inventory.Topology{"availability-zone": "node-a", "region": "cluster-1"})
 	req := unboundRequest(t, "/latest/meta-data/placement/region")
 	req = req.WithContext(context.WithValue(req.Context(), inventory.VMConfigContextKey,
-		&inventory.VMConfig{VMID: "100", RawConfig: map[string]string{"zone": "rack-b", "region": "bgl-1"},
+		&inventory.VMConfig{VMID: "100", RawConfig: map[string]string{"zone": "rack-b", "region": "region-1"},
 			Tags: map[string]string{"zone": "rack-b"}}))
 	zone, region := placementOfRequest(t, req)
-	if zone != "hogan" || region != "bgl-cluster" {
-		t.Fatalf("got zone %q, region %q; want hogan and bgl-cluster", zone, region)
+	if zone != "node-a" || region != "cluster-1" {
+		t.Fatalf("got zone %q, region %q; want node-a and cluster-1", zone, region)
 	}
 }
 
 // An unbound caller is served the host's placement.
 func TestAnUnboundCallerIsServedTheHostsPlacement(t *testing.T) {
 	setupTestStore()
-	withHostTopology(t, inventory.Topology{"availability-zone": "hogan", "region": "bgl-cluster"})
+	withHostTopology(t, inventory.Topology{"availability-zone": "node-a", "region": "cluster-1"})
 	zone, region := placementOfRequest(t, unboundRequest(t, "/latest/meta-data/placement/region"))
-	if zone != "hogan" || region != "bgl-cluster" {
-		t.Fatalf("got zone %q, region %q; want hogan and bgl-cluster", zone, region)
+	if zone != "node-a" || region != "cluster-1" {
+		t.Fatalf("got zone %q, region %q; want node-a and cluster-1", zone, region)
 	}
 }
 
 // The identity document agrees with the placement keys.
 func TestTheDocumentAndThePlacementKeysAgree(t *testing.T) {
 	setupTestStore()
-	withHostTopology(t, inventory.Topology{"availability-zone": "hogan", "region": "bgl-cluster"})
-	withHostTopology(t, inventory.Topology{"availability-zone": "DUS4", "region": "DUS"})
+	withHostTopology(t, inventory.Topology{"availability-zone": "node-a", "region": "cluster-1"})
+	withHostTopology(t, inventory.Topology{"availability-zone": "AZ4", "region": "region-a"})
 	req := declaring(t, "/latest/dynamic/instance-identity/document", map[string]string{"name": "x"})
 	rec := httptest.NewRecorder()
 	HandleInstanceIdentityDocument(rec, req)
@@ -96,8 +96,8 @@ func TestTheDocumentAndThePlacementKeysAgree(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc["region"] != "DUS" || doc["availabilityZone"] != "DUS4" {
-		t.Fatalf("got region %v, availabilityZone %v; want DUS and DUS4", doc["region"], doc["availabilityZone"])
+	if doc["region"] != "region-a" || doc["availabilityZone"] != "AZ4" {
+		t.Fatalf("got region %v, availabilityZone %v; want region-a and AZ4", doc["region"], doc["availabilityZone"])
 	}
 }
 
