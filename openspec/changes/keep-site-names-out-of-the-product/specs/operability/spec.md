@@ -22,8 +22,7 @@ on such a name. Examples and test fixtures SHALL use neutral names.
 
 #### Scenario: The project's own records name the lab
 
-- **GIVEN** `AGENTS.md`, an archived change, `debian/changelog` or the
-  verification notes in a change's `tasks.md`
+- **GIVEN** an archived change, `debian/changelog` or the verification notes in a change's `tasks.md`
 - **WHEN** it records where something was verified
 - **THEN** it may name that host and VM, because it records the project's
   history rather than describing the product

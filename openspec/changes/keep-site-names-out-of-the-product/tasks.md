@@ -22,6 +22,10 @@ neutralised itself.
 - [x] 1.3 Verify with the grep of 1.5 after rewriting the README's E2E cheat
       sheet with placeholders (`<vmid>`, `<guest>`, and `<DevID CA>` for the
       CA's subject)
+- [x] 1.6 Verify with the grep of 1.5 after reducing `AGENTS.md` to rules and
+      still-valid pitfalls (D-d)
+      `AGENTS.md` is 142 lines instead of 810; the removed lines 110–810 went
+      to the operator as a file for their infrastructure repository.
 - [ ] 1.4 Write the spec deltas per D-b; verify with
       `openspec validate --all --strict` on the lab host
       Written: each requirement block extracted from `openspec/specs/` with
@@ -32,9 +36,9 @@ neutralised itself.
       The run on the lab host is still open.
 - [x] 1.5 Verify the grep is empty outside D-c's exceptions and the two files
       PR #90 owns:
-      `git grep -nIiwE 'hogan|holger|bgl|bgl-cluster|DUS[0-9]?|keller(01)?|vtpm-pilot|399' -- ':!AGENTS.md' ':!openspec/changes' ':!debian/changelog' ':!openspec/specs' ':!internal/devid/clusterpin_test.go' ':!internal/devid/pin.go'`
+      `git grep -nIiwE 'hogan|holger|bgl|bgl-cluster|DUS[0-9]?|keller(01)?|vtpm-pilot|399' -- ':!openspec/changes' ':!debian/changelog' ':!openspec/specs' ':!internal/devid/clusterpin_test.go' ':!internal/devid/pin.go'`
       and
-      `git grep -niE 'bc:24:11:(75:da:c0|06:1d:b2)' -- ':!AGENTS.md' ':!openspec/changes'`
+      `git grep -niE 'bc:24:11:(75:da:c0|06:1d:b2)' -- ':!openspec/changes'`
       Both print nothing. `openspec/specs/` keeps the old names until the
       archive applies the deltas.
 

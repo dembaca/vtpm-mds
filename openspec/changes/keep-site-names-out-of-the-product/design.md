@@ -46,9 +46,18 @@ The product is:
 - `README.md` and `ARCHITECTURE.md`
 - the scripts
 
-`AGENTS.md`, archived changes, the changelog and verification notes in
-`tasks.md` describe this project's own history and lab. They may name the lab,
-because that is what they record.
+Archived changes, the changelog and verification notes in `tasks.md`
+record this project's own history. They may name the host and VM a check ran
+on, because that is what they record.
+
+### D-d: AGENTS.md holds rules, not history or lab facts
+
+The maintainer, 2026-10-26: history is in git, and lab facts belong in the
+operator's private infrastructure repository. `AGENTS.md` keeps the rules
+(OpenSpec workflow, scope, commit discipline, verifying on real artifacts,
+review, coordination) and the pitfalls that still hold, in neutral words. The
+queue, the archive chronicle and the lab host facts are removed; the removed
+text was handed to the operator as a file and stays in git history.
 
 ## Risks
 

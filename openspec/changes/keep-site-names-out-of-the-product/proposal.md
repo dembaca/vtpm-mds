@@ -48,8 +48,8 @@ None.
 - No behaviour change: no flag, default, endpoint, status code or wire format.
   The default bridge name `vmbr_imds` stays. It is the product's documented
   convention, not a site's name, and `-bridge` overrides it.
-- `AGENTS.md`, `openspec/changes/archive/` and `debian/changelog` stay as they
-  are. They are the project's history and its lab notes, not the product.
+- `openspec/changes/archive/` and `debian/changelog` stay as they are. They
+  are the project's history, not the product.
 - The maintainer's name and address in `debian/control`, `debian/copyright`,
   `README.md` and `ARCHITECTURE.md` stay.
 - Verification records in an open change's `tasks.md` keep naming the host and
@@ -60,7 +60,8 @@ None.
 - **Code and docs:**
   - tests under `imds/` and `internal/`
   - comments in `internal/proxmox/vmconfig.go` and the TPM simulator tests
-  - `debian/devid-enroll.1` and `README.md`
+  - `debian/devid-enroll.1`, `README.md`, and `AGENTS.md`, which keeps only rules
+    and still-valid pitfalls (design D-d)
   - comments and prose only in `scripts/deb-local.sh`,
     `scripts/openspec-validate.py` and `scripts/qemu-lab/README.md`
 - **Specs:** `operability` gets an ADDED requirement. `vm-inventory` and
