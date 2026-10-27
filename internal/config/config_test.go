@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -426,5 +427,40 @@ func TestLoadAcceptsMaxDevIDLifetime(t *testing.T) {
 	}
 	if cfg.MDS.DevIDLifetime != "8760h" {
 		t.Errorf("Expected devid_lifetime '8760h', got %q", cfg.MDS.DevIDLifetime)
+	}
+}
+
+func loadFromString(t *testing.T, data string) (*Config, error) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return Load(path)
+}
+
+func TestLoadClusterPinDefaults(t *testing.T) {
+	cfg, err := loadFromString(t, "mds:\n  listen_addr: \"127.0.0.1:8080\"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MDS.ClusterPinDir != "/etc/pve/vtpm-ek" || cfg.MDS.RequireClusterPin {
+		t.Fatalf("defaults: cluster_pin_dir=%q require_cluster_pin=%v", cfg.MDS.ClusterPinDir, cfg.MDS.RequireClusterPin)
+	}
+	cfg, err = loadFromString(t, "mds:\n  cluster_pin_dir: \"/srv/pins\"\n  require_cluster_pin: true\n")
+	if err != nil || cfg.MDS.ClusterPinDir != "/srv/pins" || !cfg.MDS.RequireClusterPin {
+		t.Fatalf("explicit: cfg=%+v err=%v", cfg.MDS, err)
+	}
+}
+
+func TestLoadRejectsRequireClusterPinWithoutSource(t *testing.T) {
+	for conflict, data := range map[string]string{
+		"cluster_pin_dir": "mds:\n  cluster_pin_dir: \"\"\n  require_cluster_pin: true\n",
+		"inventory_path":  "mds:\n  inventory_path: \"/etc/vtpm-mds/inventory.yaml\"\n  require_cluster_pin: true\n",
+	} {
+		_, err := loadFromString(t, data)
+		if err == nil || !strings.Contains(err.Error(), "require_cluster_pin") || !strings.Contains(err.Error(), conflict) {
+			t.Fatalf("%s: want an error naming require_cluster_pin and %s, got %v", conflict, conflict, err)
+		}
 	}
 }

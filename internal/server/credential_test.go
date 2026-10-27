@@ -148,3 +148,35 @@ func TestNoCredentialKeepsConfiguredKeyPath(t *testing.T) {
 		})
 	}
 }
+
+// Cluster pins and the guest-config filter are wired only for the Proxmox
+// inventory (read-cluster-ek-pins-from-pmxcfs D-b).
+func TestClusterPinSeamsOnlyForProxmox(t *testing.T) {
+	dir := t.TempDir()
+	certPath, keyPEM := writeTestCA(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, credentialCAKeyName), []byte(keyPEM), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CREDENTIALS_DIRECTORY", dir)
+	captureLog(t)
+
+	cfg := config.DefaultConfig()
+	cfg.MDS.DevIDCACert = certPath
+	cfg.MDS.EKCAChain = ""
+	e, err := loadDevIDEnroller(cfg)
+	if err != nil || e == nil {
+		t.Fatalf("loadDevIDEnroller: %v", err)
+	}
+	if e.ClusterPinDir != "/etc/pve/vtpm-ek" || e.GuestConfigRoot != "/etc/pve/nodes" {
+		t.Fatalf("proxmox: ClusterPinDir=%q GuestConfigRoot=%q", e.ClusterPinDir, e.GuestConfigRoot)
+	}
+
+	cfg.MDS.InventoryPath = filepath.Join(dir, "inventory.yaml")
+	e, err = loadDevIDEnroller(cfg)
+	if err != nil || e == nil {
+		t.Fatalf("loadDevIDEnroller: %v", err)
+	}
+	if e.ClusterPinDir != "" || e.GuestConfigRoot != "" {
+		t.Fatalf("yaml: ClusterPinDir=%q GuestConfigRoot=%q", e.ClusterPinDir, e.GuestConfigRoot)
+	}
+}

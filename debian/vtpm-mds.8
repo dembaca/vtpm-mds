@@ -64,6 +64,24 @@ is a migration aid for a deployment whose inventory is incomplete: unbound
 callers are then served an instance id synthesized from their peer address.
 That id names the connection, not an instance, and is not an identity. Add the
 missing guests to the inventory and remove the setting.
+.TP
+.B cluster_pin_dir
+Default
+.IR /etc/pve/vtpm\-ek .
+Directory of cluster EK pins, read only with the Proxmox inventory (no
+.BR inventory_path );
+empty turns cluster pins off. See
+.BR "EK PINS" .
+.TP
+.B require_cluster_pin
+Default
+.BR false .
+When true, a VM without a cluster pin is refused enrollment instead of using
+its local pin. Setting it with an empty
+.B cluster_pin_dir
+or together with
+.B inventory_path
+stops the start with an error naming both keys.
 .SH EK PINS
 On the first successful DevID enrollment of a VM without an inventory
 .BR ek_sha256 ,
@@ -97,9 +115,51 @@ any file whose name is a VM ID counts as that VM's pin, so a pin set aside
 must be moved out of the directory, not renamed inside it. Files whose name
 is not all digits are ignored.
 .PP
+.B Cluster pins.
+On Proxmox the service also reads
+.IR /etc/pve/vtpm\-ek/<vmid>
+.RB ( cluster_pin_dir ),
+written by root on a vTPM's first initialisation (a hook outside this
+package); the service only reads it. A cluster pin is exactly 64 lowercase
+hex characters, optionally followed by one newline: the
+.B ek=
+value of
+.BR "devid issued" .
+Anything else is no pin and logs
+.BR "devid enroll: invalid cluster pin vm=<vmid>" .
+A VM's own pin is its inventory
+.BR ek_sha256 ,
+else its cluster pin, else its local pin. A cluster pin that does not match
+answers
+.B 401
+.IR "EK certificate does not match cluster pin" ;
+beside a cluster pin no local pin is created, and a differing local pin logs
+.BR "devid enroll: local pin differs from cluster pin vm=<vmid>" .
+When
+.I /etc/pve/vtpm\-ek
+exists but holds no pin for the VM, each enrollment leg logs
+.B "devid enroll: no cluster pin vm=<vmid>, using local pin"
+and the local pin applies, unless
+.B require_cluster_pin
+is true: then the VM is refused with
+.B 401
+.I "no cluster pin for this VM"
+and no local pin is created. Turn
+.B require_cluster_pin
+on only after every existing VM has a cluster pin.
+.PP
+The refusal of an EK pinned to another VM also counts every cluster pin, so
+it holds on every node. A pin, local or cluster, of a VM ID that has no guest
+configuration left on any node
+.RI ( /etc/pve/nodes/*/qemu\-server/<vmid>.conf
+or
+.IR \&.../lxc/<vmid>.conf )
+refuses nobody: a destroyed VM's vTPM may then enroll again under another ID,
+and each such leg logs
+.BR "devid enroll: stale pin ignored vm=<vmid> ignored_stale=<old vmid>" .
+.PP
 The service never deletes or rewrites a pin; each case below is the
-operator's. Pins are per node: a node that never saw the other VM does not
-refuse.
+operator's.
 .TP
 .B A clone that kept its source's vTPM state
 .B qm clone
@@ -113,18 +173,40 @@ from should carry an empty
 .BR tpmstate .
 .TP
 .B A VM restored under a new VM ID
-The restore keeps the vTPM, so the new ID is refused while the old ID's pin
-exists. When the old VM is gone, delete
-.I /var/lib/vtpm\-mds/ek\-pins/<old vmid>
-and enroll again.
+The restore keeps the vTPM, so the new ID is refused while the old VM still
+exists. Once the old VM is destroyed its pins refuse nobody and the new ID
+enrolls. With
+.B require_cluster_pin
+the new ID also needs a cluster pin: as root, write the
+.B ek=
+value of its EK as one line to
+.RI "" /etc/pve/vtpm\-ek/ "<new vmid>" .
+.TP
+.B A reused VM ID
+The new VM receives an LDevID with the same subject,
+.BR CN=<vmid> ,
+so in SPIRE it inherits the destroyed VM's agent ID, its node alias and every
+entry under them. Before reusing a VM ID, evict the old agent
+.RB ( "spire\-server agent evict" )
+and check the alias on
+.BR tpm_devid:subject:cn:<vmid> .
+The new VM has a new vTPM. The hook replaces
+the cluster pin on its first initialisation; where it did not run, the VM is
+refused with
+.IR "EK certificate does not match cluster pin" :
+delete
+.I /etc/pve/vtpm\-ek/<vmid>
+and, if present on this node,
+.IR /var/lib/vtpm\-mds/ek\-pins/<vmid> .
 .TP
 .B A replaced vTPM
 The VM's own pin no longer matches. Delete
 .I /var/lib/vtpm\-mds/ek\-pins/<vmid>
+on every node that has it, and its cluster pin unless the hook replaced it,
 and enroll again.
 .PP
-A pin directory that exists but cannot be listed makes every enrollment
-answer
+A pin directory, local or cluster, that exists but cannot be listed, or a
+cluster pin that cannot be read, makes every enrollment answer
 .B 500
 .IR "pin store unavailable" .
 .SH FILES
@@ -137,6 +219,10 @@ Runtime state (JWKS, signing key).
 .TP
 .I /var/lib/vtpm-mds/ek-pins
 EK pins, one file per enrolled VM ID (see
+.BR "EK PINS" ).
+.TP
+.I /etc/pve/vtpm\-ek
+Cluster EK pins, written by root, read by the daemon (see
 .BR "EK PINS" ).
 .TP
 .I /lib/systemd/system/vtpm-mds.service

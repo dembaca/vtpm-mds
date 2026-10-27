@@ -144,12 +144,15 @@ func syncDir(dir string) {
 }
 
 // pinnedToAnotherVM returns the VM ID other than vmid that fp is pinned to:
-// first a pin file in PinDir (sorted by name), then another VM's inventory
-// ek_sha256 (sorted by VM ID), or "" when none (refuse-an-ek-pinned-to-another-vm
-// D-b). Only files named like a VM ID count (isVMIDName): a set-aside
-// "399.old" or the .<vmid>.tmp-* of an in-flight create is ignored, as are
-// empty files. A missing PinDir is an empty store; one that cannot be listed
-// is ErrPinStore (D-d).
+// first a pin file in PinDir (sorted by name), then a cluster pin in
+// ClusterPinDir (sorted by name), then another VM's inventory ek_sha256
+// (sorted by VM ID), or "" when none (refuse-an-ek-pinned-to-another-vm
+// D-b, read-cluster-ek-pins-from-pmxcfs D-g). Only files named like a VM ID
+// count (isVMIDName): a set-aside "101.old" or the .<vmid>.tmp-* of an
+// in-flight create is ignored, as are empty files. A store or cluster pin
+// whose VM has no guest config left in the cluster is ignored (guestExists).
+// A missing PinDir is an empty store; one that cannot be listed is
+// ErrPinStore (D-d).
 func (e *Enroller) pinnedToAnotherVM(vmid, fp string) (string, error) {
 	if e == nil || fp == "" {
 		return "", nil
@@ -169,9 +172,22 @@ func (e *Enroller) pinnedToAnotherVM(vmid, fp string) (string, error) {
 				return "", err
 			}
 			if stored != "" && strings.EqualFold(stored, fp) {
-				return name, nil
+				if e.guestExists(name) {
+					return name, nil
+				}
+				logStalePin(vmid, name)
 			}
 		}
+	}
+	cluster, err := e.clusterPinsMatching(vmid, strings.ToLower(fp))
+	if err != nil {
+		return "", err
+	}
+	for _, id := range cluster {
+		if e.guestExists(id) {
+			return id, nil
+		}
+		logStalePin(vmid, id)
 	}
 	if e.InventoryPins == nil {
 		return "", nil
@@ -195,14 +211,32 @@ func (e *Enroller) pinnedToAnotherVM(vmid, fp string) (string, error) {
 
 // ensurePinBeforeIssue creates the pin with an exclusive link before IssueDevID
 // when none exists yet, or checks an existing pin matches fp (D-b). Under
-// pinCreateMu it first repeats the cross-VM scan, so the refusal and the
-// create are one step (refuse-an-ek-pinned-to-another-vm D-a2).
+// pinCreateMu it first re-reads the cluster pin, which, when present, is the
+// record and leaves no local pin to create (read-cluster-ek-pins-from-pmxcfs
+// D-e), then repeats the cross-VM scan, so the refusal and the create are one
+// step (refuse-an-ek-pinned-to-another-vm D-a2).
 func (e *Enroller) ensurePinBeforeIssue(vmid, fp string) error {
-	if e == nil || e.PinDir == "" {
+	if e == nil {
 		return nil
 	}
 	pinCreateMu.Lock()
 	defer pinCreateMu.Unlock()
+	cpin, _, err := e.readClusterPin(vmid, true)
+	if err != nil {
+		return err
+	}
+	if cpin != "" {
+		if !strings.EqualFold(cpin, fp) {
+			return errUnauthorized(errClusterPinMismatch)
+		}
+		return nil
+	}
+	if e.RequireClusterPin {
+		return errUnauthorized(errNoClusterPin)
+	}
+	if e.PinDir == "" {
+		return nil
+	}
 	existing, err := readStoredPin(e.PinDir, vmid)
 	if err != nil {
 		return err

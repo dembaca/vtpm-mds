@@ -661,6 +661,13 @@ func loadDevIDEnroller(cfg *config.Config) (*devid.Enroller, error) {
 	// TOFU EK pins: systemd StateDirectory, else the package state dir next to JWKS.
 	enroller.PinDir = ekPinDir()
 	enroller.InventoryPins = inventoryPins
+	// Cluster pins and the stale-pin filter only on Proxmox; the YAML
+	// inventory has neither /etc/pve/vtpm-ek nor guest configs.
+	if cfg.MDS.InventoryPath == "" {
+		enroller.ClusterPinDir = cfg.MDS.ClusterPinDir
+		enroller.GuestConfigRoot = filepath.Join(proxmox.DefaultRoot, "nodes")
+	}
+	enroller.RequireClusterPin = cfg.MDS.RequireClusterPin
 	return enroller, nil
 }
 

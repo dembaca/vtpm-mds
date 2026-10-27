@@ -22,6 +22,16 @@ type Enroller struct {
 	// when unpinned), so a leg can refuse an EK another VM is pinned to.
 	// Nil means no inventory pins are consulted.
 	InventoryPins func() map[string]string
+	// ClusterPinDir is mds.cluster_pin_dir (/etc/pve/vtpm-ek) on a Proxmox
+	// host; empty with the YAML inventory, which turns cluster pins off.
+	ClusterPinDir string
+	// RequireClusterPin refuses a VM with neither an inventory nor a cluster
+	// pin, and creates no local pin (mds.require_cluster_pin).
+	RequireClusterPin bool
+	// GuestConfigRoot is /etc/pve/nodes on a Proxmox host. A pin of a VM ID
+	// with no guest config under it no longer refuses others; empty (YAML)
+	// ignores no pin.
+	GuestConfigRoot string
 }
 
 // NewEnroller constructs an Enroller. sessions may be nil (a default is created).
