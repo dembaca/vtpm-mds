@@ -25,7 +25,7 @@ into a spec.
   scenarios, man pages, shipped configuration or the README. Examples use
   neutral names.
 - Every current occurrence is replaced with a neutral name (design D-a). The
-  scenarios of four spec requirements use site names; those requirements are
+  scenarios of six spec requirements use site names; those requirements are
   restated with the neutral names, and nothing else in them changes.
 - The README's E2E cheat sheet uses placeholders (`<vmid>`, `<guest>`) instead
   of the lab's host, guest and CA.
@@ -39,9 +39,10 @@ None.
 ### Modified Capabilities
 
 - `operability`: add a requirement that the product names no particular
-  operator's site.
+  operator's site, and restate one requirement with a neutral VM ID.
 - `vm-inventory`, `instance-metadata`: restate two requirements each with
   neutral names in their scenarios; behaviour unchanged.
+- `devid-enrollment`: restate one requirement with a neutral VM ID.
 
 ## Non-goals
 
@@ -64,8 +65,10 @@ None.
     and still-valid pitfalls (design D-d)
   - comments and prose only in `scripts/deb-local.sh`,
     `scripts/openspec-validate.py` and `scripts/qemu-lab/README.md`
-- **Specs:** `operability` gets an ADDED requirement. `vm-inventory` and
-  `instance-metadata` are MODIFIED, in scenario names only.
-- **Ordering:** `read-cluster-ek-pins-from-pmxcfs` (PR #90) neutralises its
-  own new tests. This change does not touch that change's files and rebases
-  after it merges.
+- **Specs:** `operability` gets an ADDED requirement. `vm-inventory`,
+  `instance-metadata`, `operability` and `devid-enrollment` are MODIFIED, in
+  scenario names only.
+- **Ordering:** `read-cluster-ek-pins-from-pmxcfs` (PR #90, merged, not yet
+  archived) neutralised its own tests. Its spec delta already MODIFIES
+  `Refuse An EK Pinned To Another VM`, so the VM IDs of that requirement are
+  renamed inside that delta (design D-b), not in a second MODIFIED block.

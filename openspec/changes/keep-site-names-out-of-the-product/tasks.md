@@ -56,8 +56,20 @@ neutralised itself.
       by Go version). Not taken: `169.254.169.10` in the README (an address,
       not a site name).
 
+- [x] 1.7 After rebasing on `main@972c635` (PR #90 merged), verify with the
+      grep of 1.5 without the two PR #90 exclusions, `go vet ./...`,
+      `go test ./...`, and a word diff of each new block against
+      `openspec/specs/`
+      Found two more requirements with `399` (`devid-enrollment` renewal,
+      `operability` access line) and PR #90's delta; restated per D-b. The
+      grep prints nothing; vet clean, all packages `ok` (Mac); the word diffs
+      show only `399` → `350` and, in PR #90's delta, `390` → `340`.
+
 ## 2. Archive
 
 - [ ] 2.1 After merge, the coordinator archives the change; verify with
       `openspec validate --all --strict` and the grep of 1.5 without the
-      `openspec/specs` exclusion
+      `openspec/specs` exclusion. Until `read-cluster-ek-pins-from-pmxcfs` is
+      archived too, the only expected hits are in
+      `openspec/specs/devid-enrollment/spec.md` under `Refuse An EK Pinned To
+      Another VM`

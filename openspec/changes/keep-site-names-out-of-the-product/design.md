@@ -32,10 +32,18 @@ and stays. Only the host part changes, because it identified one real NIC.
 
 ### D-b: Spec scenarios are restated, not reworded
 
-Four requirements in `vm-inventory` and `instance-metadata` use site names in
-their scenarios. Each is MODIFIED by applying D-a and nothing else, so the
-delta can be reviewed as a rename. Requirement text outside the scenarios is
-copied verbatim.
+Six requirements use site names in their scenarios: two each in
+`vm-inventory` and `instance-metadata`, one each in `operability` (the access
+line) and `devid-enrollment` (renewal). Each is MODIFIED by applying D-a and
+nothing else, so the delta can be reviewed as a rename. Requirement text
+outside the scenarios is copied verbatim.
+
+`Refuse An EK Pinned To Another VM` in `devid-enrollment` uses `399` and `390`
+too, but the open change `read-cluster-ek-pins-from-pmxcfs` already MODIFIES
+it, and two MODIFIED blocks on one requirement revert each other. Its VM IDs
+are therefore renamed inside that change's delta (`399` → `350`, `390` →
+`340`), along with the other requirements that delta restates. The main spec
+loses the old IDs when that change is archived.
 
 ### D-c: What counts as the product
 

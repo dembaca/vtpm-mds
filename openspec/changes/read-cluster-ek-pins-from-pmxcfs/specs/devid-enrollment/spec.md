@@ -265,7 +265,7 @@ receive a pin.
 
 A pin file SHALL count even when the same VM's inventory `ek_sha256` or
 cluster pin overrides it for that VM. Empty pin files and files whose name is
-not a VM ID (digits only, so a set-aside `399.old` does not count) SHALL be
+not a VM ID (digits only, so a set-aside `350.old` does not count) SHALL be
 ignored. When the local pin directory exists but cannot be listed, the leg
 SHALL answer `500` with body `pin store unavailable`; a missing directory
 SHALL count as an empty store. The service SHALL NOT delete or rewrite any
@@ -273,60 +273,60 @@ pin because of a refusal.
 
 #### Scenario: A clone with its source's EK is refused
 
-- **GIVEN** `/var/lib/<package>/ek-pins/399` holding fingerprint `abc…` and,
-  on a Proxmox host, a guest configuration for VM `399`
-- **WHEN** either enroll leg is called by VM `390` with a trusted EK whose
+- **GIVEN** `/var/lib/<package>/ek-pins/350` holding fingerprint `abc…` and,
+  on a Proxmox host, a guest configuration for VM `350`
+- **WHEN** either enroll leg is called by VM `340` with a trusted EK whose
   fingerprint is `abc…`
 - **THEN** the response is `401` with body
-  `EK certificate is pinned to another VM`, no pin file for `390` exists,
-  and the log line names `vm=390` and `pinned=399`
+  `EK certificate is pinned to another VM`, no pin file for `340` exists,
+  and the log line names `vm=340` and `pinned=350`
 
 #### Scenario: A clone is refused on a node that never saw its source
 
-- **GIVEN** a valid cluster pin `/etc/pve/vtpm-ek/399` holding `abc…`, a
-  guest configuration for VM `399` on another node, and no store file for
-  `399` on this node
-- **WHEN** either enroll leg is called on this node by VM `390` with EK
+- **GIVEN** a valid cluster pin `/etc/pve/vtpm-ek/350` holding `abc…`, a
+  guest configuration for VM `350` on another node, and no store file for
+  `350` on this node
+- **WHEN** either enroll leg is called on this node by VM `340` with EK
   fingerprint `abc…`
 - **THEN** the response is `401` with body
-  `EK certificate is pinned to another VM` and the log line names `vm=390`
-  and `pinned=399`
+  `EK certificate is pinned to another VM` and the log line names `vm=340`
+  and `pinned=350`
 
 #### Scenario: A destroyed VM's pin refuses nobody
 
 - **GIVEN** a Proxmox host, a valid cluster pin and a store file for VM
-  `399` holding `abc…`, and no guest configuration for VM `399` on any
+  `350` holding `abc…`, and no guest configuration for VM `350` on any
   node
 - **WHEN** either enroll leg is called by VM `450` with EK fingerprint `abc…`
 - **THEN** the leg is not refused by this requirement and logs
-  `devid enroll: stale pin ignored vm=450 ignored_stale=399`
+  `devid enroll: stale pin ignored vm=450 ignored_stale=350`
 
 #### Scenario: Without a guest-config tree nothing is ignored
 
-- **GIVEN** a YAML inventory host and `/var/lib/<package>/ek-pins/399`
-  holding `abc…`, with VM `399` absent from the inventory
-- **WHEN** either enroll leg is called by VM `390` with EK fingerprint `abc…`
+- **GIVEN** a YAML inventory host and `/var/lib/<package>/ek-pins/350`
+  holding `abc…`, with VM `350` absent from the inventory
+- **WHEN** either enroll leg is called by VM `340` with EK fingerprint `abc…`
 - **THEN** the response is `401` with body
   `EK certificate is pinned to another VM`
 
 #### Scenario: Two first enrollments with one EK leave one pin
 
-- **GIVEN** no pin files and VMs `390` and `399` presenting the same EK
+- **GIVEN** no pin files and VMs `340` and `350` presenting the same EK
 - **WHEN** both call `enroll/finish` concurrently
 - **THEN** at most one of them receives an LDevID and exactly one pin file
   holds that fingerprint
 
 #### Scenario: The VM that holds the pin still enrolls
 
-- **GIVEN** `/var/lib/<package>/ek-pins/399` holding fingerprint `abc…`
-- **WHEN** either enroll leg is called by VM `399` with that EK
+- **GIVEN** `/var/lib/<package>/ek-pins/350` holding fingerprint `abc…`
+- **WHEN** either enroll leg is called by VM `350` with that EK
 - **THEN** the leg is not refused by this requirement
 
 #### Scenario: A set-aside pin file refuses nobody
 
-- **GIVEN** `/var/lib/<package>/ek-pins/399.old` holding fingerprint `abc…`
+- **GIVEN** `/var/lib/<package>/ek-pins/350.old` holding fingerprint `abc…`
   and no other pin file holding it
-- **WHEN** either enroll leg is called by VM `399` with that EK
+- **WHEN** either enroll leg is called by VM `350` with that EK
 - **THEN** the leg is not refused by this requirement
 
 #### Scenario: Another VM's inventory pin refuses
