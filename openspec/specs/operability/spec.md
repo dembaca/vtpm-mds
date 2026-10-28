@@ -176,10 +176,10 @@ journal line is written as an escape and the request writes exactly one line.
 
 #### Scenario: A bound caller is named
 
-- **GIVEN** a guest bound to VM `399` connecting from `10.0.0.5`
+- **GIVEN** a guest bound to VM `350` connecting from `10.0.0.5`
 - **WHEN** it reads `GET /latest/meta-data/instance-id` and gets `200`
 - **THEN** the access line holds `GET`, `"/latest/meta-data/instance-id"`, `200`,
-  a duration, `10.0.0.5` and `399`, in that order
+  a duration, `10.0.0.5` and `350`, in that order
 
 #### Scenario: An unbound caller is named too
 
@@ -381,6 +381,33 @@ requirement (degraded, `last_error` set, previous `vm_count` retained).
 - **WHEN** a SIGHUP reload points at a file that fails strict decode
 - **THEN** a bound caller still receives its instance id from the previous
   inventory, and `GET /health` reports `degraded` with the previous `vm_count`
+
+### Requirement: Name No Particular Operator's Site In The Product
+
+Code, tests, specs, man pages, shipped configuration, the README,
+`ARCHITECTURE.md` and the scripts SHALL NOT name a host, cluster, location, VM ID, MAC address or
+certificate authority of a particular operator, and no behaviour SHALL depend
+on such a name. Examples and test fixtures SHALL use neutral names.
+
+#### Scenario: A test needs a Proxmox node and a guest
+
+- **GIVEN** a test that builds an `/etc/pve` tree
+- **WHEN** it names the node, the cluster and a guest's VM ID and MAC
+- **THEN** it uses neutral names such as `node-a`, `cluster-1`, `350` and a
+  `bc:24:11` address that belongs to no real NIC
+
+#### Scenario: A man page gives an example
+
+- **GIVEN** a man page that shows an override or a path
+- **WHEN** it gives an example
+- **THEN** the example names no particular operator's host or VM
+
+#### Scenario: The project's own records name the lab
+
+- **GIVEN** an archived change, `debian/changelog` or the verification notes in a change's `tasks.md`
+- **WHEN** it records where something was verified
+- **THEN** it may name that host and VM, because it records the project's
+  history rather than describing the product
 
 ## Notes
 

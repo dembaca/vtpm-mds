@@ -73,3 +73,9 @@ neutralised itself.
       archived too, the only expected hits are in
       `openspec/specs/devid-enrollment/spec.md` under `Refuse An EK Pinned To
       Another VM`
+      Archived with `openspec archive` (OpenSpec 1.14.3, Mac) on
+      `main@a966b58`: `+ 1, ~ 6`; the spec diff is the ADDED requirement and
+      the D-a renames only. The grep prints exactly the eight expected lines
+      (`devid-enrollment` 1087–1119) and the MAC grep nothing. Lab host
+      `openspec validate --all --strict` pending; the Mac's 1.14.3 fails every
+      spec on long requirement texts, `main` included.

@@ -389,7 +389,7 @@ an error.
 #### Scenario: A former zone and region field places nothing
 
 - **GIVEN** an inventory whose entry `100` declares `zone: rack-b` and `region:
-  bgl-1`
+  region-1`
 - **WHEN** the inventory is loaded
 - **THEN** the load succeeds, the record carries neither value anywhere that
   `instance-metadata` reads a placement from, and the log names `100`, `zone` and
@@ -478,8 +478,8 @@ leaves the region to the cluster name. `zone` is the short form of
 
 The description of a node is stored in `/etc/pve/local/config`, which most nodes
 do not have, as lines that start with `#`, each the URL-encoded text of one line
-of the description, so that `topology.vtpm_mds.io/zone: DUS4` is stored as
-`#topology.vtpm_mds.io/zone%3A DUS4`. The service SHALL decode each such line
+of the description, so that `topology.vtpm_mds.io/zone: AZ4` is stored as
+`#topology.vtpm_mds.io/zone%3A AZ4`. The service SHALL decode each such line
 and read a key from a decoded line of the form
 `topology.vtpm_mds.io/<key>: <value>`. A line that does not decode or does not
 have that form SHALL be ignored. A missing file SHALL declare nothing and SHALL
@@ -608,7 +608,7 @@ the YAML inventory.
 
 #### Scenario: A former placement tag places nothing
 
-- **GIVEN** a guest config with `tags: mds.zone.rack-b;mds.region.bgl-1`
+- **GIVEN** a guest config with `tags: mds.zone.rack-b;mds.region.region-1`
 - **WHEN** the inventory cache is loaded
 - **THEN** the record carries no tags, no placement follows from them, and the
   log names the VM id and both tags
@@ -616,55 +616,55 @@ the YAML inventory.
 #### Scenario: A hand-written zone line has no meaning
 
 - **GIVEN** a guest config whose live section contains `zone: rack-x` and
-  `region: bgl-x`
+  `region: region-x`
 - **WHEN** the inventory cache is loaded
 - **THEN** the record's raw configuration map holds both lines like any other
   key, and no placement of any caller is derived from them
 
 #### Scenario: The host's placement is this node and this cluster
 
-- **GIVEN** `/etc/pve/local` links to `nodes/hogan` and
-  `/etc/pve/corosync.conf` names the cluster `bgl-cluster`
+- **GIVEN** `/etc/pve/local` links to `nodes/node-a` and
+  `/etc/pve/corosync.conf` names the cluster `cluster-1`
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's zone is `hogan` and its region is `bgl-cluster`
+- **THEN** the host's zone is `node-a` and its region is `cluster-1`
 
 #### Scenario: Capitals in a node or cluster name are kept
 
-- **GIVEN** `/etc/pve/local` links to `nodes/Hogan` and `/etc/pve/corosync.conf`
-  names the cluster `BGL-Cluster`
+- **GIVEN** `/etc/pve/local` links to `nodes/Node-A` and `/etc/pve/corosync.conf`
+  names the cluster `Cluster-1`
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's zone is `Hogan` and its region is `BGL-Cluster`
+- **THEN** the host's zone is `Node-A` and its region is `Cluster-1`
 
 #### Scenario: The node description gives the host's placement
 
 - **GIVEN** the node's `config` holds the description lines `Location:
-  DUS4.M1.02.03`, `topology.vtpm_mds.io/region: DUS` and
-  `topology.vtpm_mds.io/zone: DUS4`, each stored as a `#` line with its `:`
+  AZ4.M1.02.03`, `topology.vtpm_mds.io/region: region-a` and
+  `topology.vtpm_mds.io/zone: AZ4`, each stored as a `#` line with its `:`
   encoded as `%3A`, and the node and cluster have other names
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's `availability-zone` is `DUS4` and its `region` is `DUS`
+- **THEN** the host's `availability-zone` is `AZ4` and its `region` is `region-a`
 
 #### Scenario: A description naming one kind leaves the other to the names
 
-- **GIVEN** a description with `topology.vtpm_mds.io/zone: DUS4` only, on node
-  `hogan` in cluster `bgl-cluster`
+- **GIVEN** a description with `topology.vtpm_mds.io/zone: AZ4` only, on node
+  `node-a` in cluster `cluster-1`
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's zone is `DUS4` and its region is `bgl-cluster`
+- **THEN** the host's zone is `AZ4` and its region is `cluster-1`
 
 #### Scenario: An invalid description value falls back to the names
 
 - **GIVEN** a description with `topology.vtpm_mds.io/zone: bad!zone` and a
-  valid region, on node `hogan`
+  valid region, on node `node-a`
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's zone is `hogan`, the region is the description's, and the
+- **THEN** the host's zone is `node-a`, the region is the description's, and the
   log names the invalid value
 
 #### Scenario: Two description lines of one kind declare nothing
 
 - **GIVEN** a description with two `topology.vtpm_mds.io/zone` lines and one
-  region line, on node `hogan`
+  region line, on node `node-a`
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's zone is `hogan` and the region is the description's
+- **THEN** the host's zone is `node-a` and the region is the description's
 
 #### Scenario: A host without a cluster file has region local
 
@@ -683,38 +683,38 @@ the YAML inventory.
 
 #### Scenario: A description adds a key of its own
 
-- **GIVEN** a description with `topology.vtpm_mds.io/rack: keller01` and no other
+- **GIVEN** a description with `topology.vtpm_mds.io/rack: rack-01` and no other
   topology line
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's topology has `rack` as `keller01`, besides the defaults of
+- **THEN** the host's topology has `rack` as `rack-01`, besides the defaults of
   `availability-zone`, `region`, `node` and `cluster`
 
 #### Scenario: A description line can use the long form of the zone
 
-- **GIVEN** a description with `topology.vtpm_mds.io/availability-zone: keller`
+- **GIVEN** a description with `topology.vtpm_mds.io/availability-zone: room-a`
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's `availability-zone` is `keller`
+- **THEN** the host's `availability-zone` is `room-a`
 
 #### Scenario: The short and the long form together declare nothing
 
-- **GIVEN** a description with `topology.vtpm_mds.io/zone: keller` and
-  `topology.vtpm_mds.io/availability-zone: attic`, on node `hogan`
+- **GIVEN** a description with `topology.vtpm_mds.io/zone: room-a` and
+  `topology.vtpm_mds.io/availability-zone: attic`, on node `node-a`
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's `availability-zone` is `hogan` and the log names the key
+- **THEN** the host's `availability-zone` is `node-a` and the log names the key
 
 #### Scenario: Node and cluster default from the host
 
-- **GIVEN** `/etc/pve/local` links to `nodes/hogan`, `/etc/pve/corosync.conf` names
-  the cluster `bgl-cluster` and the description names neither
+- **GIVEN** `/etc/pve/local` links to `nodes/node-a`, `/etc/pve/corosync.conf` names
+  the cluster `cluster-1` and the description names neither
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's `node` is `hogan` and its `cluster` is `bgl-cluster`
+- **THEN** the host's `node` is `node-a` and its `cluster` is `cluster-1`
 
 #### Scenario: A description overrides node and cluster
 
-- **GIVEN** a description with `topology.vtpm_mds.io/node: hogan-a` and
-  `topology.vtpm_mds.io/cluster: lab`, on node `hogan` in cluster `bgl-cluster`
+- **GIVEN** a description with `topology.vtpm_mds.io/node: node-x` and
+  `topology.vtpm_mds.io/cluster: lab`, on node `node-a` in cluster `cluster-1`
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's `node` is `hogan-a` and its `cluster` is `lab`
+- **THEN** the host's `node` is `node-x` and its `cluster` is `lab`
 
 #### Scenario: A host without a cluster file has no cluster
 
@@ -727,18 +727,18 @@ the YAML inventory.
 #### Scenario: A line with an invalid key or value is ignored
 
 - **GIVEN** a description with `topology.vtpm_mds.io/ra ck: x`,
-  `topology.vtpm_mds.io/row: a/b` and a valid `topology.vtpm_mds.io/rack: keller01`
+  `topology.vtpm_mds.io/row: a/b` and a valid `topology.vtpm_mds.io/rack: rack-01`
 - **WHEN** the inventory cache is loaded
-- **THEN** the host's topology has `rack` as `keller01` and no `row`, and the log
+- **THEN** the host's topology has `rack` as `rack-01` and no `row`, and the log
   names the ignored lines
 
 #### Scenario: Keys and the prefix are case-sensitive
 
 - **GIVEN** a description with `topology.vtpm_mds.io/Zone: x` and
-  `TOPOLOGY.VTPM_MDS.IO/rack: y`, on node `hogan`
+  `TOPOLOGY.VTPM_MDS.IO/rack: y`, on node `node-a`
 - **WHEN** the inventory cache is loaded
 - **THEN** the host's topology has `Zone` as `x`, no `rack`, and its
-  `availability-zone` is `hogan`
+  `availability-zone` is `node-a`
 
 #### Scenario: Keys beyond the limit are ignored
 

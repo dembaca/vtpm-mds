@@ -964,7 +964,7 @@ ordered before that unit can finish first; if the unit is absent or inactive, cl
 
 #### Scenario: Certificate for another VM renews
 
-- **GIVEN** a fresh certificate with `CN=399` and fitting blobs, on a guest
+- **GIVEN** a fresh certificate with `CN=350` and fitting blobs, on a guest
   whose `instance-id` is `i-390`, as in a clone that kept its source's vTPM
   state
 - **WHEN** the guest renewal check runs
