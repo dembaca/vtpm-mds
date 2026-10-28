@@ -109,14 +109,14 @@ func TestErrorsStayVisibleWithoutTheFlag(t *testing.T) {
 func TestTheAccessLineNamesThePeerAndTheVM(t *testing.T) {
 	withDebug(t, false)
 	srv, token := signatureTestServer(t)
-	out := strings.TrimSpace(request(t, srv, token, "/latest/meta-data/instance-id", "10.0.0.5:5000", &inventory.VMConfig{VMID: "399"}, nil))
+	out := strings.TrimSpace(request(t, srv, token, "/latest/meta-data/instance-id", "10.0.0.5:5000", &inventory.VMConfig{VMID: "350"}, nil))
 	f := strings.Fields(out)
 	// date, time, then the fields of the line
 	if len(f) < 8 {
 		t.Fatalf("unexpected line: %q", out)
 	}
 	got := f[len(f)-6:]
-	if got[0] != "GET" || got[1] != `"/latest/meta-data/instance-id"` || got[2] != "200" || got[4] != "10.0.0.5" || got[5] != "399" {
+	if got[0] != "GET" || got[1] != `"/latest/meta-data/instance-id"` || got[2] != "200" || got[4] != "10.0.0.5" || got[5] != "350" {
 		t.Fatalf("got %q", got)
 	}
 }

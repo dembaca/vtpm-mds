@@ -10,7 +10,7 @@
 // (renew-when-the-devid-key-is-not-this-tpms, tasks 1.1 to 1.5). The simulator
 // holds three objects at once, like swtpm, so a run that needed a fourth would
 // fail here with TPM_RC_OBJECT_MEMORY. It is a third TPM implementation beside
-// swtpm/libtpms on hogan and in the lab, so a pass shows the logic, not those.
+// swtpm/libtpms on a Proxmox host and in the lab, so a pass shows the logic, not those.
 package devid
 
 import (
@@ -275,7 +275,7 @@ func TestRenewWithBlobsFromAnotherTPM(t *testing.T) {
 // foreign. The earlier reason is logged, and the line still says that the key
 // does not load and is replaced.
 func TestRenewForAnotherVMWithBlobsFromAnotherTPM(t *testing.T) {
-	renewWithForeignBlobs(t, "399", ": certificate is for another VM (key does not load in this TPM: DevID blobs are foreign")
+	renewWithForeignBlobs(t, "350", ": certificate is for another VM (key does not load in this TPM: DevID blobs are foreign")
 }
 
 func renewWithForeignBlobs(t *testing.T, cn, wantLog string) {
@@ -393,7 +393,7 @@ func TestRenewReasonsWithLoadableBlobs(t *testing.T) {
 			writeTestCert(t, dir, blobKey, "390", now.Add(-80*24*time.Hour), now.Add(10*24*time.Hour))
 		}, "due", true},
 		{"certificate is for another VM", func(t *testing.T, dir string) {
-			writeTestCert(t, dir, blobKey, "399", nb, na)
+			writeTestCert(t, dir, blobKey, "350", nb, na)
 		}, "certificate is for another VM", true},
 		{"certificate does not match key", func(t *testing.T, dir string) {
 			writeTestCert(t, dir, &otherKey.PublicKey, "390", nb, na)
@@ -408,7 +408,7 @@ func TestRenewReasonsWithLoadableBlobs(t *testing.T) {
 		}, "missing blob", false},
 		// Two reasons: the first in the order of D-c is the one logged.
 		{"other VM and another key", func(t *testing.T, dir string) {
-			writeTestCert(t, dir, &otherKey.PublicKey, "399", nb, na)
+			writeTestCert(t, dir, &otherKey.PublicKey, "350", nb, na)
 		}, "certificate is for another VM", true},
 	}
 	for _, tc := range cases {

@@ -6,14 +6,14 @@ import (
 	"testing"
 )
 
-const fpGuest = "name: g\nnet0: virtio=BC:24:11:06:1D:B2,bridge=vmbr_imds\n"
+const fpGuest = "name: g\nnet0: virtio=BC:24:11:00:02:99,bridge=vmbr_imds\n"
 
 // Each input ParseVMConfigs or HostTopology reads changes the fingerprint, and
 // nothing else does.
 func TestSourceFingerprintFollowsWhatTheLoaderReads(t *testing.T) {
-	root := pveTree(t, "hogan", map[string]map[string]string{
-		"hogan":  {"399.conf": fpGuest},
-		"holger": {"500.conf": fpGuest},
+	root := pveTree(t, "node-a", map[string]map[string]string{
+		"node-a": {"350.conf": fpGuest},
+		"node-b": {"500.conf": fpGuest},
 	})
 	base := SourceFingerprint(root)
 	if SourceFingerprint(root) != base {
@@ -25,30 +25,30 @@ func TestSourceFingerprintFollowsWhatTheLoaderReads(t *testing.T) {
 		change func(t *testing.T)
 	}{
 		{"a guest config changes", func(t *testing.T) {
-			write(t, filepath.Join(root, "nodes", "hogan", "qemu-server", "399.conf"),
-				"name: g\nnet0: virtio=BC:24:11:06:1D:B3,bridge=vmbr_imds\n")
+			write(t, filepath.Join(root, "nodes", "node-a", "qemu-server", "350.conf"),
+				"name: g\nnet0: virtio=BC:24:11:00:02:9A,bridge=vmbr_imds\n")
 		}},
 		{"a guest config appears (created or migrated in)", func(t *testing.T) {
-			write(t, filepath.Join(root, "nodes", "hogan", "qemu-server", "401.conf"), fpGuest)
+			write(t, filepath.Join(root, "nodes", "node-a", "qemu-server", "401.conf"), fpGuest)
 		}},
 		{"a guest config is renamed away (migrated out)", func(t *testing.T) {
 			if err := os.Rename(
-				filepath.Join(root, "nodes", "hogan", "qemu-server", "401.conf"),
-				filepath.Join(root, "nodes", "holger", "qemu-server", "401.conf")); err != nil {
+				filepath.Join(root, "nodes", "node-a", "qemu-server", "401.conf"),
+				filepath.Join(root, "nodes", "node-b", "qemu-server", "401.conf")); err != nil {
 				t.Fatal(err)
 			}
 		}},
 		{"the node description appears", func(t *testing.T) {
-			write(t, filepath.Join(root, "nodes", "hogan", "config"), "#topology.vtpm_mds.io/zone%3A DUS4\n")
+			write(t, filepath.Join(root, "nodes", "node-a", "config"), "#topology.vtpm_mds.io/zone%3A AZ4\n")
 		}},
 		{"corosync.conf appears", func(t *testing.T) {
-			write(t, filepath.Join(root, "corosync.conf"), "totem {\n  cluster_name: bgl\n}\n")
+			write(t, filepath.Join(root, "corosync.conf"), "totem {\n  cluster_name: cluster-1\n}\n")
 		}},
 		{"the local link moves to another node", func(t *testing.T) {
 			if err := os.Remove(filepath.Join(root, "local")); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.Symlink(filepath.Join("nodes", "holger"), filepath.Join(root, "local")); err != nil {
+			if err := os.Symlink(filepath.Join("nodes", "node-b"), filepath.Join(root, "local")); err != nil {
 				t.Fatal(err)
 			}
 		}},
@@ -64,9 +64,9 @@ func TestSourceFingerprintFollowsWhatTheLoaderReads(t *testing.T) {
 	}
 
 	// Another node's files are not read by the loader (local now points at
-	// holger, so change hogan's) and must not change the fingerprint.
-	write(t, filepath.Join(root, "nodes", "hogan", "qemu-server", "399.conf"), "name: other\n")
-	write(t, filepath.Join(root, "nodes", "hogan", "lrm_status"), "{}")
+	// node-b, so change node-a's) and must not change the fingerprint.
+	write(t, filepath.Join(root, "nodes", "node-a", "qemu-server", "350.conf"), "name: other\n")
+	write(t, filepath.Join(root, "nodes", "node-a", "lrm_status"), "{}")
 	if SourceFingerprint(root) != prev {
 		t.Fatal("a file the loader does not read changed the fingerprint")
 	}
@@ -75,15 +75,15 @@ func TestSourceFingerprintFollowsWhatTheLoaderReads(t *testing.T) {
 // The node name feeds availability-zone and node, so the link target counts
 // even when both nodes hold identical files.
 func TestSourceFingerprintFollowsTheLinkTarget(t *testing.T) {
-	root := pveTree(t, "hogan", map[string]map[string]string{
-		"hogan":  {"399.conf": fpGuest},
-		"holger": {"399.conf": fpGuest},
+	root := pveTree(t, "node-a", map[string]map[string]string{
+		"node-a": {"350.conf": fpGuest},
+		"node-b": {"350.conf": fpGuest},
 	})
 	before := SourceFingerprint(root)
 	if err := os.Remove(filepath.Join(root, "local")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join("nodes", "holger"), filepath.Join(root, "local")); err != nil {
+	if err := os.Symlink(filepath.Join("nodes", "node-b"), filepath.Join(root, "local")); err != nil {
 		t.Fatal(err)
 	}
 	if SourceFingerprint(root) == before {
@@ -92,9 +92,9 @@ func TestSourceFingerprintFollowsTheLinkTarget(t *testing.T) {
 }
 
 func TestSourceFingerprintWithoutALocalLink(t *testing.T) {
-	root := pveTree(t, "", map[string]map[string]string{"hogan": {"399.conf": fpGuest}})
+	root := pveTree(t, "", map[string]map[string]string{"node-a": {"350.conf": fpGuest}})
 	noLink := SourceFingerprint(root)
-	if err := os.Symlink(filepath.Join("nodes", "hogan"), filepath.Join(root, "local")); err != nil {
+	if err := os.Symlink(filepath.Join("nodes", "node-a"), filepath.Join(root, "local")); err != nil {
 		t.Fatal(err)
 	}
 	if SourceFingerprint(root) == noLink {

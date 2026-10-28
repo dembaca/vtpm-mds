@@ -197,7 +197,7 @@ func TestLoadYAMLFormerZoneAndRegionPlaceNothing(t *testing.T) {
 	m, err := LoadYAML(writeInventory(t, `vms:
   - id: "100"
     zone: rack-b
-    region: bgl-1
+    region: region-1
 `))
 	if err != nil {
 		t.Fatalf("LoadYAML: %v", err)
@@ -237,8 +237,8 @@ func TestValidTagKeyAndValue(t *testing.T) {
 func TestValidPlacementName(t *testing.T) {
 	long := strings.Repeat("a", 63)
 	for name, want := range map[string]bool{
-		"hogan": true, "rack-b": true, "a": true, "0x": true, "a_b.c+d-e": true, long: true,
-		"DUS4": true, "BGL-Cluster": true,
+		"node-a": true, "rack-b": true, "a": true, "0x": true, "a_b.c+d-e": true, long: true,
+		"AZ4": true, "Cluster-1": true,
 		"": false, "-a": false, ".a": false, "a b": false, "a!": false,
 		long + "a": false, "a/b": false,
 	} {
@@ -253,20 +253,20 @@ func TestHostTopologyDefaultsUntilSet(t *testing.T) {
 	if got := HostTopology(); !reflect.DeepEqual(got, DefaultTopology()) {
 		t.Fatalf("got %+v, want the default %+v", got, DefaultTopology())
 	}
-	SetHostTopology(Topology{"availability-zone": "hogan", "region": "bgl", "rack": "r1"})
+	SetHostTopology(Topology{"availability-zone": "node-a", "region": "region-1", "rack": "r1"})
 	defer SetHostTopology(DefaultTopology())
-	if got := HostTopology(); got["availability-zone"] != "hogan" || got["rack"] != "r1" || len(got) != 3 {
+	if got := HostTopology(); got["availability-zone"] != "node-a" || got["rack"] != "r1" || len(got) != 3 {
 		t.Fatalf("got %+v after SetHostTopology", got)
 	}
 }
 
 // What a caller holds is a copy: changing it never changes the host's topology.
 func TestHostTopologyIsACopy(t *testing.T) {
-	SetHostTopology(Topology{"availability-zone": "hogan", "region": "bgl"})
+	SetHostTopology(Topology{"availability-zone": "node-a", "region": "region-1"})
 	defer SetHostTopology(DefaultTopology())
 	got := HostTopology()
 	got["availability-zone"] = "changed"
-	if HostTopology()["availability-zone"] != "hogan" {
+	if HostTopology()["availability-zone"] != "node-a" {
 		t.Fatal("the returned topology aliases the host's")
 	}
 }

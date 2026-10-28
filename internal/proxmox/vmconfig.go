@@ -221,7 +221,7 @@ func HostTopology(pveRoot string) inventory.Topology {
 
 // descriptionTopology reads the topology keys a node declares in its description.
 // Proxmox keeps the description in <node>/config as '#' lines, each URL-encoded, so
-// "topology.vtpm_mds.io/zone: DUS4" is stored as "#topology.vtpm_mds.io/zone%3A DUS4".
+// "topology.vtpm_mds.io/zone: AZ4" is stored as "#topology.vtpm_mds.io/zone%3A AZ4".
 // A key is declared by exactly one line with a valid key and value; two or more
 // lines for one key, valid or not, declare nothing, as two tags do, and zone and
 // availability-zone are one key. Keys are case-sensitive and only exactly "zone"

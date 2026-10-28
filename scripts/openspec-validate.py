@@ -2,7 +2,7 @@
 """Structural check for openspec/ when the `openspec` CLI is unavailable.
 
 The upstream CLI (`openspec validate --all --strict`) is an npm package. It is
-installed on `hogan` and is what to run there; this script is the fallback for
+the authoritative check wherever node is available; this script is the fallback for
 a host without node. It covers the structure the CLI enforces: required
 documents, task checkboxes with a verification clause, and spec deltas whose
 requirements carry what their delta operation requires.

@@ -9,8 +9,8 @@ import (
 )
 
 var rackTopology = inventory.Topology{
-	"availability-zone": "keller", "region": "bgl", "node": "hogan", "cluster": "lab",
-	"rack": "keller01", "host-id": "h-01",
+	"availability-zone": "room-a", "region": "region-1", "node": "node-a", "cluster": "lab",
+	"rack": "rack-01", "host-id": "h-01",
 }
 
 func keyRequest(t *testing.T, key string) *http.Request {
@@ -25,8 +25,8 @@ func TestAKeyOfTheNodeDescriptionIsServed(t *testing.T) {
 	setupTestStore()
 	withHostTopology(t, rackTopology)
 	rec := get(HandlePlacementKey, keyRequest(t, "rack"))
-	if rec.Code != http.StatusOK || rec.Body.String() != "keller01" {
-		t.Fatalf("got %d %q, want 200 \"keller01\"", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK || rec.Body.String() != "rack-01" {
+		t.Fatalf("got %d %q, want 200 \"rack-01\"", rec.Code, rec.Body.String())
 	}
 	if ct := rec.Header().Get("Content-Type"); ct != "text/plain" {
 		t.Fatalf("Content-Type %q, want text/plain", ct)
@@ -37,7 +37,7 @@ func TestAKeyOfTheNodeDescriptionIsServed(t *testing.T) {
 func TestNodeAndClusterAreServed(t *testing.T) {
 	setupTestStore()
 	withHostTopology(t, rackTopology)
-	for key, want := range map[string]string{"node": "hogan", "cluster": "lab"} {
+	for key, want := range map[string]string{"node": "node-a", "cluster": "lab"} {
 		if rec := get(HandlePlacementKey, keyRequest(t, key)); rec.Code != http.StatusOK || rec.Body.String() != want {
 			t.Errorf("%s: got %d %q, want 200 %q", key, rec.Code, rec.Body.String(), want)
 		}
@@ -94,8 +94,8 @@ func TestAnUnboundCallerReadsTheSameTopology(t *testing.T) {
 	req := keyRequest(t, "rack")
 	bound := boundRequest(t, "/latest/meta-data/placement/rack", "100")
 	bound.SetPathValue("key", "rack")
-	if a, b := get(HandlePlacementKey, req).Body.String(), get(HandlePlacementKey, bound).Body.String(); a != "keller01" || b != a {
-		t.Fatalf("unbound %q, bound %q, want both keller01", a, b)
+	if a, b := get(HandlePlacementKey, req).Body.String(), get(HandlePlacementKey, bound).Body.String(); a != "rack-01" || b != a {
+		t.Fatalf("unbound %q, bound %q, want both rack-01", a, b)
 	}
 }
 
@@ -118,7 +118,7 @@ func TestTheDocumentDoesNotCarryTheOtherKeys(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
-	for _, leak := range []string{"keller01", "h-01", "hogan", "rack"} {
+	for _, leak := range []string{"rack-01", "h-01", "node-a", "rack"} {
 		if contains(rec.Body.String(), leak) {
 			t.Errorf("the document mentions %q: %s", leak, rec.Body.String())
 		}

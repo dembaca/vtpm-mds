@@ -9,7 +9,7 @@
 //
 // They check the parent key the client creates its keys under
 // (create-devid-under-the-srk-spire-loads, tasks 2.1 to 2.3). The simulator is a
-// third TPM implementation beside swtpm/libtpms on hogan and in the lab, so a
+// third TPM implementation beside swtpm/libtpms on a Proxmox host and in the lab, so a
 // pass here shows nothing about those; it shows the logic.
 package devid
 
@@ -104,7 +104,7 @@ func TestDevIDLoadsUnderSPIREParent(t *testing.T) {
 
 // A data point, not an assertion: whether this simulator tells the go-tpm-tools
 // 256-zero-byte template from SPIRE's empty one. On the cloud lab's TPM and on
-// hogan's, through go-tpm, it is a different parent.
+// a Proxmox host's, through go-tpm, it is a different parent.
 func TestStockTemplateParentLogged(t *testing.T) {
 	rw := newSim(t)
 	f := DefaultKeyFactory()

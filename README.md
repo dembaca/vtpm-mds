@@ -222,11 +222,11 @@ go test ./internal/devid/ ./internal/inventory/ -count=1
 
 ## E2E verification cheat sheet
 
-Human (and agent) crib for “did DevID + SPIRE actually work?”. Paths below are the **Hogan lab**: host = Proxmox hypervisor, guest = VM **399** (`vtpm-pilot`). Nested QEMU-lab materials instead live under `/var/lib/mds-lab/vms/guest100/shared/devid-out/`.
+Human (and agent) crib for “did DevID + SPIRE actually work?”. Below, the host is the Proxmox hypervisor, `<vmid>` is the guest's VM ID and `<guest>` its SSH alias. Nested QEMU-lab materials instead live under `/var/lib/mds-lab/vms/guest100/shared/devid-out/`.
 
-As `cursor-agent` on Hogan: `ssh vtpm-pilot` (or `qm guest exec 399 -- …`). Guest has **python3**, often **no curl**.
+Reach the guest with `ssh <guest>` or `qm guest exec <vmid> -- …`. A minimal guest may have **python3** but **no curl**.
 
-**Green** means all of: MDS `instance-id=i-399`; guest DevID PEM issued by `CN=BGL Proxmox DevID CA`; `devid.{priv,pub}.blob` non-empty; `spire-agent` healthy; `spire-server agent list` shows a `tpm_devid` agent. `spire-agent api fetch x509` may still say `no identity issued` until you create registration entries — that is SPIRE policy, not enroll failure.
+**Green** means all of: MDS `instance-id=i-<vmid>`; guest DevID PEM issued by your DevID CA (`<DevID CA>` below); `devid.{priv,pub}.blob` non-empty; `spire-agent` healthy; `spire-server agent list` shows a `tpm_devid` agent. `spire-agent api fetch x509` may still say `no identity issued` until you create registration entries — that is SPIRE policy, not enroll failure.
 
 ### Host — package, MDS, IMDS DNAT
 
@@ -239,7 +239,7 @@ curl -fsS http://169.254.169.1/health
 journalctl -u vtpm-mds -n 50 --no-pager | grep -E 'version |DevID |enroll/'
 
 # Guest IMDS NIC on the bridge
-qm status 399; qm config 399 | grep -E 'net1|tpmstate'
+qm status <vmid>; qm config <vmid> | grep -E 'net1|tpmstate'
 ip neigh show dev vmbr_imds | grep 169.254.169.10
 
 # DNAT 169.254.169.254 → :80 (use iifname, table inet vtpm_mds)
@@ -249,7 +249,7 @@ nft list table inet vtpm_mds
 ### Guest — IMDS (from inside the VM)
 
 ```bash
-ssh vtpm-pilot
+ssh <guest>
 python3 - <<'PY'
 import json, urllib.request
 IMDS = "http://169.254.169.254"
@@ -260,7 +260,7 @@ token = urllib.request.urlopen(req, timeout=5).read().decode()
 h = {"X-aws-ec2-metadata-token": token}
 iid = urllib.request.urlopen(urllib.request.Request(
     IMDS + "/latest/meta-data/instance-id", headers=h), timeout=5).read().decode()
-print("instance-id", iid)          # expect i-399
+print("instance-id", iid)          # expect i-<vmid>
 print(urllib.request.urlopen(urllib.request.Request(
     IMDS + "/latest/dynamic/instance-identity/document", headers=h), timeout=5).read().decode())
 PY
@@ -286,10 +286,10 @@ ls -l /var/lib/spire/agent/devid.crt.pem \
       /var/lib/spire/agent/devid.priv.blob \
       /var/lib/spire/agent/devid.pub.blob
 wc -c /var/lib/spire/agent/devid.priv.blob /var/lib/spire/agent/devid.pub.blob
-# Hogan today: priv=222 pub=280 bytes (TPM2B_PRIVATE / TPM2B_PUBLIC)
+# typical sizes: priv=222 pub=280 bytes (TPM2B_PRIVATE / TPM2B_PUBLIC)
 
 openssl x509 -in /var/lib/spire/agent/devid.crt.pem -noout -subject -issuer -dates
-# subject=CN=399   issuer=CN=BGL Proxmox DevID CA  (the subject is always CN=<VM ID>)
+# subject=CN=<vmid>   issuer=CN=<DevID CA>  (the subject is always CN=<VM ID>)
 openssl x509 -in /var/lib/spire/agent/devid.crt.pem -noout -text | less
 devid-enroll -version
 ```
@@ -298,24 +298,24 @@ devid-enroll -version
 
 ```bash
 # guest; default MDS URL is http://169.254.169.254
-sudo devid-enroll -cn vtpm-pilot -tpm /dev/tpmrm0 -out /tmp/devid-e2e
+sudo devid-enroll -tpm /dev/tpmrm0 -out /tmp/devid-e2e
 openssl x509 -in /tmp/devid-e2e/devid.crt.pem -noout -subject -issuer -dates
 ```
 
-Install a host-matching client after a `dpkg -i` on Hogan — the host package no longer carries `/usr/bin/devid-enroll`, so push the guest `.deb` of the same version instead:
+Install a host-matching client after a `dpkg -i` on the host — the host package no longer carries `/usr/bin/devid-enroll`, so push the guest `.deb` of the same version instead:
 
 ```bash
-# HOST as cursor-agent; from dist/ after `make deb`, or
+# host; from dist/ after `make deb`, or
 # gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'devid-enroll_*_amd64.deb'
 DEB=$(ls -t dist/devid-enroll_*+git*.deb | head -1)
-scp "$DEB" "vtpm-pilot:/tmp/$(basename "$DEB")"
-ssh vtpm-pilot "sudo dpkg -i /tmp/$(basename "$DEB") && devid-enroll -version"
+scp "$DEB" "<guest>:/tmp/$(basename "$DEB")"
+ssh <guest> "sudo dpkg -i /tmp/$(basename "$DEB") && devid-enroll -version"
 ```
 
 ### Host — verify the guest cert against the DevID CA
 
 ```bash
-ssh vtpm-pilot cat /var/lib/spire/agent/devid.crt.pem > /tmp/devid.crt.pem
+ssh <guest> cat /var/lib/spire/agent/devid.crt.pem > /tmp/devid.crt.pem
 openssl x509 -in /etc/ssl/certs/proxmox_devid_ca.crt -noout -subject -issuer -dates
 # issuer is the org root; -partial_chain if you only have the issuing CA file
 openssl verify -partial_chain -CAfile /etc/ssl/certs/proxmox_devid_ca.crt /tmp/devid.crt.pem
@@ -352,7 +352,7 @@ spire-server agent list
 MDS enroll logs on the host while a guest enroll runs:
 
 ```bash
-journalctl -u vtpm-mds -f --no-pager | grep -E 'enroll/|VMID=399'
+journalctl -u vtpm-mds -f --no-pager | grep -E 'enroll/|vm=<vmid>| <vmid>$'
 # POST /latest/devid/enroll/start 200
 # POST /latest/devid/enroll/finish 200
 ```

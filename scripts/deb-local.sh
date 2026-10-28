@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the local host and guest .debs with a Version that encodes the git
-# commit, so Hogan (and other lab hosts) can tell exactly which tree is
+# commit, so a lab host can tell exactly which tree is
 # installed.
 # Does not rewrite debian/changelog in the working tree.
 set -euo pipefail

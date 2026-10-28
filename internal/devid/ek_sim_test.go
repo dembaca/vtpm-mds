@@ -8,7 +8,7 @@
 //
 // They check how the client treats the endorsement key
 // (stop-evicting-foreign-objects-at-the-ek-handle, tasks 2.1 and 2.2). The
-// simulator is a third TPM implementation beside swtpm/libtpms on hogan and in
+// simulator is a third TPM implementation beside swtpm/libtpms on a Proxmox host and in
 // the lab, so a pass here shows the logic, not those.
 package devid
 
