@@ -637,25 +637,25 @@ includes the `placement/` and `services/` prefixes that the index advertises.
 #### Scenario: A declared zone and region are served
 
 - **GIVEN** a valid session token, a host whose node description declares zone
-  `DUS4` and region `DUS`, and a caller bound to any VM record
+  `AZ4` and region `region-a`, and a caller bound to any VM record
 - **WHEN** it reads `placement/availability-zone` and `placement/region`
-- **THEN** the service responds `200` with `DUS4` and `DUS` respectively, with no
+- **THEN** the service responds `200` with `AZ4` and `region-a` respectively, with no
   trailing newline
 
 #### Scenario: Nothing declared gives the host's placement
 
 - **GIVEN** a valid session token and a caller bound to a VM record, on a host
-  whose description declares neither a zone nor a region, whose zone is `hogan`
-  and whose region is `bgl-cluster`
+  whose description declares neither a zone nor a region, whose zone is `node-a`
+  and whose region is `cluster-1`
 - **WHEN** it reads `placement/availability-zone` and `placement/region`
-- **THEN** the service responds `200` with `hogan` and `bgl-cluster`
+- **THEN** the service responds `200` with `node-a` and `cluster-1`
 
 #### Scenario: One value declared, the other taken from the host
 
 - **GIVEN** a caller bound to a VM record, on a host whose description declares a
-  zone `DUS4` and no region, and whose cluster is named `bgl-cluster`
+  zone `AZ4` and no region, and whose cluster is named `cluster-1`
 - **WHEN** it reads both placement keys
-- **THEN** the zone is `DUS4` and the region is `bgl-cluster`
+- **THEN** the zone is `AZ4` and the region is `cluster-1`
 
 #### Scenario: An unbound caller is served the host's placement
 
@@ -708,16 +708,16 @@ includes the `placement/` and `services/` prefixes that the index advertises.
 #### Scenario: A key of the node description is served
 
 - **GIVEN** a valid session token, a host whose node description declares
-  `topology.vtpm_mds.io/rack: keller01`, and a caller bound to any VM record
+  `topology.vtpm_mds.io/rack: rack-01`, and a caller bound to any VM record
 - **WHEN** it reads `placement/rack`
-- **THEN** the service responds `200` with `keller01`, with no trailing newline
+- **THEN** the service responds `200` with `rack-01`, with no trailing newline
 
 #### Scenario: Node and cluster are served by default
 
-- **GIVEN** a host on node `hogan` in cluster `bgl-cluster` whose description
+- **GIVEN** a host on node `node-a` in cluster `cluster-1` whose description
   declares neither
 - **WHEN** a caller reads `placement/node` and `placement/cluster`
-- **THEN** the service responds `200` with `hogan` and `bgl-cluster`
+- **THEN** the service responds `200` with `node-a` and `cluster-1`
 
 #### Scenario: A key with no value is not the index
 
@@ -805,10 +805,10 @@ verifies it against a key this service holds.
 
 #### Scenario: The document and the placement keys agree
 
-- **GIVEN** a host whose node description declares zone `DUS4` and region `DUS`,
+- **GIVEN** a host whose node description declares zone `AZ4` and region `region-a`,
   and a caller bound to any VM record
 - **WHEN** it reads the identity document
-- **THEN** `region` is `DUS` and `availabilityZone` is `DUS4`, as the placement
+- **THEN** `region` is `region-a` and `availabilityZone` is `AZ4`, as the placement
   keys serve them
 
 #### Scenario: Identity document for a peer with no IPv4 address

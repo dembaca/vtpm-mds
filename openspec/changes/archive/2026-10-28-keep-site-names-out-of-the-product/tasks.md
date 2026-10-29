@@ -67,9 +67,16 @@ neutralised itself.
 
 ## 2. Archive
 
-- [ ] 2.1 After merge, the coordinator archives the change; verify with
+- [x] 2.1 After merge, the coordinator archives the change; verify with
       `openspec validate --all --strict` and the grep of 1.5 without the
       `openspec/specs` exclusion. Until `read-cluster-ek-pins-from-pmxcfs` is
       archived too, the only expected hits are in
       `openspec/specs/devid-enrollment/spec.md` under `Refuse An EK Pinned To
       Another VM`
+      Archived with `openspec archive` (OpenSpec 1.14.3, Mac) on
+      `main@a966b58`: `+ 1, ~ 6`; the spec diff is the ADDED requirement and
+      the D-a renames only. The grep prints exactly the eight expected lines
+      (`devid-enrollment` 1087–1119) and the MAC grep nothing. On the lab
+      host (OpenSpec 1.13.1, `2fa99a8`): `Totals: 6 passed, 0 failed
+      (6 items)`, only INFO notes on long requirements. The Mac's 1.14.3
+      fails every spec on long requirement texts, `main` included.
