@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -17,6 +18,7 @@ type fakeSPIRE struct {
 	banned    []string
 	createErr error
 	next      int
+	calls     []string // "create:<spiffe ids>" and "delete:<entry ids>", in order
 }
 
 func (f *fakeSPIRE) Entries(context.Context) ([]Entry, error) {
@@ -24,6 +26,11 @@ func (f *fakeSPIRE) Entries(context.Context) ([]Entry, error) {
 }
 
 func (f *fakeSPIRE) Create(_ context.Context, as []Alias) error {
+	var ids []string
+	for _, a := range as {
+		ids = append(ids, a.SPIFFEID)
+	}
+	f.calls = append(f.calls, "create:"+strings.Join(ids, ","))
 	if f.createErr != nil {
 		return f.createErr
 	}
@@ -36,6 +43,7 @@ func (f *fakeSPIRE) Create(_ context.Context, as []Alias) error {
 }
 
 func (f *fakeSPIRE) Delete(_ context.Context, ids []string) error {
+	f.calls = append(f.calls, "delete:"+strings.Join(ids, ","))
 	drop := map[string]bool{}
 	for _, id := range ids {
 		drop[id] = true
@@ -84,14 +92,14 @@ func TestPass(t *testing.T) {
 	t.Run("a good pass creates aliases and a second changes nothing", func(t *testing.T) {
 		s := &fakeSPIRE{}
 		r := newRec(s, &fakeReader{guests: []Guest{{VMID: "350", Pool: "web"}}})
-		if err := r.Pass(ctx, false); err != nil {
+		if _, err := r.Pass(ctx, false); err != nil {
 			t.Fatal(err)
 		}
 		if len(s.entries) != 2 {
 			t.Fatalf("entries = %d, want 2", len(s.entries))
 		}
 		before := s.next
-		if err := r.Pass(ctx, false); err != nil {
+		if _, err := r.Pass(ctx, false); err != nil {
 			t.Fatal(err)
 		}
 		if s.next != before || len(s.entries) != 2 {
@@ -103,13 +111,13 @@ func TestPass(t *testing.T) {
 		a := &fakeReader{guests: []Guest{{VMID: "350"}}}
 		b := &fakeReader{guests: []Guest{{VMID: "450"}}}
 		r := newRec(s, a, b)
-		if err := r.Pass(ctx, false); err != nil {
+		if _, err := r.Pass(ctx, false); err != nil {
 			t.Fatal(err)
 		}
 		a.err = fmt.Errorf("%w: down", ErrDoubtful)
 		a.guests = nil
 		b.guests = []Guest{{VMID: "451"}}
-		if err := r.Pass(ctx, false); err != nil {
+		if _, err := r.Pass(ctx, false); err != nil {
 			t.Fatal(err)
 		}
 		have := map[string]bool{}
@@ -125,10 +133,55 @@ func TestPass(t *testing.T) {
 			t.Error("cluster-2 vm 450 was not removed")
 		}
 	})
+	t.Run("a doubtful read is counted as skipped", func(t *testing.T) {
+		s := &fakeSPIRE{}
+		a := &fakeReader{err: fmt.Errorf("%w: down", ErrDoubtful)}
+		b := &fakeReader{guests: []Guest{{VMID: "450"}}}
+		skipped, err := newRec(s, a, b).Pass(ctx, false)
+		if err != nil || skipped != 1 {
+			t.Errorf("skipped, err = %d, %v; want 1, nil", skipped, err)
+		}
+	})
+	// The cluster-1 aliases of VM 350: a pool-less VM has the VM alias only.
+	handEditedSetup := func() *fakeSPIRE {
+		const parent = "spiffe://example.org/spire/server"
+		return &fakeSPIRE{entries: []Entry{
+			{ID: "hand", ParentID: parent, SPIFFEID: "spiffe://example.org/pve/cluster-1/vm/350", Selectors: []string{"tpm_devid:ca:fingerprint:f1", "tpm_devid:subject:cn:350"}, Default: false},
+			{ID: "stale", ParentID: parent, SPIFFEID: "spiffe://example.org/pve/cluster-1/vm/999", Selectors: []string{"tpm_devid:ca:fingerprint:f1", "tpm_devid:subject:cn:999"}, Default: true},
+		}}
+	}
+	t.Run("a hand-edited alias is replaced without a gap", func(t *testing.T) {
+		s := handEditedSetup()
+		r := newRec(s, &fakeReader{guests: []Guest{{VMID: "350"}, {VMID: "351"}}})
+		if _, err := r.Pass(ctx, false); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{
+			"create:spiffe://example.org/pve/cluster-1/vm/351",
+			"delete:hand,stale",
+			"create:spiffe://example.org/pve/cluster-1/vm/350",
+		}
+		if strings.Join(s.calls, "|") != strings.Join(want, "|") {
+			t.Errorf("calls = %q, want %q", s.calls, want)
+		}
+	})
+	t.Run("when the first Create fails nothing is deleted", func(t *testing.T) {
+		s := handEditedSetup()
+		s.createErr = errors.New("boom")
+		r := newRec(s, &fakeReader{guests: []Guest{{VMID: "350"}, {VMID: "351"}}})
+		if _, err := r.Pass(ctx, false); err == nil {
+			t.Fatal("want an error")
+		}
+		for _, c := range s.calls {
+			if strings.HasPrefix(c, "delete:") {
+				t.Errorf("Delete was called: %q", s.calls)
+			}
+		}
+	})
 	t.Run("a Create error is returned", func(t *testing.T) {
 		s := &fakeSPIRE{createErr: errors.New("boom")}
 		r := newRec(s, &fakeReader{guests: []Guest{{VMID: "350"}}})
-		if err := r.Pass(ctx, false); err == nil {
+		if _, err := r.Pass(ctx, false); err == nil {
 			t.Error("want an error")
 		}
 	})
@@ -159,7 +212,7 @@ func TestPassBans(t *testing.T) {
 		rd.err = fmt.Errorf("%w: down", ErrDoubtful)
 		r.Pass(ctx, true)
 		rd.err = nil
-		if r.Pass(ctx, true); len(s.banned) != 1 {
+		if _, _ = r.Pass(ctx, true); len(s.banned) != 1 {
 			t.Errorf("banned = %v, want one on the third pass", s.banned)
 		}
 	})

@@ -55,6 +55,9 @@ func main() {
 		log.Fatal(err)
 	}
 	defer spire.Close()
+	if _, err := spire.Entries(ctx); err != nil {
+		log.Fatalf("spire socket %s: %v", cfg.SPIRESocket, err)
+	}
 
 	log.Printf("vtpm-mds-reconcile version %s, %d clusters, interval %s", Version, len(cfg.Clusters), cfg.Interval)
 	r := &reconcile.Reconciler{
@@ -65,8 +68,13 @@ func main() {
 		Log:     log.Default(),
 	}
 	if *once {
-		if err := r.Pass(ctx, false); err != nil {
+		skipped, err := r.Pass(ctx, false)
+		if err != nil {
 			log.Printf("pass: %v", err)
+		} else if skipped > 0 {
+			log.Printf("pass: %d of %d clusters left unchanged", skipped, len(targets))
+		}
+		if err != nil || skipped > 0 {
 			spire.Close()
 			os.Exit(1)
 		}
@@ -75,7 +83,7 @@ func main() {
 	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
 	for {
-		if err := r.Pass(ctx, true); err != nil {
+		if _, err := r.Pass(ctx, true); err != nil {
 			log.Printf("pass: %v", err)
 		}
 		select {

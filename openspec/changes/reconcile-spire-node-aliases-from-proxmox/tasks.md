@@ -152,5 +152,21 @@ deferred). Record only until the maintainer's go.
 
 ## 5. Ship
 
-- [ ] 5.1 Review of the implementation by a stronger model before ready
+- [x] 5.1 Review of the implementation by a stronger model before ready
+      **Fable, 2026-10-29, of `c1863ff`:** no must-fix; no path found that
+      deletes a live alias, touches an entry outside the owned parent and
+      prefix, or bans an agent whose VM is listed. Should-fix taken: `-once`
+      exits 1 when a cluster was left unchanged (`Pass` returns the count);
+      wanted aliases are created before stale ones are deleted, and one that
+      replaces a deleted entry after it, so a failed create leaves the old
+      aliases (tested); `entryFromProto` with a unit test per field; remote
+      strings quoted in logs; the man page said aliases go after two reads,
+      they go on the first, only the ban waits. Nits taken: absolute
+      `spire_socket`, a socket that cannot be listed stops the start,
+      intermediates deduplicated by fingerprint, nil logger, drained error
+      bodies, man page on `ca_file`, token rotation and removing a cluster.
+      Not taken: refusing to ban an agent whose cn is not all digits; the spec
+      bans by cn alone, and every LDevID under an intermediate has
+      `CN=<vmid>`. Rerun of 4.2 with the fixed binary: `created 27`, then two
+      passes with nothing, rights-less token exit 1, wrong socket exit 1.
 - [ ] 5.2 After merge, the coordinator archives the change

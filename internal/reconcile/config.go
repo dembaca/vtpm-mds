@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -69,6 +70,9 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.SPIRESocket == "" {
 		return nil, fmt.Errorf("config %s: spire_socket is empty", path)
 	}
+	if !filepath.IsAbs(cfg.SPIRESocket) {
+		return nil, fmt.Errorf("config %s: spire_socket %q must be an absolute path", path, cfg.SPIRESocket)
+	}
 	if cfg.Interval < MinInterval {
 		return nil, fmt.Errorf("config %s: interval %s is below the minimum %s", path, cfg.Interval, MinInterval)
 	}
@@ -96,17 +100,22 @@ func LoadConfig(path string) (*Config, error) {
 			return nil, fmt.Errorf("config %s: cluster %s: no intermediates", path, c.Name)
 		}
 		seenFile := map[string]bool{}
+		seenFP := map[string]bool{}
 		var files []string
 		for _, f := range c.Intermediates {
 			if seenFile[f] {
 				continue
 			}
 			seenFile[f] = true
-			files = append(files, f)
 			fp, err := intermediateFingerprint(f)
 			if err != nil {
 				return nil, fmt.Errorf("cluster %s: %w", c.Name, err)
 			}
+			if seenFP[fp] {
+				continue
+			}
+			seenFP[fp] = true
+			files = append(files, f)
 			if other, ok := fpOwner[fp]; ok && other != c.Name {
 				return nil, fmt.Errorf("fingerprint %s (%s) is configured for clusters %s and %s", fp, f, other, c.Name)
 			}

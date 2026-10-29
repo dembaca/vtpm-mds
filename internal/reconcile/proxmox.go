@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -51,6 +52,7 @@ func (c *ProxmoxClient) get(ctx context.Context, path string, out any) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 		return fmt.Errorf("%w: GET %s: status %d", ErrDoubtful, path, resp.StatusCode)
 	}
 	var body struct {

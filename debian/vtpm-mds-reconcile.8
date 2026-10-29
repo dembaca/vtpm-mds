@@ -158,8 +158,9 @@ A workload holding an SVID under it keeps it until the SVID expires.
 .SS A destroyed VM
 When VM
 .B 353
-is missing from two consecutive good reads of its cluster, its aliases are
-deleted and every
+is missing from a good read of its cluster, its aliases are deleted on that
+pass.
+When it is still missing from the next good read, every
 .B tpm_devid
 agent naming
 .B cn:353
@@ -219,7 +220,7 @@ Only after two consecutive good reads, and never with
 .BR \-once .
 The count is held in memory; a restart starts it again.
 .TP
-.B Renaming a cluster
+.B Renaming or removing a cluster
 in the configuration leaves the aliases under the old prefix, which no
 longer belongs to the reconciler; delete them by hand.
 .SH OPTIONS
@@ -229,7 +230,8 @@ The configuration file; default
 .IR /etc/vtpm\-mds\-reconcile/config.yaml .
 .TP
 .B \-once
-Run one pass and exit, without banning: 0 on success, 1 on failure.
+Run one pass and exit, without banning: 0 when every cluster was read and
+reconciled, 1 when a cluster was left unchanged or the pass failed.
 .TP
 .B \-version
 Print the version and exit.
@@ -249,8 +251,14 @@ clusters:
       \- /etc/vtpm\-mds\-reconcile/cluster\-1\-intermediate.pem
 .fi
 .PP
+.B spire_socket
+must be an absolute path; a socket that cannot be listed stops the start.
 .B interval
 defaults to 60 s and must be at least 10 s.
+.B ca_file
+is optional: without it the system roots verify the API's certificate; it may
+also hold the certificate the API presents itself.
+The token file is read once at start, so a rotated token needs a restart.
 A cluster name must be a SPIFFE path segment and unique.
 Every cluster needs at least one intermediate; with two (a rotation) every
 alias exists once per intermediate.

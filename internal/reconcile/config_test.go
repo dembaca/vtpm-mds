@@ -92,6 +92,7 @@ func TestLoadConfig(t *testing.T) {
 		{"a capital in the cluster name", head + "clusters:\n" + cl("Cluster_1", "https://pve", int1), "Cluster_1"},
 		{"a dot-dot cluster name", head + "clusters:\n" + cl("..", "https://pve", int1), "cluster name"},
 		{"an http api_url", head + "clusters:\n" + cl("c", "http://pve", int1), "https://"},
+		{"a relative spire_socket", "trust_domain: example.org\nspire_socket: s.sock\nclusters:\n" + cl("c", "https://pve", int1), "must be an absolute path"},
 		{"no clusters", head + "clusters: []\n", "no clusters"},
 	}
 	for _, tt := range tests {
@@ -114,6 +115,22 @@ func TestLoadConfig(t *testing.T) {
 				t.Errorf("fingerprints = %v, want [%x]", fps, sum)
 			}
 		})
+	}
+}
+
+func TestLoadConfigDedupesByFingerprint(t *testing.T) {
+	dir := t.TempDir()
+	_, int1, int2, der := makePKI(t, dir)
+	copyOfInt1 := writePEM(t, dir, "int1-copy.pem", der)
+	body := "trust_domain: example.org\nspire_socket: /run/s.sock\nclusters:\n  - name: c\n    api_url: https://pve\n    token_file: /t\n    intermediates:\n" +
+		"      - " + int1 + "\n      - " + copyOfInt1 + "\n      - " + int2 + "\n"
+	cfg, err := LoadConfig(writeConfig(t, dir, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := cfg.Clusters[0]
+	if len(c.Fingerprints) != 2 || c.Fingerprints[0] == c.Fingerprints[1] || len(c.Intermediates) != 2 {
+		t.Errorf("same cert under two file names: fingerprints %v, intermediates %v", c.Fingerprints, c.Intermediates)
 	}
 }
 

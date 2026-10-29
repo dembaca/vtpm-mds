@@ -57,6 +57,26 @@ func selectorStrings(sel []*types.Selector) []string {
 	return out
 }
 
+// entryFromProto maps a listed entry; Default is true when every field a
+// reconciler could have set is at its default (CreatedAt and RevisionNumber are
+// server-managed and ignored).
+func entryFromProto(e *types.Entry) Entry {
+	return Entry{
+		ID:        e.Id,
+		ParentID:  idString(e.ParentId),
+		SPIFFEID:  idString(e.SpiffeId),
+		Selectors: selectorStrings(e.Selectors),
+		Default: !e.Admin && !e.Downstream && len(e.DnsNames) == 0 &&
+			len(e.FederatesWith) == 0 && e.X509SvidTtl == 0 && e.JwtSvidTtl == 0 &&
+			e.Hint == "" && e.ExpiresAt == 0 && !e.StoreSvid,
+	}
+}
+
+// agentFromProto maps a listed agent.
+func agentFromProto(a *types.Agent) Agent {
+	return Agent{ID: idString(a.Id), Selectors: selectorStrings(a.Selectors), Banned: a.Banned}
+}
+
 // Entries lists every entry whose parent is the server, that is every node
 // alias, page by page. The entry API has no prefix filter; Diff filters.
 func (s *SPIRE) Entries(ctx context.Context) ([]Entry, error) {
@@ -72,15 +92,7 @@ func (s *SPIRE) Entries(ctx context.Context) ([]Entry, error) {
 			return nil, fmt.Errorf("list entries: %w", err)
 		}
 		for _, e := range resp.Entries {
-			out = append(out, Entry{
-				ID:        e.Id,
-				ParentID:  idString(e.ParentId),
-				SPIFFEID:  idString(e.SpiffeId),
-				Selectors: selectorStrings(e.Selectors),
-				Default: !e.Admin && !e.Downstream && len(e.DnsNames) == 0 &&
-					len(e.FederatesWith) == 0 && e.X509SvidTtl == 0 && e.JwtSvidTtl == 0 &&
-					e.Hint == "" && e.ExpiresAt == 0 && !e.StoreSvid,
-			})
+			out = append(out, entryFromProto(e))
 		}
 		if resp.NextPageToken == "" {
 			return out, nil
@@ -153,7 +165,7 @@ func (s *SPIRE) Agents(ctx context.Context) ([]Agent, error) {
 			return nil, fmt.Errorf("list agents: %w", err)
 		}
 		for _, a := range resp.Agents {
-			out = append(out, Agent{ID: idString(a.Id), Selectors: selectorStrings(a.Selectors), Banned: a.Banned})
+			out = append(out, agentFromProto(a))
 		}
 		if resp.NextPageToken == "" {
 			return out, nil
