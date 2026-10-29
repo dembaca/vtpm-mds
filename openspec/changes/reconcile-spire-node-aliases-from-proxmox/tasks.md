@@ -27,7 +27,8 @@ deferred). Record only until the maintainer's go.
       **Verify:** Q-1 (ask `s67xd1uz…`, 22:38): reused VM IDs are a change
       of their own, by way of forwarded `leaf=` lines. Q-2 (ask `jpwfsysg…`,
       22:49): a third `.deb` and a static binary in a follow-up change.
-- [ ] 1.4 Maintainer's go for implementation
+- [x] 1.4 Maintainer's go for implementation
+      **Verify:** ask `srpayine…`, 👍 2026-10-29 22:51
 
 ## 2. Before code
 
@@ -58,9 +59,12 @@ deferred). Record only until the maintainer's go.
 
 ## 3. Implementation
 
-- [ ] 3.1 `logIssuance` writes `leaf=<sha1>`; test that it equals the SHA-1 of
+- [x] 3.1 `logIssuance` writes `leaf=<sha1>`; test that it equals the SHA-1 of
       the returned leaf DER
-      **Verify:** `go test ./internal/devid/ -run Issuance`
+      **Verify:** `go test ./internal/devid/ -run 'LoggedOnce|Issuance'`:
+      both PASS (2026-10-29); `go vet ./...` and `go test ./...` green.
+      `debian/vtpm-mds.8` names only the `ek=` value of the line, so it is
+      unchanged.
 - [ ] 3.2 `internal/reconcile`: desired-alias computation (D-b, D-c, D-g) as a pure
       function, table tests for every scenario of the delta
 - [ ] 3.3 Proxmox reader with the permission check and the doubtful-read rule
