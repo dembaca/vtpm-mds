@@ -65,8 +65,13 @@ deferred). Record only until the maintainer's go.
       both PASS (2026-10-29); `go vet ./...` and `go test ./...` green.
       `debian/vtpm-mds.8` names only the `ek=` value of the line, so it is
       unchanged.
-- [ ] 3.2 `internal/reconcile`: desired-alias computation (D-b, D-c, D-g) as a pure
+- [x] 3.2 `internal/reconcile`: desired-alias computation (D-b, D-c, D-g) as a pure
       function, table tests for every scenario of the delta
+      **Verify:** `go test ./internal/reconcile/`: PASS (2026-10-29),
+      `Wanted` in `wanted.go`, subtests for every scenario of the first two
+      requirements plus dot segments, separators, a tag without value, two
+      intermediates, no fingerprints, duplicates and sorting. D-g's
+      field-default check belongs to the writer (3.4).
 - [ ] 3.3 Proxmox reader with the permission check and the doubtful-read rule
       (D-d), tests on a fake API
 - [ ] 3.4 SPIRE writer: diff under the prefix, create/delete, bans after two
