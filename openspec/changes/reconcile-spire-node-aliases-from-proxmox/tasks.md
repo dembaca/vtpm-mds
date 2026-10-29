@@ -82,8 +82,13 @@ deferred). Record only until the maintainer's go.
       requirements plus dot segments, separators, a tag without value, two
       intermediates, no fingerprints, duplicates and sorting. D-g's
       field-default check belongs to the writer (3.4).
-- [ ] 3.3 Proxmox reader with the permission check and the doubtful-read rule
+- [x] 3.3 Proxmox reader with the permission check and the doubtful-read rule
       (D-d), tests on a fake API
+      **Verify:** `go test ./internal/reconcile/ -run TestRead`: PASS
+      (2026-10-29): a good read, an empty listing, only templates, no rights
+      (resources not requested), privilege without propagation, server error
+      (no token in the message), unreachable, vmid as a number. Response
+      shapes from task 2.1.
 - [ ] 3.4 SPIRE writer: diff under the prefix, create/delete, bans after two
       reads (D-e), tests on a fake entry and agent API
 - [ ] 3.5 `cmd/vtpm-mds-reconcile`: strict config (D-i, D-f), `-version`,
