@@ -40,6 +40,21 @@ deferred). Record only until the maintainer's go.
       (selectors, anything that ties it to an EK), entry create/delete under one
       SPIFFE ID with two selector sets, `BanAgent` then re-attestation refused
       **Verify:** lab output recorded here
+      **Partly done, 2026-10-29, local scratch SPIRE 1.14.0** (sqlite, own
+      socket, `join_token` agents, run as the agent user and stopped after):
+      two node aliases under `…/pve/cluster-1/vm/350` with
+      `subject:cn:350` + `ca:fingerprint:aaaa` and `…:bbbb` were both created
+      and `entry show -parentID spiffe://<td>/spire/server` lists both; the
+      same ID with the same selector set again is refused
+      `AlreadyExists, "similar entry already exists"`. `agent show` holds
+      SPIFFE ID, attestation type, SVID expiry and serial, `Can re-attest`,
+      and no selector for a `join_token` agent. A running agent banned with
+      `agent ban` failed its next sync 5 s later with `PermissionDenied` on
+      `SyncAuthorizedEntries` and shut down (`Agent is banned: removing SVID
+      and shutting down`). **Still open, needs the cloud lab:** `agent show`
+      for a `tpm_devid` agent (which selectors, anything tying it to an EK),
+      and that a banned `tpm_devid` agent ID cannot attest again with the
+      same LDevID.
 
 ## 3. Implementation
 
