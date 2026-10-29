@@ -8,9 +8,21 @@ deferred). Record only until the maintainer's go.
 
 - [x] 1.1 `proposal.md`, `design.md`, this file, deltas for `spire-reconciler`
       (ADDED) and `devid-enrollment` (MODIFIED issuance line)
-      **Verify:** `openspec validate --all --strict`
-- [ ] 1.2 Review of the record by a stronger model (Fable), findings taken or
+      **Verify:** `openspec validate --all --strict`: Totals 7 passed, 0 failed
+      (2026-10-29, `0000d99`)
+- [x] 1.2 Review of the record by a stronger model (Fable), findings taken or
       deferred by the maintainer
+      **Fable, 2026-10-29, of `0000d99`:** all taken. Must-fix: pools that
+      collide after lowercasing grant nothing; nested pools not served; a
+      fingerprint may identify only one cluster and no root may be configured
+      (D-f), since `ca:fingerprint` covers the root; only entries parented by
+      the server are owned (D-a). Should-fix: privilege check before every
+      pass with the propagate flag; an empty listing is always doubtful; what
+      makes an entry wanted (D-g); one alias per tag value; `.`/`..` and
+      config names as segments; `user-tag-access`/`registered-tags` in the
+      derivation; cluster rename; `-once` and restarts never ban. Nits: the
+      validate output recorded; renewals leave old agents (Risks); facts read
+      from source.
 - [ ] 1.3 Maintainer's answers to Q-1 and Q-2, or their deferral; go for
       implementation
 
@@ -31,15 +43,15 @@ deferred). Record only until the maintainer's go.
 - [ ] 3.1 `logIssuance` writes `leaf=<sha1>`; test that it equals the SHA-1 of
       the returned leaf DER
       **Verify:** `go test ./internal/devid/ -run Issuance`
-- [ ] 3.2 `internal/reconcile`: desired-alias computation (D-b, D-c) as a pure
+- [ ] 3.2 `internal/reconcile`: desired-alias computation (D-b, D-c, D-g) as a pure
       function, table tests for every scenario of the delta
 - [ ] 3.3 Proxmox reader with the permission check and the doubtful-read rule
       (D-d), tests on a fake API
 - [ ] 3.4 SPIRE writer: diff under the prefix, create/delete, bans after two
       reads (D-e), tests on a fake entry and agent API
-- [ ] 3.5 `cmd/vtpm-mds-reconcile`: strict config (D-g), `-version`, `-once`
-      for a single pass, signal handling
-- [ ] 3.6 `vtpm-mds-reconcile(8)` (D-h), `README.md`, `ARCHITECTURE.md`
+- [ ] 3.5 `cmd/vtpm-mds-reconcile`: strict config (D-i, D-f), `-version`,
+      `-once` for a single pass that never bans (D-e), signal handling
+- [ ] 3.6 `vtpm-mds-reconcile(8)` (D-j), `README.md`, `ARCHITECTURE.md`
       **Verify (3.x):** `go vet ./...`, `go test ./...`,
       `openspec validate --all --strict`
 

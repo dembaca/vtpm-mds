@@ -55,21 +55,34 @@ certificate would sign the same Proxmox read at issuance and freeze it until
 
 ## Decisions
 
-- **D-a. One writer per prefix.** The reconciler owns every node alias whose
-  SPIFFE ID starts with `spiffe://<td>/pve/<cluster>/` for a configured
-  `<cluster>`, and nothing else. It creates and deletes only there. An entry
-  someone wrote by hand under that prefix is deleted on the next pass; the man
-  page says so.
+- **D-a. One writer per prefix, node aliases only.** The reconciler owns every
+  entry whose parent is `spiffe://<td>/spire/server` and whose SPIFFE ID
+  starts with `spiffe://<td>/pve/<cluster>/` for a configured `<cluster>`, and
+  nothing else. Entries with another parent (workload entries an operator
+  registered under that prefix) are never touched. A node alias someone wrote
+  by hand under the prefix is deleted on the next pass; the man page says so.
 - **D-b. Three ID shapes (A-4).** For a VM `<vmid>` of cluster `<cluster>`:
   `…/pve/<cluster>/vm/<vmid>` always; `…/pve/<cluster>/pool/<pool>` when the VM
   is in a pool; `…/pve/<cluster>/pool/<pool>/tag/<key>/<value>` for each of its
-  instance tags when it is in a pool. Tags are parsed exactly as the
-  `vm-inventory` capability parses them for metadata (`vtpm_mds.io.<key>.<value>`,
-  prefix case-insensitive), then key and value are lowercased. A pool, key or
-  value that is not a valid SPIFFE path segment (`[a-z0-9._-]` after
-  lowercasing) yields no alias and one log line per pass naming the VM and the
-  tag; `+` is the case Proxmox allows. A VM without a pool gets only its
-  `vm/` alias, and its tags grant nothing (A-1).
+  instance tags when it is in a pool.
+  - **Tags.** Every Proxmox tag `vtpm_mds.io.<key>.<value>` (prefix
+    case-insensitive, key up to the next `.`, value the rest) yields one alias.
+    Unlike instance metadata, two tags with one key are not a conflict: `role.web`
+    and `role.db` give two aliases, because a VM may hold several roles.
+  - **Segments.** Pool, key and value are lowercased. One that is then not
+    made only of `a-z`, `0-9`, `.`, `-` and `_`, or that is `.` or `..`
+    (go-spiffe rejects both), yields no alias and one log line per pass naming
+    the VM and the tag or pool. `+` is the case Proxmox allows in tags.
+  - **Collisions.** When lowercasing maps two distinct pools of a cluster to
+    one segment (`Web` and `web`), neither pool yields a pool or tag alias, and
+    one line is logged per pass. Pool IDs are case-sensitive in Proxmox, so
+    merging them would hand one pool's grants to the other.
+  - **Nested pools** (`web/front`, allowed by Proxmox up to three levels) are
+    not served in this change: a VM in a nested pool gets only its `vm/` alias
+    and a log line. Encoding `/` as a path would collide with `pool/<p>/tag/…`
+    for a sub-pool named `tag`; a later change can add a reserved marker.
+  - A VM without a pool gets only its `vm/` alias, and its tags grant nothing
+    (A-1).
 - **D-c. Selectors.** Every alias for VM `<vmid>` of cluster `<cluster>` has
   exactly `tpm_devid:subject:cn:<vmid>` and
   `tpm_devid:ca:fingerprint:<sha1>`, with `<sha1>` the lowercase hex SHA-1 of
@@ -77,46 +90,73 @@ certificate would sign the same Proxmox read at issuance and freeze it until
   intermediates configured (rotation), every alias exists once per
   intermediate. The cluster name in the ID comes from the configuration, not
   from Proxmox, so two clusters with the same `cluster_name` stay apart.
-- **D-d. Never delete on a doubtful read.** A pass applies a cluster's diff
-  only when the read of that cluster succeeded completely. A failed request, a
-  TLS or authentication error, or a read with **no qemu guest at all** while
-  aliases exist under that cluster's prefix, skips that cluster for the pass
-  and logs once. Proxmox filters `/cluster/resources` by the token's rights
-  and answers an under-privileged token with a short or empty list instead of
-  `403`; at start the reconciler therefore checks the token's
-  `/access/permissions` for `VM.Audit` on `/vms` and `Pool.Audit` on `/pool`
-  (propagated) and refuses to start without them.
+- **D-d. Never act on a doubtful read.** A pass applies a cluster's diff and
+  counts toward bans only when the read of that cluster succeeded completely
+  and is not doubtful. Doubtful are: a failed request, a TLS or authentication
+  error, a listing with **no qemu guest at all** (always, whether aliases exist
+  or not), and a failed privilege check. Proxmox filters `/cluster/resources`
+  by the token's rights: a guest without `VM.Audit` is skipped, not answered
+  with `403`, and `pool` is dropped without `Pool.Audit` on that pool. So
+  **before every pass**, not only at start, the reconciler reads the token's
+  `/access/permissions` and requires `VM.Audit` on `/vms` and `Pool.Audit` on
+  `/pool`, each with the propagate flag set (value `1`). At start a failed
+  check stops the process; during a run it makes the pass doubtful. A
+  `NoAccess` ACL on one guest path still hides that guest from a good read;
+  the man page states that the reconciler then reads that VM as destroyed.
 - **D-e. Bans for destroyed VMs.** A `tpm_devid` agent whose selectors include
   `ca:fingerprint` of a configured intermediate of cluster C and whose
-  `subject:cn` names no qemu guest of C in **two consecutive** successful
-  reads is banned, with one log line naming the agent ID and the VM ID. Two
-  reads, so that a VM briefly missing from one listing (an API answering
-  during a migration or a restore) is not banned. Banned, not evicted: an
-  evicted agent could attest again with the same certificate, for example from
-  a backup.
-- **D-f. The issuance line carries the agent ID.** `devid issued` gains
+  `subject:cn` names no qemu guest of C in **two consecutive** good reads is
+  banned, with one log line naming the agent ID and the VM ID. Two reads, so
+  that a VM briefly missing from one listing (an API answering during a
+  migration or a restore) is not banned. Banned, not evicted: an evicted agent
+  could attest again with the same certificate, for example from a backup; a
+  banned one is refused on every call to the server, so a ban takes effect at
+  the agent's next server call. The count lives in memory: a restart starts it
+  again, and `-once` never bans.
+- **D-f. Fingerprints identify exactly one cluster.** `ca:fingerprint` is
+  emitted for every non-leaf certificate of the chain, root included. A root,
+  or an intermediate configured for two clusters, would match every agent of
+  every cluster under it, and D-e would ban the agents of the other cluster.
+  Configuration loading therefore refuses a self-signed certificate as an
+  intermediate and a fingerprint configured for more than one cluster.
+- **D-g. What makes an existing entry wanted.** An entry under the prefix is
+  kept when its parent, SPIFFE ID and selector set equal a wanted alias and its
+  other fields (`admin`, `downstream`, `dns_names`, `federates_with`, TTLs,
+  `hint`) are at their defaults. Any other entry under the prefix is deleted
+  and, where wanted, created again. Entries are listed by parent
+  `spiffe://<td>/spire/server` and filtered by prefix in the reconciler, page
+  by page; the entry API has no prefix filter.
+- **D-h. The issuance line carries the agent ID.** `devid issued` gains
   `leaf=<sha1>`, so the agent ID SPIRE will give a certificate is in the
   issuer's log. Nothing consumes it in this change; it costs one field and
   every answer to Q-1 needs it.
-- **D-g. Configuration.** One YAML file, decoded strictly like the daemon's:
+- **D-i. Configuration.** One YAML file, decoded strictly like the daemon's:
   the trust domain, the SPIRE admin socket path, the interval (default 60 s),
   and per cluster its name, the API URL, a CA file for TLS, the token file and
-  the intermediate certificate files. Secrets are read from files (systemd
-  credentials where available), never from the YAML itself.
-- **D-h. Documentation (A-1's condition).** `vtpm-mds-reconcile(8)` derives
-  the rule: who can set a tag, why a tag alone is worth only as much as the VM
-  owner, why the pool is the scope, which IDs a VM receives, and what an owner
-  does for a tag to take effect. One worked example per case: a VM with pool
-  and tags, a VM without a pool, a tag with `+`, a removed tag, a destroyed
-  VM.
+  the intermediate certificate files. The trust domain and each cluster name
+  must be valid SPIFFE path components, and cluster names unique. Secrets are
+  read from files (systemd credentials where available), never from the YAML
+  itself.
+- **D-j. Documentation (A-1's condition).** `vtpm-mds-reconcile(8)` derives
+  the rule: who can set a tag (`VM.Config.Options` on the guest, narrowed by
+  `datacenter.cfg` `user-tag-access` and `registered-tags`, which only
+  `Sys.Modify` on `/` overrides), why a tag alone is therefore worth only as
+  much as the VM owner, why the pool is the scope, which IDs a VM receives,
+  and what an owner does for a tag to take effect. One worked example per
+  case: a VM with pool and tags, a VM without a pool, a tag with `+`, a removed
+  tag, a destroyed VM, a nested pool, and two pools differing only in case. It
+  also states what renaming a cluster in the configuration does (D-a no longer
+  owns the old prefix; its aliases must be deleted by hand), that `NoAccess`
+  on a guest reads as destroyed, and that a VM restored after its agent was
+  banned must enroll again.
 
 ## Open questions for the maintainer
 
 - **Q-1. Reused VM IDs.** Between a destroy and a re-creation under the same
   ID inside two reads, or for a VM ID reused after the ban, the reconciler
-  cannot tell the old agent from the new one: the attested node record holds
-  no EK and no issuance time **[unverified: `ListAgents` output not
-  inspected]**. Options: (1) ship the `leaf=` lines of every node to the
+  cannot tell the old agent from the new one: SPIRE's agent record holds
+  selectors and SVID serials but no EK and no issuance time (read from the
+  1.14 API types). Options: (1) ship the `leaf=` lines of every node to the
   reconciler (journal forwarding, the operator's); (2) compare against the
   guest config's `meta: ctime=`; (3) an issuance record per VM that the
   reconciler can read. Recommendation: (1), as a change of its own once this
@@ -132,7 +172,13 @@ certificate would sign the same Proxmox read at issuance and freeze it until
   reconciler or SPIRE admin grants anything; that is no worse than a SPIRE
   admin today.
 - **Removal latency** is one interval plus the agent's entry sync, and a
-  workload holding an SVID keeps it until it expires. Granting is as fast.
+  workload holding an SVID keeps it until it expires. Granting is as fast. A
+  ban takes effect at the banned agent's next call to the server.
+- **Renewals leave old agents of live VMs.** Each LDevID renewal gives a new
+  agent ID; the old attested node of a live VM is never banned here. Known,
+  out of scope (Q-1 decides how incarnations are told apart).
+- **A renamed cluster** leaves its old aliases granting until deleted by hand
+  (D-j).
 - **Hand-written entries under `/pve/<cluster>/`** are deleted (D-a).
 - **A restored VM after a ban** cannot attest with its old certificate; the
   guest must enroll again. The man page says so.
@@ -140,6 +186,6 @@ certificate would sign the same Proxmox read at issuance and freeze it until
   issue for any VM ID of its cluster and so reach every alias of that cluster.
   Unchanged by this design; the selector on the intermediate limits it to one
   cluster.
-- **Proxmox API facts read from source, not run**: that `/cluster/resources`
-  returns `pool` and `tags` per guest and that `PVEAuditor` suffices. Task 2.1
-  checks both against a real cluster before any code.
+- **Proxmox and SPIRE facts were read from source** (pve-manager,
+  pve-access-control and pve-guest-common `master`, SPIRE v1.14.0) in the
+  pre-review, not run. Tasks 2.1 and 2.2 check them live before any code.
