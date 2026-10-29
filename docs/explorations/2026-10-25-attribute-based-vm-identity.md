@@ -17,13 +17,13 @@ Goal, from the maintainer (2026-10-25, translated):
 
 Sources read: `internal/devid/ca.go`, `internal/proxmox/vmconfig.go`,
 `openspec/specs/devid-enrollment/spec.md`, the archives named below, issue #89,
-PR #90 (`design.md` on branch `read-cluster-ek-pins-from-pmxcfs`), the closed
+PR #90 (`openspec/changes/read-cluster-ek-pins-from-pmxcfs/design.md`), the closed
 exploration #64; SPIRE tags `v1.14.9`, `v1.15.5` and `main` on GitHub;
 `spire-plugin-sdk`; the SPIFFE-ID standard; `pve-common`, `pve-guest-common`,
 `pve-access-control`, `pve-manager` from git.proxmox.com (branch `HEAD`, read
 2026-10-25, no commit pinned); the Proxmox `datacenter.cfg(5)` page. Items
 marked **[unverified]** were not checked against a primary source or a running
-system. Nothing in this document was run in a lab or on hogan.
+system. Nothing in this document was run in a lab or on a Proxmox node.
 
 ## Where things stand
 
@@ -35,8 +35,8 @@ system. Nothing in this document was run in a lab or on hogan.
 | Answer 4 of 2026-10-18: "Nothing into the certificate; the identity document does not carry tags." **This exploration revisits it.** | same archive, `design.md:34`, trust section `:82-93` |
 | SPIRE registrations and node aliases select `tpm_devid:subject:cn:<vmid>` AND `tpm_devid:ca:fingerprint:<sha1 of the cluster intermediate>` | archive `2026-10-20-issue-ldevids-from-an-intermediate-per-cluster`, `design.md:38-41` |
 | LDevID lifetime 90 days (`mds.devid_lifetime`); SPIRE checks the LDevID only at node attestation; a renewal changes the agent ID | archive `2026-10-20-limit-the-ldevid-lifetime-and-renew-it`; `AGENTS.md` |
-| VM-ID reuse leaves the predecessor's agent attested under the same `cn:<vmid>`; eight agents under `cn:399` on 2026-10-25 | issue #89; PR #90 `design.md`, D-i |
-| Cluster EK pins in `/etc/pve/vtpm-ek/<vmid>`, written only by a root hook (D-a); pins of destroyed VMs stop refusing (D-g, accepted 2026-10-25); destroying a VM deletes nothing (D-i) | PR #90 `design.md`, D-a, D-g, D-i (open PR, not merged) |
+| VM-ID reuse leaves the predecessor's agent attested under the same `cn:<vmid>`; eight agents under one `cn:<vmid>` in a lab cluster on 2026-10-25 | issue #89; PR #90 `design.md`, D-i |
+| Cluster EK pins in `/etc/pve/vtpm-ek/<vmid>`, written only by a root hook (D-a); pins of destroyed VMs stop refusing (D-g, accepted 2026-10-25); destroying a VM deletes nothing (D-i) | PR #90 `design.md`, D-a, D-g, D-i (open when this was written; merged 2026-10-27) |
 
 PR #90's D-g was accepted on the argument that "access policies will name
 roles or groups rather than a VM ID". Its own D-i adds: "The roles argument
@@ -342,7 +342,7 @@ cluster can still issue for any VM of that cluster (#72).
   without a pool get any grant?
 - **A-2.** Free tags in the certificate: keep answer 4 (recommended) or
   revisit it?
-- **A-3.** Where the reconciler lives (bgl-infra, beside the P1-w hook, or
+- **A-3.** Where the reconciler lives (the operator's infrastructure repository, beside the P1-w hook, or
   this repository) and which credentials it gets on SPIRE and Proxmox.
 - **A-4.** SPIFFE ID shape and lowercase/escape rule for tags (section 4, 6).
 - **A-5.** OID arc for later subject attributes (PEN or site arc).
@@ -358,4 +358,4 @@ cluster can still issue for any VM of that cluster (#72).
   limit; `registered-tags` matching exact tags only (D9, not re-read).
 - Selector length limits on SQLite and Postgres datastores.
 - All Proxmox sources were read at `HEAD`, not at the installed pve-manager
-  9.2.3 / pve-guest-common versions on hogan.
+  9.2.3 / pve-guest-common versions of the lab cluster.
