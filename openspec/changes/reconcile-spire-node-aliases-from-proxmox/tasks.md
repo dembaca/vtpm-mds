@@ -91,6 +91,14 @@ deferred). Record only until the maintainer's go.
       shapes from task 2.1.
 - [ ] 3.4 SPIRE writer: diff under the prefix, create/delete, bans after two
       reads (D-e), tests on a fake entry and agent API
+      **Decision half done (2026-10-29):** `Diff` and `BanTracker` in
+      `diff.go`, pure; `go test ./internal/reconcile/ -run 'TestDiff|TestBanTracker'`
+      PASS (a removed tag, entries outside the prefix, a workload entry under
+      it, a hand-edited alias, duplicates, `cluster-10` vs `cluster-1`; a
+      destroyed VM, a VM missing once, another cluster's agent, counts dropped
+      for vanished agents). **Open:** the gRPC adapter to the SPIRE server API,
+      tested against a scratch SPIRE 1.14.0. 3.5 must refuse a cluster without
+      an intermediate, or `Diff` would delete all its aliases.
 - [ ] 3.5 `cmd/vtpm-mds-reconcile`: strict config (D-i, D-f), `-version`,
       `-once` for a single pass that never bans (D-e), signal handling
 - [ ] 3.6 `vtpm-mds-reconcile(8)` (D-j), `README.md`, `ARCHITECTURE.md`
