@@ -129,8 +129,19 @@ deferred). Record only until the maintainer's go.
       gets an SVID; removing the tag removes it within one interval plus sync;
       a VM without a pool gets only `vm/`; a destroyed VM's agent is banned
       after two reads
-- [ ] 4.2 Real cluster, read-only against Proxmox, against a scratch SPIRE
+- [x] 4.2 Real cluster, read-only against Proxmox, against a scratch SPIRE
       server: one `-once` pass, aliases listed, nothing banned that is alive
+      **2026-10-29, binary from `b98587e`**, the maintainer's read-only
+      `PVEAuditor` token, the API over loopback with pveproxy's certificate
+      pinned (the cluster CA file is not readable by the agent user), a test
+      intermediate, scratch SPIRE 1.14.0 with one hand-written node alias
+      `spiffe://example.org/nodes/build`. First `-once`: `created 27, deleted
+      0`, exit 0: one `vm/` alias per non-template guest and one `pool/` alias
+      per pooled guest; no tag alias, as no pooled guest carries a
+      `vtpm_mds.io.` tag. Second `-once`: nothing logged, exit 0. With the
+      token without rights: `cluster cluster-1: doubtful read: missing
+      Pool.Audit on /pool, missing VM.Audit on /vms`, exit 1, nothing changed.
+      The hand-written alias survived; `-once` banned nothing.
 
 ## 5. Ship
 
