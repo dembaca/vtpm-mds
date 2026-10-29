@@ -159,8 +159,10 @@ certificate would sign the same Proxmox read at issuance and freeze it until
   1.14 API types). Options: (1) ship the `leaf=` lines of every node to the
   reconciler (journal forwarding, the operator's); (2) compare against the
   guest config's `meta: ctime=`; (3) an issuance record per VM that the
-  reconciler can read. Recommendation: (1), as a change of its own once this
-  one runs.
+  reconciler can read. **Decided (the maintainer, 2026-10-29, ask
+  `s67xd1uz…`):** out of this change; a change of its own once this one runs,
+  by way of (1): the reconciler bans, per VM ID, every agent that does not
+  belong to the latest LDevID issued for it.
 - **Q-2. Packaging.** The binary runs beside the SPIRE server, not on a
   Proxmox node, so neither existing package fits. Recommendation: a third
   `.deb` and a static binary in a follow-up change; until then the operator
