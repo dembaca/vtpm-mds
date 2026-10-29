@@ -89,16 +89,24 @@ deferred). Record only until the maintainer's go.
       (resources not requested), privilege without propagation, server error
       (no token in the message), unreachable, vmid as a number. Response
       shapes from task 2.1.
-- [ ] 3.4 SPIRE writer: diff under the prefix, create/delete, bans after two
+- [x] 3.4 SPIRE writer: diff under the prefix, create/delete, bans after two
       reads (D-e), tests on a fake entry and agent API
       **Decision half done (2026-10-29):** `Diff` and `BanTracker` in
       `diff.go`, pure; `go test ./internal/reconcile/ -run 'TestDiff|TestBanTracker'`
       PASS (a removed tag, entries outside the prefix, a workload entry under
       it, a hand-edited alias, duplicates, `cluster-10` vs `cluster-1`; a
       destroyed VM, a VM missing once, another cluster's agent, counts dropped
-      for vanished agents). **Open:** the gRPC adapter to the SPIRE server API,
-      tested against a scratch SPIRE 1.14.0. 3.5 must refuse a cluster without
-      an intermediate, or `Diff` would delete all its aliases.
+      for vanished agents). 3.5 must refuse a cluster without an
+      intermediate, or `Diff` would delete all its aliases.
+      **Adapter (2026-10-29):** `spire.go` over `spire-api-sdk v1.14.7` and
+      `grpc v1.74.2`, pinned with `GOTOOLCHAIN=local` so `go.mod` stays at
+      `go 1.24.0` (the latest grpc wants 1.26). `TestSPIREAgainstAServer`,
+      run only with `VTPM_RECONCILE_SPIRE_SOCKET`, PASS against a scratch
+      SPIRE 1.14.0: a first pass creates the 6 aliases (3 IDs × 2
+      intermediates), a second changes nothing, a removed tag deletes its 2,
+      nothing wanted deletes the remaining 4, agents list, banning an unknown
+      agent fails; a hand-written `spiffe://example.org/nodes/build` alias
+      survived every pass.
 - [ ] 3.5 `cmd/vtpm-mds-reconcile`: strict config (D-i, D-f), `-version`,
       `-once` for a single pass that never bans (D-e), signal handling
 - [ ] 3.6 `vtpm-mds-reconcile(8)` (D-j), `README.md`, `ARCHITECTURE.md`
