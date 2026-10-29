@@ -83,6 +83,9 @@ certificate would sign the same Proxmox read at issuance and freeze it until
     for a sub-pool named `tag`; a later change can add a reserved marker.
   - A VM without a pool gets only its `vm/` alias, and its tags grant nothing
     (A-1).
+  - **Templates** (`template: 1` in `/cluster/resources`, found in task 2.1)
+    get no alias, since they never run, but count as listed guests for D-d
+    and D-e.
 - **D-c. Selectors.** Every alias for VM `<vmid>` of cluster `<cluster>` has
   exactly `tpm_devid:subject:cn:<vmid>` and
   `tpm_devid:ca:fingerprint:<sha1>`, with `<sha1>` the lowercase hex SHA-1 of

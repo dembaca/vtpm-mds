@@ -22,7 +22,15 @@ ID and the offending tag or pool once per pass. A pool whose ID contains `/`
 way. When two distinct pools of one cluster lowercase to the same segment,
 neither SHALL yield a pool or tag alias, and the reconciler SHALL log both
 once per pass. A guest that is in no pool SHALL get only its `vm/` alias; its
-tags SHALL grant nothing.
+tags SHALL grant nothing. A template (`template` set in the listing) SHALL
+yield no alias, since it never runs, but SHALL count as a listed guest.
+
+#### Scenario: A template
+
+- **GIVEN** guest `355` listed as a template, in pool `web` with the tag
+  `vtpm_mds.io.role.db`
+- **WHEN** the reconciler computes the wanted aliases
+- **THEN** it wants no alias for `355`, and `355` is not read as destroyed
 
 #### Scenario: A VM with a pool and tags
 

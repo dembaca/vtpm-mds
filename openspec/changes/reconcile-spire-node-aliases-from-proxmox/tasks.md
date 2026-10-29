@@ -32,11 +32,21 @@ deferred). Record only until the maintainer's go.
 
 ## 2. Before code
 
-- [ ] 2.1 Against a real cluster, read-only: `/cluster/resources?type=vm`
+- [x] 2.1 Against a real cluster, read-only: `/cluster/resources?type=vm`
       returns `pool` and `tags` per qemu guest; a `PVEAuditor` token on `/`
       sees all guests and pools; a token without it gets a short list, not
       `403`; `/access/permissions` shows the privileges D-d checks
       **Verify:** the API answers, recorded here without site names
+      **2026-10-29, two tokens of one `@pve` user with privilege separation,
+      made by the maintainer** (`probe`: `PVEAuditor` on `/` for user and
+      token; `noacl`: no token ACL). `probe`: `200`, every guest listed, keys
+      include `vmid` (a JSON **number**), `node`, `pool` (absent when none),
+      `tags` (separated by `;` and by spaces), `template` (`0`/`1`: templates
+      are listed as qemu, hence D-b's template rule); `/access/permissions`
+      gives `VM.Audit: 1` and `Pool.Audit: 1` on `/`, `/vms` and `/pool`.
+      `noacl`: `/cluster/resources` `200` with an **empty list**, not `403`;
+      `/access/permissions` an empty map; `/pools` `200`, empty. Not seen: a
+      nested pool (none exists there).
 - [ ] 2.2 Against SPIRE 1.14.x: `ListAgents` output for a `tpm_devid` agent
       (selectors, anything that ties it to an EK), entry create/delete under one
       SPIFFE ID with two selector sets, `BanAgent` then re-attestation refused

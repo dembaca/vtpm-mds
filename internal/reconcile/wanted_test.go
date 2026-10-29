@@ -32,52 +32,55 @@ func TestWanted(t *testing.T) {
 		problems []Problem
 	}{
 		{"a VM with a pool and tags", one,
-			[]Guest{{"350", "web", "vtpm_mds.io.role.Frontend;vtpm_mds.io.role.cache;other"}},
+			[]Guest{{"350", "web", "vtpm_mds.io.role.Frontend;vtpm_mds.io.role.cache;other", false}},
 			[]string{"pool/web", "pool/web/tag/role/cache", "pool/web/tag/role/frontend", "vm/350"}, nil},
 		{"a VM without a pool", one,
-			[]Guest{{"351", "", "vtpm_mds.io.role.admin"}},
+			[]Guest{{"351", "", "vtpm_mds.io.role.admin", false}},
 			[]string{"vm/351"}, nil},
 		{"a tag that cannot be a path segment", one,
-			[]Guest{{"352", "web", "vtpm_mds.io.role.a+b"}},
+			[]Guest{{"352", "web", "vtpm_mds.io.role.a+b", false}},
 			[]string{"pool/web", "vm/352"},
 			[]Problem{{"352", ReasonBadSegment, "vtpm_mds.io.role.a+b"}}},
 		{"two pools that differ only in case", one,
-			[]Guest{{"360", "Web", "vtpm_mds.io.role.x"}, {"361", "web", "vtpm_mds.io.role.x"}},
+			[]Guest{{"360", "Web", "vtpm_mds.io.role.x", false}, {"361", "web", "vtpm_mds.io.role.x", false}},
 			[]string{"vm/360", "vm/361"},
 			[]Problem{{"360", ReasonPoolCollision, "Web,web"}, {"361", ReasonPoolCollision, "Web,web"}}},
 		{"a nested pool", one,
-			[]Guest{{"354", "web/front", "vtpm_mds.io.role.db"}},
+			[]Guest{{"354", "web/front", "vtpm_mds.io.role.db", false}},
 			[]string{"vm/354"},
 			[]Problem{{"354", ReasonNestedPool, "web/front"}}},
 		{"dot segments pool", one,
-			[]Guest{{"355", "..", ""}},
+			[]Guest{{"355", "..", "", false}},
 			[]string{"vm/355"},
 			[]Problem{{"355", ReasonBadSegment, ".."}}},
 		{"dot segments tag", one,
-			[]Guest{{"356", "web", "vtpm_mds.io.role.."}},
+			[]Guest{{"356", "web", "vtpm_mds.io.role..", false}},
 			[]string{"pool/web", "vm/356"},
 			[]Problem{{"356", ReasonBadSegment, "vtpm_mds.io.role.."}}},
 		{"prefix case-insensitive and value with dots", one,
-			[]Guest{{"357", "web", "VTPM_MDS.IO.Env.Prod.EU"}},
+			[]Guest{{"357", "web", "VTPM_MDS.IO.Env.Prod.EU", false}},
 			[]string{"pool/web", "pool/web/tag/env/prod.eu", "vm/357"}, nil},
 		{"separators", one,
-			[]Guest{{"358", "web", "vtpm_mds.io.a.1, vtpm_mds.io.b.2 vtpm_mds.io.c.3"}},
+			[]Guest{{"358", "web", "vtpm_mds.io.a.1, vtpm_mds.io.b.2 vtpm_mds.io.c.3", false}},
 			[]string{"pool/web", "pool/web/tag/a/1", "pool/web/tag/b/2", "pool/web/tag/c/3", "vm/358"}, nil},
 		{"two intermediates", Cluster{Name: "cluster-1", Fingerprints: []string{"aa", "bb"}},
-			[]Guest{{"359", "", ""}},
+			[]Guest{{"359", "", "", false}},
 			[]string{"vm/359", "vm/359"}, nil},
 		{"no fingerprints", Cluster{Name: "cluster-1"},
-			[]Guest{{"359", "web", ""}},
+			[]Guest{{"359", "web", "", false}},
 			nil, nil},
 		{"duplicates removed", one,
-			[]Guest{{"362", "web", "vtpm_mds.io.role.web;vtpm_mds.io.role.web"}},
+			[]Guest{{"362", "web", "vtpm_mds.io.role.web;vtpm_mds.io.role.web", false}},
 			[]string{"pool/web", "pool/web/tag/role/web", "vm/362"}, nil},
 		{"a tag with no value", one,
-			[]Guest{{"363", "web", "vtpm_mds.io.role"}},
+			[]Guest{{"363", "web", "vtpm_mds.io.role", false}},
 			[]string{"pool/web", "vm/363"},
 			[]Problem{{"363", ReasonBadSegment, "vtpm_mds.io.role"}}},
+		{"a template", one,
+			[]Guest{{"355", "web", "vtpm_mds.io.role.db", true}},
+			nil, nil},
 		{"a bad tag written twice is reported once", one,
-			[]Guest{{"364", "web", "vtpm_mds.io.role.a+b;vtpm_mds.io.role.a+b"}},
+			[]Guest{{"364", "web", "vtpm_mds.io.role.a+b;vtpm_mds.io.role.a+b", false}},
 			[]string{"pool/web", "vm/364"},
 			[]Problem{{"364", ReasonBadSegment, "vtpm_mds.io.role.a+b"}}},
 	}
@@ -97,7 +100,7 @@ func TestWanted(t *testing.T) {
 func TestWantedSelectors(t *testing.T) {
 	t.Run("two selectors per fingerprint", func(t *testing.T) {
 		c := Cluster{Name: "cluster-1", Fingerprints: []string{"aa", "bb"}}
-		got, _ := Wanted(td, c, []Guest{{"350", "web", ""}, {"351", "web", ""}})
+		got, _ := Wanted(td, c, []Guest{{"350", "web", "", false}, {"351", "web", "", false}})
 		var pool [][]string
 		for _, a := range got {
 			if a.SPIFFEID == "spiffe://example.org/pve/cluster-1/pool/web" {
@@ -115,9 +118,9 @@ func TestWantedSorted(t *testing.T) {
 	t.Run("output sorted", func(t *testing.T) {
 		c := Cluster{Name: "cluster-1", Fingerprints: []string{"bb", "aa"}}
 		guests := []Guest{
-			{"9", "web", "vtpm_mds.io.z.1;vtpm_mds.io.a.1;vtpm_mds.io.a.."},
-			{"10", "db", "vtpm_mds.io.k"},
-			{"2", "web/x", ""},
+			{"9", "web", "vtpm_mds.io.z.1;vtpm_mds.io.a.1;vtpm_mds.io.a..", false},
+			{"10", "db", "vtpm_mds.io.k", false},
+			{"2", "web/x", "", false},
 		}
 		got, problems := Wanted(td, c, guests)
 		if !sort.SliceIsSorted(got, func(i, j int) bool {

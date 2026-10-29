@@ -12,6 +12,9 @@ type Guest struct {
 	VMID string // e.g. "350"
 	Pool string // Proxmox pool ID, "" when in no pool; may contain "/" (nested pool)
 	Tags string // Proxmox tags string as the API returns it, e.g. "vtpm_mds.io.role.web;other"
+	// Template is set for a template: it never runs, so it yields no alias, but
+	// it is still a listed guest.
+	Template bool
 }
 
 // Cluster is one configured cluster.
@@ -71,7 +74,7 @@ func Wanted(td string, c Cluster, guests []Guest) ([]Alias, []Problem) {
 	// Pools that collide once lowercased.
 	byLower := map[string]map[string]bool{}
 	for _, g := range guests {
-		if g.Pool == "" || strings.Contains(g.Pool, "/") {
+		if g.Template || g.Pool == "" || strings.Contains(g.Pool, "/") {
 			continue
 		}
 		l := strings.ToLower(g.Pool)
@@ -113,6 +116,9 @@ func Wanted(td string, c Cluster, guests []Guest) ([]Alias, []Problem) {
 	base := "spiffe://" + td + "/pve/" + c.Name
 
 	for _, g := range guests {
+		if g.Template {
+			continue
+		}
 		add(base+"/vm/"+g.VMID, g.VMID)
 		if g.Pool == "" {
 			continue
