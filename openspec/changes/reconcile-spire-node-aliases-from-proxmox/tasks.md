@@ -107,8 +107,17 @@ deferred). Record only until the maintainer's go.
       nothing wanted deletes the remaining 4, agents list, banning an unknown
       agent fails; a hand-written `spiffe://example.org/nodes/build` alias
       survived every pass.
-- [ ] 3.5 `cmd/vtpm-mds-reconcile`: strict config (D-i, D-f), `-version`,
+- [x] 3.5 `cmd/vtpm-mds-reconcile`: strict config (D-i, D-f), `-version`,
       `-once` for a single pass that never bans (D-e), signal handling
+      **Verify (2026-10-29):** `go test ./internal/reconcile/ -run
+      'TestLoadConfig|TestClusterClient|TestPass'` PASS: unknown key, short
+      interval, no intermediate, a root as intermediate, a fingerprint in two
+      clusters, duplicate and invalid cluster names, `http://`, token file
+      empty or padded; a pass creates then changes nothing, a doubtful cluster
+      is left alone while another is reconciled, a destroyed VM is banned on
+      the second pass, a doubtful read in between neither resets nor advances
+      the count, `allowBans=false` never bans. `main` (flags, start refusal,
+      signals) has no unit test; 4.2 runs it.
 - [ ] 3.6 `vtpm-mds-reconcile(8)` (D-j), `README.md`, `ARCHITECTURE.md`
       **Verify (3.x):** `go vet ./...`, `go test ./...`,
       `openspec validate --all --strict`
