@@ -166,7 +166,8 @@ certificate would sign the same Proxmox read at issuance and freeze it until
 - **Q-2. Packaging.** The binary runs beside the SPIRE server, not on a
   Proxmox node, so neither existing package fits. Recommendation: a third
   `.deb` and a static binary in a follow-up change; until then the operator
-  builds it.
+  builds it. **Decided (the maintainer, 2026-10-29, ask `jpwfsysg…`):** as
+  recommended; packaging is not part of this change.
 
 ## Risks / Trade-offs
 

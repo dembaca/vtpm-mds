@@ -23,8 +23,11 @@ deferred). Record only until the maintainer's go.
       derivation; cluster rename; `-once` and restarts never ban. Nits: the
       validate output recorded; renewals leave old agents (Risks); facts read
       from source.
-- [ ] 1.3 Maintainer's answers to Q-1 and Q-2, or their deferral; go for
-      implementation
+- [x] 1.3 Maintainer's answers to Q-1 and Q-2
+      **Verify:** Q-1 (ask `s67xd1uz…`, 22:38): reused VM IDs are a change
+      of their own, by way of forwarded `leaf=` lines. Q-2 (ask `jpwfsysg…`,
+      22:49): a third `.deb` and a static binary in a follow-up change.
+- [ ] 1.4 Maintainer's go for implementation
 
 ## 2. Before code
 
