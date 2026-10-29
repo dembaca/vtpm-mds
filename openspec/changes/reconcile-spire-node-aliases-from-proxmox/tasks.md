@@ -118,7 +118,14 @@ deferred). Record only until the maintainer's go.
       the second pass, a doubtful read in between neither resets nor advances
       the count, `allowBans=false` never bans. `main` (flags, start refusal,
       signals) has no unit test; 4.2 runs it.
-- [ ] 3.6 `vtpm-mds-reconcile(8)` (D-j), `README.md`, `ARCHITECTURE.md`
+- [x] 3.6 `vtpm-mds-reconcile(8)` (D-j), `README.md`, `ARCHITECTURE.md`
+      **2026-10-29:** `debian/vtpm-mds-reconcile.8` (not installed until the
+      packaging change, Q-2): the derivation (who sets a tag, incl.
+      `user-tag-access`/`registered-tags`; why a tag alone is worth the
+      owner; why the pool; which IDs; what an owner does), the seven examples,
+      the safety notes (prefix, doubtful reads and `NoAccess`, bans, cluster
+      rename, restored VM must enroll). `man -l --warnings` clean. README
+      feature row "in progress, not yet packaged"; ARCHITECTURE trust model.
       **Verify (3.x):** `go vet ./...`, `go test ./...`,
       `openspec validate --all --strict`
 

@@ -19,6 +19,7 @@ Binary: `vtpm-mds` (aliases: `qemu-mds`, `prox-mds`). Module path: `github.com/d
 | **Inventory backends** — YAML inventory (plain QEMU lab) or Proxmox `/etc/pve` | implemented |
 | **Instance tags and node topology** — Proxmox tags `vtpm_mds.io.<key>.<value>` under `tags/instance/`, zone and region from the node description | implemented |
 | **Host-anchored trust** — EK CA chain + optional DevID CA | implemented |
+| **SPIRE node aliases from Proxmox pools and tags** — `vtpm-mds-reconcile`, one instance beside the SPIRE server, writes node aliases `spiffe://<td>/pve/<cluster>/{vm/<vmid>, pool/<pool>, pool/<pool>/tag/<key>/<value>}` selecting `tpm_devid:subject:cn` and the cluster intermediate's `ca:fingerprint`; a tag grants only inside a pool; agents of destroyed VMs are banned. See `vtpm-mds-reconcile(8)` | in progress, not yet packaged |
 | **TPM attestation** — verify VM identity using vTPM (swtpm) quotes | **removed** 2026-10-16: the endpoints affirmed without verifying |
 | **Short-lived identity documents (JWT/JWS)** | **removed** 2026-10-16: the published key set could not verify the token, and no verifier could reach it |
 

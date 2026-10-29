@@ -1,0 +1,281 @@
+.TH VTPM-MDS-RECONCILE 8 "October 2026" "vtpm-mds" "System Manager's Manual"
+.SH NAME
+vtpm-mds-reconcile \- keep SPIRE node aliases in line with Proxmox pools and tags
+.SH SYNOPSIS
+.B vtpm-mds-reconcile
+.RB [ \-config
+.IR path ]
+.RB [ \-once ]
+.RB [ \-version ]
+.SH DESCRIPTION
+A guest enrolled by
+.B vtpm-mds
+holds an LDevID whose subject is
+.BI CN= <vmid>
+and which chains to its cluster's intermediate.
+SPIRE's
+.B tpm_devid
+attestor turns that into the selectors
+.BI tpm_devid:subject:cn: <vmid>
+and
+.BI tpm_devid:ca:fingerprint: <sha1>
+for the intermediate.
+Those two prove which VM of which cluster an agent is.
+.PP
+.B vtpm-mds-reconcile
+runs once, beside the SPIRE server, not on a Proxmox node.
+It reads each configured cluster's guests, pools and tags over the Proxmox API
+and writes SPIRE node aliases that select exactly those two selectors.
+The SPIFFE IDs of the aliases carry the VM's pool and tags, so that
+registrations can name a role instead of a list of VM IDs, and so that a
+removed tag or a destroyed VM takes its rights away without anything changing
+in the guest or in its certificate.
+.PP
+That a VM is in a pool or carries a tag is the reconciler's statement, read
+from the Proxmox API and written through the SPIRE admin socket.
+It is not signed, and a relying party cannot check it afterwards; trust it as
+far as anyone who holds SPIRE admin rights.
+.SH WHY A TAG NEEDS A POOL
+.SS Who can set a tag
+Proxmox lets anyone with
+.B VM.Config.Options
+on a guest set its tags, which is the guest's owner.
+The datacenter options
+.B user-tag-access
+(default
+.BR free )
+and
+.B registered-tags
+can narrow which tags such a user may set; a user with
+.B Sys.Modify
+on
+.B /
+is never narrowed.
+With the default, the owner of any VM can write
+.B vtpm_mds.io.role.db-admin
+on it.
+.SS So a tag alone is worth only as much as the VM's owner
+If a tag alone granted a right, every VM owner could grant their VM every
+right, including a sandbox VM created a minute ago.
+A grant therefore has to name a scope that the VM's owner cannot choose by
+themselves.
+.SS Why the pool
+A Proxmox pool is set per VM, and putting a VM into a pool, or taking it out,
+needs
+.B Pool.Allocate
+on that pool; moving it between pools needs that right on both.
+Pools are how Proxmox already delegates the administration of VMs.
+So the pool is the scope, and a tag counts only together with the VM's pool:
+the owner chooses the tag, an administrator of the pool chooses who may carry
+it there.
+.SS Which IDs a VM receives
+For trust domain
+.IR td ,
+the configured cluster name
+.I cluster
+and a VM
+.IR vmid :
+.TP
+.BI spiffe:// td /pve/ cluster /vm/ vmid
+always.
+.TP
+.BI spiffe:// td /pve/ cluster /pool/ pool
+when the VM is in a pool.
+.TP
+.BI spiffe:// td /pve/ cluster /pool/ pool /tag/ key / value
+for each tag
+.BI vtpm_mds.io. key . value
+of a VM that is in a pool.
+.PP
+Pool, key and value are lowercased.
+A tag with a character a SPIFFE path cannot hold (anything but
+.BR a\-z ,
+.BR 0\-9 ,
+.BR . ,
+.B \-
+and
+.BR _ ,
+or a segment that is
+.B .
+or
+.BR .. )
+grants nothing and is logged.
+Templates get no alias.
+.SS What an owner does for a tag to take effect
+Put the tag on the VM, and have a pool administrator put the VM into a pool.
+Registrations then name the tag alias of that pool as their parent.
+.SH EXAMPLES
+.SS A VM with a pool and tags
+VM
+.B 350
+in pool
+.B web
+with the tags
+.B vtpm_mds.io.role.Frontend
+and
+.B vtpm_mds.io.role.cache
+receives
+.BR \&.../vm/350 ,
+.BR \&.../pool/web ,
+.B \&.../pool/web/tag/role/frontend
+and
+.BR \&.../pool/web/tag/role/cache .
+A workload entry whose parent is
+.B \&.../pool/web/tag/role/frontend
+runs on every VM of pool
+.B web
+that carries that tag, and on no other.
+.SS A VM without a pool
+VM
+.B 351
+in no pool with the tag
+.B vtpm_mds.io.role.admin
+receives only
+.BR \&.../vm/351 .
+The tag grants nothing.
+Adding the VM to a pool makes it effective within one interval.
+.SS A tag that cannot be a path segment
+VM
+.B 352
+in pool
+.B web
+with the tag
+.B vtpm_mds.io.role.a+b
+receives
+.B \&.../vm/352
+and
+.BR \&.../pool/web ;
+the tag is logged once per pass and grants nothing.
+.SS A removed tag
+Removing
+.B vtpm_mds.io.role.cache
+from VM
+.B 350
+deletes
+.B \&.../pool/web/tag/role/cache
+for that VM on the next pass.
+A workload holding an SVID under it keeps it until the SVID expires.
+.SS A destroyed VM
+When VM
+.B 353
+is missing from two consecutive good reads of its cluster, its aliases are
+deleted and every
+.B tpm_devid
+agent naming
+.B cn:353
+with that cluster's intermediate is banned.
+A ban cuts the agent off at its next call to the server.
+A VM restored from a backup after that must enroll again
+.RB ( devid\-enroll ),
+because its old LDevID is banned.
+.SS A nested pool
+VM
+.B 354
+in pool
+.B web/front
+receives only
+.BR \&.../vm/354 ;
+the pool is logged.
+Nested pools are not served.
+.SS Two pools that differ only in case
+Pools
+.B Web
+and
+.B web
+of one cluster would both become
+.BR pool/web .
+Neither yields a pool or tag alias, and both are logged, so that one pool can
+never receive the other's grants.
+.SH SAFETY
+.TP
+.B Only its own prefix
+The reconciler creates and deletes only entries whose parent is
+.BI spiffe:// td /spire/server
+and whose SPIFFE ID starts with
+.BI spiffe:// td /pve/ cluster /
+for a configured cluster.
+A node alias written by hand under that prefix is deleted.
+Workload entries, whatever their SPIFFE ID, are never touched.
+.TP
+.B Doubtful reads
+A cluster whose API cannot be read, whose listing holds no guest at all, or
+whose token lacks
+.B VM.Audit
+on
+.B /vms
+or
+.B Pool.Audit
+on
+.B /pool
+with propagation, is left unchanged for that pass and does not count toward a
+ban.
+Proxmox hides a guest the token may not see instead of refusing the request:
+a
+.B NoAccess
+ACL on one guest makes that guest look destroyed.
+.TP
+.B Bans
+Only after two consecutive good reads, and never with
+.BR \-once .
+The count is held in memory; a restart starts it again.
+.TP
+.B Renaming a cluster
+in the configuration leaves the aliases under the old prefix, which no
+longer belongs to the reconciler; delete them by hand.
+.SH OPTIONS
+.TP
+.BI \-config " path"
+The configuration file; default
+.IR /etc/vtpm\-mds\-reconcile/config.yaml .
+.TP
+.B \-once
+Run one pass and exit, without banning: 0 on success, 1 on failure.
+.TP
+.B \-version
+Print the version and exit.
+.SH CONFIGURATION
+YAML, decoded strictly: an unknown key stops the start.
+.PP
+.nf
+trust_domain: example.org
+spire_socket: /run/spire/server/private/api.sock
+interval: 60s
+clusters:
+  \- name: cluster\-1
+    api_url: https://pve\-a.example:8006
+    ca_file: /etc/vtpm\-mds\-reconcile/cluster\-1\-ca.pem
+    token_file: /run/credentials/vtpm\-mds\-reconcile.service/cluster\-1.token
+    intermediates:
+      \- /etc/vtpm\-mds\-reconcile/cluster\-1\-intermediate.pem
+.fi
+.PP
+.B interval
+defaults to 60 s and must be at least 10 s.
+A cluster name must be a SPIFFE path segment and unique.
+Every cluster needs at least one intermediate; with two (a rotation) every
+alias exists once per intermediate.
+A self-signed certificate is refused as an intermediate, and so is one
+configured for two clusters, because
+.B ca:fingerprint
+covers every certificate of the chain and a shared one would match the other
+cluster's agents.
+The token file holds
+.IB user @ realm ! tokenid = secret ;
+the token needs
+.B PVEAuditor
+on
+.BR / ,
+for the user and the token.
+At start a token without
+.B VM.Audit
+on
+.B /vms
+or
+.B Pool.Audit
+on
+.B /pool
+stops the process, naming the cluster and the privilege.
+.SH SEE ALSO
+.BR vtpm\-mds (8),
+.BR devid\-enroll (1),
+.BR spire\-server (1)

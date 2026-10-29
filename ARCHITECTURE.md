@@ -96,6 +96,11 @@ Guest client (`cmd/devid-enroll`) performs credential activation locally and wri
 - **vtpm-mds** verifies EKCerts on DevID enroll, runs TPM credential activation challenge,
   and issues LDevIDs from `devid_ca_*`.
 - SPIRE `tpm_devid`: trusts the DevID CA and verifies residency via TPM blobs.
+- `vtpm-mds-reconcile` (beside the SPIRE server) writes node aliases from each
+  VM's Proxmox pool and tags, selecting `subject:cn:<vmid>` and the cluster
+  intermediate's `ca:fingerprint`. Which VM an agent is stays proved by the
+  LDevID and the TPM; which pool and tags it has is the reconciler's statement
+  from the Proxmox API, trusted as far as a SPIRE admin.
 
 ---
 
