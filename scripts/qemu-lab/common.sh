@@ -113,8 +113,7 @@ refuse_non_lab_host() {
     echo "Nothing was changed." >&2
     return 1
   fi
-  # Package etc path equals MM_PROJECT_CHANNEL in this env; name once.
-  local pkg_etc="/etc/vtpm-mds" # pragma: allowlist secret
+  local pkg_etc="/etc/vtpm-mds"
   if [[ -z "${MDS_LAB_ETC_DIR:-}" && -f "${pkg_etc}/devid-ca.pem" ]]; then
     echo "ERROR: ${pkg_etc}/devid-ca.pem exists and MDS_LAB_ETC_DIR is unset." >&2
     echo "Set MDS_LAB_ETC_DIR to a scratch directory so gen-lab-pki does not" >&2
