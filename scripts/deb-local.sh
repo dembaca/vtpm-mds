@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the local host and guest .debs with a Version that encodes the git
+# Build the local host, guest and reconciler .debs with a Version that encodes the git
 # commit, so a lab host can tell exactly which tree is
 # installed.
 # Does not rewrite debian/changelog in the working tree.

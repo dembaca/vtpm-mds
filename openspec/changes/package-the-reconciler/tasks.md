@@ -137,7 +137,18 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
 
 ## 5. Ship
 
-- [ ] 5.1 Review of the implementation by a stronger model before ready
+- [x] 5.1 Review of the implementation by a stronger model before ready
+      **Fable, 2026-11-01, of `29ecb29`:** no must-fix. Should-fix taken:
+      README.Debian on `reset-failed` after the start limit and on
+      `After=<spire unit>` in the drop-in; `README.Debian` kept uncompressed
+      (`override_dh_compress`), since unit, man page and example name that
+      path. Nits taken: release-download lines in the workflow header,
+      `chmod +x` in the release notes, no empty `AmbientCapabilities=`, the
+      `deb-local.sh` header, what a purge leaves. **For the maintainer, not
+      this change:** the host package's `README.Debian` (4425 bytes) is
+      installed as `README.Debian.gz`, so `vtpm-mds.service`'s
+      `Documentation=file:///usr/share/doc/vtpm-mds/README.Debian` points
+      nowhere; the `-X` here excludes only the reconciler's file.
 - [ ] 5.2 `README.md` status row: "packaged"; after merge the coordinator
       archives the change and edits the Purpose paragraph of
       `openspec/specs/debian-packaging/spec.md` by hand to three packages

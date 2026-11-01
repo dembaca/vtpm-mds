@@ -26,7 +26,6 @@ RestartSec=10s
 User=vtpm-mds-reconcile
 Group=vtpm-mds-reconcile
 CapabilityBoundingSet=
-AmbientCapabilities=
 
 ProtectHome=true
 # Hides SPIRE's default socket under /tmp/spire-server/private/: put the

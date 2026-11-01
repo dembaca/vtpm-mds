@@ -66,11 +66,26 @@ stopped one stopped.
    changes. A token without VM.Audit on /vms or Pool.Audit on /pool, or a
    socket it cannot open, stops the start with a line naming the cluster or
    the socket; systemd retries every 10 s and gives up after five starts in
-   five minutes.
+   five minutes. The unit is then failed and refuses a plain start until
+   those five minutes are over; after fixing the cause:
+
+     systemctl reset-failed vtpm-mds-reconcile
+     systemctl start vtpm-mds-reconcile
+
+   The unit is not ordered after the SPIRE server, whose unit name differs
+   per installation. If SPIRE runs on the same host and may take longer than
+   a minute to open its socket at boot, add to the drop-in:
+
+     [Unit]
+     After=spire-server.service
+
+   (with the SPIRE server's actual unit name).
 
    To try a configuration without the service: run
    vtpm-mds-reconcile -once -config <file> as a user who can read the token
    files and open the socket. -once never bans.
 
 Removing the package stops the service and leaves the aliases it wrote in
-SPIRE; delete them by hand if the reconciler is not coming back.
+SPIRE; delete them by hand if the reconciler is not coming back. Purging it
+leaves /etc/vtpm-mds-reconcile/ and the token files, which the operator
+created and the package does not own.

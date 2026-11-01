@@ -53,7 +53,9 @@ GitHub Release for a `v<changelog version>` tag.
   `debian/vtpm-mds-reconcile.README.Debian` (the unprefixed
   `debian/README.Debian` belongs to `vtpm-mds`). The unit runs
   `ExecStart=/usr/sbin/vtpm-mds-reconcile -config
-  /etc/vtpm-mds-reconcile/config.yaml`, explicit like `vtpm-mds.service`. **No conffile in `/etc`:** a shipped `config.yaml` would carry an
+  /etc/vtpm-mds-reconcile/config.yaml`, explicit like `vtpm-mds.service`.
+  Its `README.Debian` is excluded from `dh_compress` so the path the unit,
+  the man page and the example name stays valid whatever the file's size. **No conffile in `/etc`:** a shipped `config.yaml` would carry an
   invented cluster, and a strict decoder plus a start-time privilege check
   would make the service fail at once. The host packages' binaries are not in
   it, and its binary is in neither of them.

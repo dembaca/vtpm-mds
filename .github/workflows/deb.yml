@@ -11,6 +11,8 @@
 # Ansible / operator fetch (private repo needs GitHub auth):
 #   gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds_*_amd64.deb'
 #   gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'devid-enroll_*_amd64.deb'
+#   gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds-reconcile_*_amd64.deb'
+#   gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds-reconcile_*_linux_amd64*'
 #   https://github.com/dembaca/vtpm-mds/releases/download/v0.2.0/vtpm-mds_0.2.0_amd64.deb
 #   https://github.com/dembaca/vtpm-mds/releases/download/v0.2.0/devid-enroll_0.2.0_amd64.deb
 #
@@ -297,6 +299,7 @@ jobs:
           \`\`\`
           gh release download ${TAG} --repo dembaca/vtpm-mds --pattern 'vtpm-mds-reconcile_*_linux_amd64*'
           sha256sum -c ${RECONCILE_BIN_BASENAME}.sha256
+          chmod +x ${RECONCILE_BIN_BASENAME}
           \`\`\`
 
           Direct URLs (private repo: authenticate):

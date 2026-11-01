@@ -53,6 +53,12 @@ override_dh_auto_install:
 override_dh_dwz:
 	# Go binaries are not compatible with dh_dwz.
 
+override_dh_compress:
+	# The reconciler's unit, man page and example config name
+	# /usr/share/doc/vtpm-mds-reconcile/README.Debian; keep it uncompressed
+	# whatever its size.
+	dh_compress -Xdoc/vtpm-mds-reconcile/README.Debian
+
 override_dh_builddeb:
 	# xz on every build host: Ubuntu's dpkg-deb defaults to zstd, which
 	# Debian's lintian rejects (build-release-debs-with-xz).
