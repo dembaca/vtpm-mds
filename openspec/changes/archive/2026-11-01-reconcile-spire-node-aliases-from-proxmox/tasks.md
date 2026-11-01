@@ -209,4 +209,8 @@ deferred). Record only until the maintainer's go.
       bans by cn alone, and every LDevID under an intermediate has
       `CN=<vmid>`. Rerun of 4.2 with the fixed binary: `created 27`, then two
       passes with nothing, rights-less token exit 1, wrong socket exit 1.
-- [ ] 5.2 After merge, the coordinator archives the change
+- [x] 5.2 After merge, the coordinator archives the change
+      **2026-11-01:** #94 merged as `b8ba26c`; `openspec archive` moved the
+      deltas (`spire-reconciler` created with 7 requirements,
+      `devid-enrollment` 1 modified) and the Purpose of `spire-reconciler`
+      was written by hand; README status "implemented, not yet packaged".
