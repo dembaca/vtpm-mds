@@ -1,0 +1,199 @@
+# Tasks
+
+Written on 2026-11-01 by `agent-claude-vtpm-05a6b5e52` against `main@ccd0f47`,
+from the maintainer's Q-2 decision of 2026-10-29 and the go of 2026-11-01
+(ask `mpj6ah7d…`). **Record only until the maintainer's go for the code, and
+code only after `reconcile-spire-node-aliases-from-proxmox` is merged.**
+Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
+`scripts/deb-local.sh`, the `README.md` status row. Not `cmd/`, not
+`internal/`.
+
+## 1. Record
+
+- [x] 1.1 `proposal.md`, `design.md`, this file, the `debian-packaging` delta
+      **Verify:** `openspec validate --all --strict`: Totals 7 passed, 0 failed
+      (2026-11-01). The validator refuses a MODIFIED block that drops
+      scenarios of the requirement it replaces, so "Two Binary Packages" is
+      REMOVED and "Three Binary Packages" ADDED rather than renamed.
+- [x] 1.2 Record SPIRE 1.14's admin socket: path default, mode of the socket
+      and of its directory, owner; and whether a user in the socket's group
+      can list entries (D-d)
+      **Verify:** `stat` output and one `spire-server entry show -socketPath`
+      as another user, from a scratch SPIRE server, recorded here
+      **Half done, 2026-11-01, scratch SPIRE 1.14.0** run as one user with
+      umask `0002`, `socket_path` `<dir>/private/api.sock` in a directory that
+      did not exist: SPIRE created `<dir>` and `<dir>/private` as `0750` and
+      the socket as `0770`, all owned by the server's user and primary group.
+      So a member of the server's group can traverse both directories and
+      connect; nobody else can. The default `/tmp/spire-server/private/` is
+      created the same way. A socket path of 107 bytes was refused by the
+      client (`connect: invalid argument`); the kernel's `sun_path` holds
+      107 usable bytes, worth one line in the documentation.
+      **Closed, 2026-11-01, cloud host, SPIRE 1.14.0** as system user `spire`
+      (primary group `spire`): `socket_path=/tmp/spire-server/private/api.sock`
+      created `drwxr-x---` / `drwxr-x---` / `srwxrwx---` (`0750`/`0750`/`0770`)
+      owned by `spire:spire`. Second system user `spire-peer` (group `spire`)
+      ran `spire-server entry show -socketPath …` and listed entries; user
+      `ubuntu` (not in `spire`) got `connect: permission denied`. Same modes
+      observed for `/run/spire/server/private/api.sock`.
+- [x] 1.3 Review of the record by a stronger model (Fable), findings taken or
+      deferred by the maintainer
+      **Fable, 2026-11-01, of `d98fa9e`:** all taken. Must-fix: `PrivateTmp`
+      hides SPIRE's default `/tmp` socket (D-g: socket under `/run` or a
+      `PrivateTmp=false` drop-in, tested in 4.1); the living spec's Purpose
+      paragraph still says two packages and archiving does not rewrite it
+      (5.2). Should-fix: "Local Lab Builds" MODIFIED for "both packages"; a
+      start limit (`300 s`/`5`) so the risk text is true, and D-g as the
+      set of `vtpm-mds.service`; the Makefile tar exclude and `deb-clean`
+      (2.4); D-f needs no new override, `prerm` stops on remove; modes of
+      `/etc/vtpm-mds-reconcile/` (D-e). Nits: `.examples` and a
+      package-prefixed `README.Debian`, `sha256sum` format, extraction in
+      `build-deb`, explicit `ExecStart`, the stale guest sentence in the
+      release notes, 107 usable bytes.
+- [x] 1.4 Maintainer's go for the code
+      **Verify:** ask `rt4y3rt3…`, 👍 2026-11-01 17:20, after #94 and its
+      archive (#98) were merged; record rebased onto `1f2d920`
+
+## 2. Package
+
+- [x] 2.1 `debian/control`: package `vtpm-mds-reconcile` (D-a); `debian/rules`
+      builds and installs `bin/vtpm-mds-reconcile` and its unit; the existing
+      `dh_installsystemd --no-start --no-stop-on-upgrade` covers it, no new
+      override (D-f)
+      **Verify:** `make deb` (or `make deb-local`) yields three `.deb` at one
+      version; `dpkg-deb -c` of each matches "Reconciler Package Ships The
+      Reconciler Only" and the host and guest requirements
+      **2026-11-01, `make deb-local` at `0.3.2+git20261101.bd447c1edb25`:** three `.deb` at that
+      version. `vtpm-mds-reconcile`: `/usr/sbin/vtpm-mds-reconcile`, its unit,
+      `sysusers.d/vtpm-mds-reconcile.conf`, the man page, `README.Debian`,
+      `examples/config.yaml`, nothing in `/etc`; `Depends:` only the sysusers
+      alternatives debhelper adds. `vtpm-mds` and `devid-enroll` contain no
+      `reconcile` path and are otherwise unchanged.
+- [x] 2.2 `vtpm-mds-reconcile.service` (D-b, D-f, D-g), `.sysusers` (D-c),
+      `.manpages`, `.examples` with the example config (D-b), `.postinst`
+      (D-f), `.lintian-overrides` (`statically-linked-binary`)
+      **Verify:** `systemd-analyze verify` on the unit; `systemd-analyze
+      security vtpm-mds-reconcile` ≤ 2.0 after install;
+      `lintian --fail-on error,warning` on all three `.deb`
+      **2026-11-01:** `lintian --fail-on error,warning` exit 0 on all three.
+      `systemd-analyze verify` on the extracted unit: only that
+      `/usr/sbin/vtpm-mds-reconcile` does not exist on this host (not
+      installed here). `systemd-analyze security --offline=true` on the
+      extracted tree: **1.4 OK**; the installed unit waits for 4.1. Found on
+      the way: with `--no-start` debhelper generates no stop on removal (the
+      first build had no `prerm`), so `debian/vtpm-mds-reconcile.prerm` was
+      added (D-f corrected); the rebuilt package has
+      `postinst`, `postrm` and `prerm`.
+- [x] 2.3 Documentation for the operator in
+      `debian/vtpm-mds-reconcile.README.Debian`: the socket-group drop-in
+      (D-d); the SPIRE socket under `/run` or a `PrivateTmp=false` drop-in
+      for the default `/tmp` path, and the 107-byte limit (D-g); the
+      credential drop-in and the modes of `/etc/vtpm-mds-reconcile/` (D-e);
+      first start. `vtpm-mds-reconcile(8)` gets only SEE ALSO and FILES
+      lines, no behaviour text
+      **Verify:** `man -l --warnings` clean; the drop-ins shown are the ones
+      used in 4.1
+      **2026-11-01:** written; `man -l --warnings` prints nothing. Whether
+      the drop-ins work as shown is 4.1.
+- [x] 2.4 `Makefile`: the `deb` message; `--exclude=debian/vtpm-mds-reconcile`
+      in the `deb` tar (the `debian/vtpm-mds` exclude does not match it);
+      `debian/vtpm-mds-reconcile` in the `deb-clean` `rm -rf`.
+      `scripts/deb-local.sh` prints the third package
+      **Verify:** `make deb-clean && make deb-local` from a clean tree
+      **2026-11-01:** the first `make deb-local` ran in a fresh worktree and
+      printed all three packages; `make deb-clean` afterwards removed
+      `debian/vtpm-mds-reconcile` and `dist/`.
+
+## 3. Release
+
+- [ ] 3.1 `.github/workflows/deb.yml`: the third `.deb` in metadata, xz check,
+      lintian, upload, release; in `build-deb` the standalone binary from
+      `dpkg-deb -x` with the static and `-version` checks, uploaded as a
+      fourth artifact; in `release` the binary and its `sha256sum`-format
+      `.sha256` (D-h); release notes (D-i)
+      **Verify:** the workflow on the PR is green and its artifacts list three
+      `.deb` and the binary; the release job is tag-gated and cannot run on a
+      PR, so say so instead of implying it passed
+      **2026-11-01, written; open until the PR's run is green.** The
+      extraction step's commands ran locally (4.2). The `release` job has not
+      run and cannot on a PR.
+
+## 4. Verification
+
+- [x] 4.1 On a scratch host with a scratch SPIRE 1.14 server: install the
+      package; unit enabled, inactive, condition unmet on `start`; write a
+      config, the socket-group and credential drop-ins, start: the log shows
+      the version and a pass, with the SPIRE socket under `/run`; once more
+      with SPIRE on its default `/tmp/spire-server/private/api.sock`: fails
+      under the shipped unit, works with the `PrivateTmp=false` drop-in; a
+      start without the socket group ends failed after the start limit;
+      upgrade while running (restart, new version in the journal) and while
+      stopped (stays stopped); `dpkg -r` stops it and leaves no unit; a
+      second user in the SPIRE group connects (task 1.2's open half)
+      **Verify:** commands and key journal lines recorded here
+      **2026-11-01, cloud agent host, base `97fac5f` (PR tip after Fable),
+      nested systemd** (`unshare --fork --pid --mount --mount-proc
+      /lib/systemd/systemd`): PID 1 here is `tini`, so unit tests ran against
+      a nested systemd sharing the host `/etc` and network; SPIRE had to bind
+      its socket inside that mount namespace's `/run` or `/tmp`. Fake Proxmox
+      API from `scripts/qemu-lab/fake-proxmox-api.py`. Packages from
+      `make deb-local` (third binary package, version
+      `0.3.2+git20261101.97fac5f44d59`).
+      1. `dpkg -i` of that `.deb`: reconciler system user created; unit
+         `enabled`, `inactive`; `systemctl start` → skipped, not failed
+         (`ConditionPathExists` on `/etc/<pkg>/config.yaml` was not met).
+      2. Config `0750`/`0640` as README.Debian; drop-in
+         `SupplementaryGroups=spire` +
+         `LoadCredential=lab1.token:…`; SPIRE socket under
+         `/run/spire/server/private/api.sock`. Journal: version line with
+         `0.3.2+git20261101.97fac5f44d59, 1 clusters, interval 10s` then
+         `cluster lab1: created 4, deleted 0`.
+      3. SPIRE on `/tmp/spire-server/private/api.sock`: shipped
+         `PrivateTmp=true` → `connect: no such file or directory`; with
+         drop-in `PrivateTmp=false` → starts and logs the version.
+      4. Drop-in without `SupplementaryGroups`: five
+         `connect: permission denied` failures, then
+         `Start request repeated too quickly` / `failed`; plain
+         `systemctl start` stays failed until `reset-failed`.
+      5. Upgrade while running (`f4f36da` → `69847a1`): host `dpkg` cannot
+         talk to nested systemd, so `try-restart` was issued there after
+         install (same as postinst intent); journal shows new version
+         `0.3.2+git20261101.69847a1e73c0`. Upgrade while stopped: stays
+         `inactive`.
+      6. `dpkg -r`: unit file removed; nested manager needed a manual
+         `stop`+`daemon-reload` because prerm's host `systemctl` cannot
+         reach nested PID 1. `systemd-analyze security` on the installed
+         unit: **1.5 OK** (≤ 2.0).
+      7. Task 1.2 second-user connect: see 1.2 note above.
+      **Not verified here:** postinst/`prerm` talking to a real host PID 1
+      systemd (this image boots `tini`); Proxmox-host install (out of
+      scope). Full log kept as lab artifact `package-reconciler-4.1.log`.
+
+- [x] 4.2 Standalone binary from the local extraction: `file` says statically
+      linked, `-version` prints the package version, hash equals the
+      package's binary, `sha256sum -c` passes on the `.sha256`
+      **2026-11-01, `0.3.2+git20261101.bd447c1edb25`:** `file`: "ELF 64-bit LSB executable, x86-64,
+      … statically linked, … stripped"; `-version`: `vtpm-mds-reconcile
+      0.3.2+git20261101.bd447c1edb25`; `cmp` with the packaged binary: identical; `sha256sum -c`: OK
+- [x] 4.3 `go vet ./...`, `go test ./...`, `openspec validate --all --strict`
+      **2026-11-01:** vet silent, every test package `ok`, validate 8/8
+
+## 5. Ship
+
+- [x] 5.1 Review of the implementation by a stronger model before ready
+      **Fable, 2026-11-01, of `29ecb29`:** no must-fix. Should-fix taken:
+      README.Debian on `reset-failed` after the start limit and on
+      `After=<spire unit>` in the drop-in; `README.Debian` kept uncompressed
+      (`override_dh_compress`), since unit, man page and example name that
+      path. Nits taken: release-download lines in the workflow header,
+      `chmod +x` in the release notes, no empty `AmbientCapabilities=`, the
+      `deb-local.sh` header, what a purge leaves. **For the maintainer, not
+      this change:** the host package's `README.Debian` (4425 bytes) is
+      installed as `README.Debian.gz`, so `vtpm-mds.service`'s
+      `Documentation=file:///usr/share/doc/vtpm-mds/README.Debian` points
+      nowhere; the `-X` here excludes only the reconciler's file.
+- [ ] 5.2 `README.md` status row: "packaged"; after merge the coordinator
+      archives the change and edits the Purpose paragraph of
+      `openspec/specs/debian-packaging/spec.md` by hand to three packages
+      (host, guest, SPIRE server host), since archiving merges requirements
+      only

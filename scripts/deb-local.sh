@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the local host and guest .debs with a Version that encodes the git
+# Build the local host, guest and reconciler .debs with a Version that encodes the git
 # commit, so a lab host can tell exactly which tree is
 # installed.
 # Does not rewrite debian/changelog in the working tree.
@@ -81,10 +81,11 @@ trap 'rm -f "$tmp"' EXIT
 
 host_deb="dist/vtpm-mds_${local_ver}_amd64.deb"
 guest_deb="dist/devid-enroll_${local_ver}_amd64.deb"
+reconcile_deb="dist/vtpm-mds-reconcile_${local_ver}_amd64.deb"
 
 echo
 echo "Local lab packages:"
-ls -lh "$host_deb" "$guest_deb"
+ls -lh "$host_deb" "$guest_deb" "$reconcile_deb"
 echo "Install the host daemon on the lab host with:"
 echo "  dpkg -i --force-confold ${host_deb}"
 echo "  systemctl start vtpm-mds"
@@ -92,3 +93,6 @@ echo "  vtpm-mds -version"
 echo "Install the guest client in a VM image with:"
 echo "  dpkg -i ${guest_deb}"
 echo "  devid-enroll -version"
+echo "Install the reconciler on the SPIRE server host with:"
+echo "  dpkg -i ${reconcile_deb}"
+echo "  see /usr/share/doc/vtpm-mds-reconcile/README.Debian"

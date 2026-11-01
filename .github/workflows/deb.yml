@@ -1,18 +1,23 @@
 # Build the amd64 .debs on Linux and, on a version tag or an
 # explicit workflow_dispatch, attach them to a GitHub Release.
 #
-# One Debian source builds two binary packages at the same version:
-#   vtpm-mds_<version>_amd64.deb      host / hypervisor daemon (systemd unit, /etc/vtpm-mds)
-#   devid-enroll_<version>_amd64.deb  guest / VM-image DevID enrollment client
+# One Debian source builds three binary packages at the same version:
+#   vtpm-mds_<version>_amd64.deb            host / hypervisor daemon (systemd unit, /etc/vtpm-mds)
+#   devid-enroll_<version>_amd64.deb        guest / VM-image DevID enrollment client
+#   vtpm-mds-reconcile_<version>_amd64.deb  SPIRE server host: node aliases from Proxmox
+# plus vtpm-mds-reconcile_<version>_linux_amd64 (+ .sha256), the reconciler's
+# static binary taken out of its .deb, for a SPIRE server that is not Debian.
 #
 # Ansible / operator fetch (private repo needs GitHub auth):
 #   gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds_*_amd64.deb'
 #   gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'devid-enroll_*_amd64.deb'
+#   gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds-reconcile_*_amd64.deb'
+#   gh release download v0.2.0 --repo dembaca/vtpm-mds --pattern 'vtpm-mds-reconcile_*_linux_amd64*'
 #   https://github.com/dembaca/vtpm-mds/releases/download/v0.2.0/vtpm-mds_0.2.0_amd64.deb
 #   https://github.com/dembaca/vtpm-mds/releases/download/v0.2.0/devid-enroll_0.2.0_amd64.deb
 #
-# Tag must be v<debian-changelog-version>, e.g. v0.2.0 → vtpm-mds_0.2.0_amd64.deb
-# and devid-enroll_0.2.0_amd64.deb
+# Tag must be v<debian-changelog-version>, e.g. v0.2.0 → vtpm-mds_0.2.0_amd64.deb,
+# devid-enroll_0.2.0_amd64.deb and vtpm-mds-reconcile_0.2.0_amd64.deb
 
 name: Debian package
 
@@ -25,7 +30,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: Create GitHub Release tag v<debian-version> and attach both amd64 .debs
+        description: Create GitHub Release tag v<debian-version> and attach the amd64 .debs and the reconciler binary
         type: boolean
         default: false
 
@@ -45,6 +50,8 @@ jobs:
       deb-version: ${{ steps.meta.outputs.deb-version }}
       host-deb-basename: ${{ steps.meta.outputs.host-deb-basename }}
       guest-deb-basename: ${{ steps.meta.outputs.guest-deb-basename }}
+      reconcile-deb-basename: ${{ steps.meta.outputs.reconcile-deb-basename }}
+      reconcile-bin-basename: ${{ steps.meta.outputs.reconcile-bin-basename }}
     steps:
       - name: Require Linux amd64
         run: |
@@ -74,8 +81,8 @@ jobs:
           echo "go=$(command -v go) $(go version)"
           make deb
 
-      # The source builds a host and a guest package; both must exist at the
-      # changelog version or the release would ship an incomplete pair.
+      # The source builds a host, a guest and a reconciler package; all three
+      # must exist at the changelog version or the release would be incomplete.
       - name: Record package metadata
         id: meta
         run: |
@@ -83,15 +90,16 @@ jobs:
           VERSION=$(dpkg-parsechangelog -S Version)
           HOST_DEB="vtpm-mds_${VERSION}_amd64.deb"
           GUEST_DEB="devid-enroll_${VERSION}_amd64.deb"
+          RECONCILE_DEB="vtpm-mds-reconcile_${VERSION}_amd64.deb"
           missing=0
-          for deb in "$HOST_DEB" "$GUEST_DEB"; do
+          for deb in "$HOST_DEB" "$GUEST_DEB" "$RECONCILE_DEB"; do
             if [ ! -f "dist/${deb}" ]; then
               echo "::error::missing dist/${deb}"
               missing=1
             fi
           done
           if [ "$missing" -ne 0 ]; then
-            echo "Both the host (vtpm-mds) and guest (devid-enroll) packages must be built at version ${VERSION}."
+            echo "The host (vtpm-mds), guest (devid-enroll) and reconciler (vtpm-mds-reconcile) packages must all be built at version ${VERSION}."
             ls -lh dist/ || true
             exit 1
           fi
@@ -99,10 +107,13 @@ jobs:
             echo "deb-version=${VERSION}"
             echo "host-deb-basename=${HOST_DEB}"
             echo "guest-deb-basename=${GUEST_DEB}"
+            echo "reconcile-deb-basename=${RECONCILE_DEB}"
+            echo "reconcile-bin-basename=vtpm-mds-reconcile_${VERSION}_linux_amd64"
           } >> "$GITHUB_OUTPUT"
           ls -lh dist/*.deb
           dpkg-deb -I "dist/${HOST_DEB}"
           dpkg-deb -I "dist/${GUEST_DEB}"
+          dpkg-deb -I "dist/${RECONCILE_DEB}"
 
       # Ubuntu's lintian accepts zstd members, Debian's does not; check the
       # format directly (build-release-debs-with-xz).
@@ -110,7 +121,8 @@ jobs:
         run: |
           set -euo pipefail
           for deb in "dist/${{ steps.meta.outputs.host-deb-basename }}" \
-                     "dist/${{ steps.meta.outputs.guest-deb-basename }}"; do
+                     "dist/${{ steps.meta.outputs.guest-deb-basename }}" \
+                     "dist/${{ steps.meta.outputs.reconcile-deb-basename }}"; do
             members=$(ar t "$deb")
             echo "$deb:" $members
             for want in control.tar.xz data.tar.xz; do
@@ -125,7 +137,34 @@ jobs:
         run: |
           lintian --fail-on error,warning \
             "dist/${{ steps.meta.outputs.host-deb-basename }}" \
-            "dist/${{ steps.meta.outputs.guest-deb-basename }}"
+            "dist/${{ steps.meta.outputs.guest-deb-basename }}" \
+            "dist/${{ steps.meta.outputs.reconcile-deb-basename }}"
+
+      # The standalone reconciler is the packaged binary, not a second build,
+      # so its checksum identifies the one in the .deb (package-the-reconciler
+      # D-h). It must be static and print the changelog version.
+      - name: Extract standalone reconciler binary
+        env:
+          DEB_VERSION: ${{ steps.meta.outputs.deb-version }}
+          RECONCILE_DEB: dist/${{ steps.meta.outputs.reconcile-deb-basename }}
+          BIN: ${{ steps.meta.outputs.reconcile-bin-basename }}
+        run: |
+          set -euo pipefail
+          tree="$(mktemp -d)"
+          dpkg-deb -x "$RECONCILE_DEB" "$tree"
+          install -m 0755 "$tree/usr/sbin/vtpm-mds-reconcile" "dist/$BIN"
+          info="$(file -b "dist/$BIN")"
+          echo "$info"
+          if ! grep -q 'statically linked' <<<"$info"; then
+            echo "::error::dist/$BIN is not statically linked: $info"
+            exit 1
+          fi
+          got="$("dist/$BIN" -version)"
+          if [ "$got" != "vtpm-mds-reconcile ${DEB_VERSION}" ]; then
+            echo "::error::dist/$BIN -version printed '$got', want 'vtpm-mds-reconcile ${DEB_VERSION}'"
+            exit 1
+          fi
+          (cd dist && sha256sum "$BIN" > "$BIN.sha256" && sha256sum -c "$BIN.sha256")
 
       - name: Upload host package
         uses: actions/upload-artifact@v4
@@ -139,6 +178,22 @@ jobs:
         with:
           name: ${{ steps.meta.outputs.guest-deb-basename }}
           path: dist/${{ steps.meta.outputs.guest-deb-basename }}
+          if-no-files-found: error
+
+      - name: Upload reconciler package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.reconcile-deb-basename }}
+          path: dist/${{ steps.meta.outputs.reconcile-deb-basename }}
+          if-no-files-found: error
+
+      - name: Upload standalone reconciler binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.reconcile-bin-basename }}
+          path: |
+            dist/${{ steps.meta.outputs.reconcile-bin-basename }}
+            dist/${{ steps.meta.outputs.reconcile-bin-basename }}.sha256
           if-no-files-found: error
 
   release:
@@ -157,6 +212,8 @@ jobs:
       DEB_VERSION: ${{ needs.build-deb.outputs.deb-version }}
       HOST_DEB_BASENAME: ${{ needs.build-deb.outputs.host-deb-basename }}
       GUEST_DEB_BASENAME: ${{ needs.build-deb.outputs.guest-deb-basename }}
+      RECONCILE_DEB_BASENAME: ${{ needs.build-deb.outputs.reconcile-deb-basename }}
+      RECONCILE_BIN_BASENAME: ${{ needs.build-deb.outputs.reconcile-bin-basename }}
     steps:
       - name: Resolve release tag
         id: tag
@@ -186,14 +243,33 @@ jobs:
           name: ${{ env.GUEST_DEB_BASENAME }}
           path: dist
 
+      - name: Download reconciler package
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.RECONCILE_DEB_BASENAME }}
+          path: dist
+
+      - name: Download standalone reconciler binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.RECONCILE_BIN_BASENAME }}
+          path: dist
+
       - name: Publish GitHub Release
         run: |
           set -euo pipefail
           TAG="${{ steps.tag.outputs.tag }}"
           HOST_DEB="dist/${HOST_DEB_BASENAME}"
           GUEST_DEB="dist/${GUEST_DEB_BASENAME}"
+          RECONCILE_DEB="dist/${RECONCILE_DEB_BASENAME}"
+          RECONCILE_BIN="dist/${RECONCILE_BIN_BASENAME}"
           test -f "$HOST_DEB"
           test -f "$GUEST_DEB"
+          test -f "$RECONCILE_DEB"
+          test -f "$RECONCILE_BIN"
+          test -f "$RECONCILE_BIN.sha256"
+          (cd dist && sha256sum -c "${RECONCILE_BIN_BASENAME}.sha256")
+          ASSETS=("$HOST_DEB" "$GUEST_DEB" "$RECONCILE_DEB" "$RECONCILE_BIN" "$RECONCILE_BIN.sha256")
           NOTES="Debian packages for ${TAG} (Linux amd64), built from one source at version ${DEB_VERSION}.
 
           Host / hypervisor package: \`${HOST_DEB_BASENAME}\`
@@ -204,22 +280,40 @@ jobs:
           \`\`\`
 
           Guest / VM-image package: \`${GUEST_DEB_BASENAME}\`
-          The devid-enroll client only. Install in VM images; it installs no daemon and no systemd unit.
+          The devid-enroll client, its man page and the LDevID renewal timer. Install in VM images, not on the hypervisor.
 
           \`\`\`
           gh release download ${TAG} --repo dembaca/vtpm-mds --pattern 'devid-enroll_*_amd64.deb'
+          \`\`\`
+
+          SPIRE server host package: \`${RECONCILE_DEB_BASENAME}\`
+          vtpm-mds-reconcile, which writes SPIRE node aliases from Proxmox pools and tags, with its unit and user. Install once, beside the SPIRE server; see its README.Debian.
+
+          \`\`\`
+          gh release download ${TAG} --repo dembaca/vtpm-mds --pattern 'vtpm-mds-reconcile_*_amd64.deb'
+          \`\`\`
+
+          Standalone reconciler: \`${RECONCILE_BIN_BASENAME}\` and its \`.sha256\`
+          The same static binary as in the package, for a SPIRE server host that is not Debian. It comes without unit, user or man page.
+
+          \`\`\`
+          gh release download ${TAG} --repo dembaca/vtpm-mds --pattern 'vtpm-mds-reconcile_*_linux_amd64*'
+          sha256sum -c ${RECONCILE_BIN_BASENAME}.sha256
+          chmod +x ${RECONCILE_BIN_BASENAME}
           \`\`\`
 
           Direct URLs (private repo: authenticate):
 
           https://github.com/dembaca/vtpm-mds/releases/download/${TAG}/${HOST_DEB_BASENAME}
           https://github.com/dembaca/vtpm-mds/releases/download/${TAG}/${GUEST_DEB_BASENAME}
+          https://github.com/dembaca/vtpm-mds/releases/download/${TAG}/${RECONCILE_DEB_BASENAME}
+          https://github.com/dembaca/vtpm-mds/releases/download/${TAG}/${RECONCILE_BIN_BASENAME}
           "
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$HOST_DEB" "$GUEST_DEB" --clobber
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
             gh release edit "$TAG" --notes "$NOTES"
           else
-            gh release create "$TAG" "$HOST_DEB" "$GUEST_DEB" \
+            gh release create "$TAG" "${ASSETS[@]}" \
               --title "$TAG" \
               --notes "$NOTES" \
               --target "${GITHUB_SHA}"
@@ -227,3 +321,5 @@ jobs:
           gh release view "$TAG"
           echo "Host download:  https://github.com/dembaca/vtpm-mds/releases/download/${TAG}/${HOST_DEB_BASENAME}"
           echo "Guest download: https://github.com/dembaca/vtpm-mds/releases/download/${TAG}/${GUEST_DEB_BASENAME}"
+          echo "Reconciler download: https://github.com/dembaca/vtpm-mds/releases/download/${TAG}/${RECONCILE_DEB_BASENAME}"
+          echo "Reconciler binary:   https://github.com/dembaca/vtpm-mds/releases/download/${TAG}/${RECONCILE_BIN_BASENAME}"

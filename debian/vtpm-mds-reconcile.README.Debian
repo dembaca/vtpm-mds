@@ -1,0 +1,91 @@
+vtpm-mds-reconcile for the SPIRE server host
+--------------------------------------------
+
+This package installs the reconciler (/usr/sbin/vtpm-mds-reconcile), its
+systemd unit, the system user vtpm-mds-reconcile and an example
+configuration under /usr/share/doc/vtpm-mds-reconcile/examples/. Install it
+once, on the host of the SPIRE server, not on Proxmox nodes and not in
+guests. What it does, and why a tag grants only inside a pool, is in
+vtpm-mds-reconcile(8).
+
+It ships no configuration in /etc. The unit is enabled on install but starts
+only once /etc/vtpm-mds-reconcile/config.yaml exists; before that a start is
+skipped, not failed. An upgrade restarts a running reconciler and leaves a
+stopped one stopped.
+
+1. Configuration and files
+   Start from the example:
+
+     install -d -m 0750 -o root -g vtpm-mds-reconcile /etc/vtpm-mds-reconcile
+     install -m 0640 -o root -g vtpm-mds-reconcile \
+       /usr/share/doc/vtpm-mds-reconcile/examples/config.yaml \
+       /etc/vtpm-mds-reconcile/config.yaml
+
+   Put each cluster's ca_file and intermediates beside it, 0640
+   root:vtpm-mds-reconcile, so the service user can read them. The
+   intermediates are certificates only, never keys.
+
+2. Tokens, as systemd credentials
+   Each cluster needs a Proxmox API token with PVEAuditor on / for the user
+   and the token. Keep each token file root:root 0600 and hand it over with
+   one LoadCredential= line per cluster in a drop-in; the configuration's
+   token_file then points at /run/credentials/vtpm-mds-reconcile.service/:
+
+     # systemctl edit vtpm-mds-reconcile
+     [Service]
+     LoadCredential=cluster-1.token:/etc/vtpm-mds-reconcile/cluster-1.token
+
+   The token is read once at start; a rotated token needs a restart.
+
+3. The SPIRE admin socket
+   SPIRE 1.14 creates its admin socket 0770 and the two directories above it
+   0750, owned by the server's user and primary group. Give the reconciler
+   that group in the same drop-in:
+
+     SupplementaryGroups=spire
+
+   (use the group the SPIRE server actually runs as). Whoever opens the
+   socket is a SPIRE admin, so this group is the reconciler's whole SPIRE
+   authority.
+
+   The unit runs with PrivateTmp=true, which hides SPIRE's default socket
+   /tmp/spire-server/private/api.sock. Either set the SPIRE server's
+   socket_path under /run (recommended, as in the example), or, for a server
+   that stays on the default path, add to the drop-in:
+
+     PrivateTmp=false
+
+   A socket path holds at most 107 bytes.
+
+4. First start
+
+     systemctl start vtpm-mds-reconcile
+     journalctl -u vtpm-mds-reconcile
+
+   The log names the version and the number of clusters, then each pass's
+   changes. A token without VM.Audit on /vms or Pool.Audit on /pool, or a
+   socket it cannot open, stops the start with a line naming the cluster or
+   the socket; systemd retries every 10 s and gives up after five starts in
+   five minutes. The unit is then failed and refuses a plain start until
+   those five minutes are over; after fixing the cause:
+
+     systemctl reset-failed vtpm-mds-reconcile
+     systemctl start vtpm-mds-reconcile
+
+   The unit is not ordered after the SPIRE server, whose unit name differs
+   per installation. If SPIRE runs on the same host and may take longer than
+   a minute to open its socket at boot, add to the drop-in:
+
+     [Unit]
+     After=spire-server.service
+
+   (with the SPIRE server's actual unit name).
+
+   To try a configuration without the service: run
+   vtpm-mds-reconcile -once -config <file> as a user who can read the token
+   files and open the socket. -once never bans.
+
+Removing the package stops the service and leaves the aliases it wrote in
+SPIRE; delete them by hand if the reconciler is not coming back. Purging it
+leaves /etc/vtpm-mds-reconcile/ and the token files, which the operator
+created and the package does not own.

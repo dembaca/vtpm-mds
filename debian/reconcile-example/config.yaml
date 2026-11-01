@@ -1,0 +1,16 @@
+# Example for /etc/vtpm-mds-reconcile/config.yaml; see vtpm-mds-reconcile(8)
+# and /usr/share/doc/vtpm-mds-reconcile/README.Debian. Decoded strictly: an
+# unknown key stops the start.
+trust_domain: example.org
+# Under /run, not SPIRE's default /tmp/spire-server/private/, which the unit's
+# PrivateTmp hides.
+spire_socket: /run/spire/server/private/api.sock
+interval: 60s
+clusters:
+  - name: cluster-1
+    api_url: https://pve-a.example:8006
+    ca_file: /etc/vtpm-mds-reconcile/cluster-1-ca.pem
+    # Handed over by systemd from a LoadCredential= line in a drop-in.
+    token_file: /run/credentials/vtpm-mds-reconcile.service/cluster-1.token
+    intermediates:
+      - /etc/vtpm-mds-reconcile/cluster-1-intermediate.pem

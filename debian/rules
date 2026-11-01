@@ -32,6 +32,7 @@ override_dh_auto_build:
 	go build -buildvcs=false -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/vtpm-mds .
 	go build -buildvcs=false -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/devid-enroll ./cmd/devid-enroll
 	go build -buildvcs=false -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/vtpm-mds-bind ./cmd/vtpm-mds-bind
+	go build -buildvcs=false -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o bin/vtpm-mds-reconcile ./cmd/vtpm-mds-reconcile
 
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
@@ -46,9 +47,17 @@ override_dh_auto_install:
 	install -m 0644 debian/vtpm-mds-bind.service debian/vtpm-mds/usr/lib/systemd/system/vtpm-mds-bind.service
 	install -d debian/devid-enroll/usr/bin
 	install -m 0755 bin/devid-enroll debian/devid-enroll/usr/bin/devid-enroll
+	install -d debian/vtpm-mds-reconcile/usr/sbin
+	install -m 0755 bin/vtpm-mds-reconcile debian/vtpm-mds-reconcile/usr/sbin/vtpm-mds-reconcile
 
 override_dh_dwz:
 	# Go binaries are not compatible with dh_dwz.
+
+override_dh_compress:
+	# The reconciler's unit, man page and example config name
+	# /usr/share/doc/vtpm-mds-reconcile/README.Debian; keep it uncompressed
+	# whatever its size.
+	dh_compress -Xdoc/vtpm-mds-reconcile/README.Debian
 
 override_dh_builddeb:
 	# xz on every build host: Ubuntu's dpkg-deb defaults to zstd, which
@@ -67,5 +76,7 @@ override_dh_installsystemd:
 	# restarts a running daemon instead (restart-the-service-on-upgrade).
 	# Both units of the package, vtpm-mds and vtpm-mds-bind, are handled
 	# alike: vtpm-mds-bind.service is installed in override_dh_auto_install
-	# and picked up from the package tree.
+	# and picked up from the package tree. The same flags cover
+	# vtpm-mds-reconcile.service, whose debian/vtpm-mds-reconcile.postinst
+	# reloads and try-restarts like debian/postinst (package-the-reconciler D-f).
 	dh_installsystemd --no-start --no-stop-on-upgrade
