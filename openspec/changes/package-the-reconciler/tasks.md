@@ -15,7 +15,7 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
       (2026-11-01). The validator refuses a MODIFIED block that drops
       scenarios of the requirement it replaces, so "Two Binary Packages" is
       REMOVED and "Three Binary Packages" ADDED rather than renamed.
-- [ ] 1.2 Record SPIRE 1.14's admin socket: path default, mode of the socket
+- [x] 1.2 Record SPIRE 1.14's admin socket: path default, mode of the socket
       and of its directory, owner; and whether a user in the socket's group
       can list entries (D-d)
       **Verify:** `stat` output and one `spire-server entry show -socketPath`
@@ -28,9 +28,14 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
       connect; nobody else can. The default `/tmp/spire-server/private/` is
       created the same way. A socket path of 107 bytes was refused by the
       client (`connect: invalid argument`); the kernel's `sun_path` holds
-      107 usable bytes, worth one line in the documentation. **Open:** a connect
-      by a second user in that group; this host has only one unprivileged
-      user, so it waits for 4.1.
+      107 usable bytes, worth one line in the documentation.
+      **Closed, 2026-11-01, cloud host, SPIRE 1.14.0** as system user `spire`
+      (primary group `spire`): `socket_path=/tmp/spire-server/private/api.sock`
+      created `drwxr-x---` / `drwxr-x---` / `srwxrwx---` (`0750`/`0750`/`0770`)
+      owned by `spire:spire`. Second system user `spire-peer` (group `spire`)
+      ran `spire-server entry show -socketPath …` and listed entries; user
+      `ubuntu` (not in `spire`) got `connect: permission denied`. Same modes
+      observed for `/run/spire/server/private/api.sock`.
 - [x] 1.3 Review of the record by a stronger model (Fable), findings taken or
       deferred by the maintainer
       **Fable, 2026-11-01, of `d98fa9e`:** all taken. Must-fix: `PrivateTmp`
@@ -115,7 +120,7 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
 
 ## 4. Verification
 
-- [ ] 4.1 On a scratch host with a scratch SPIRE 1.14 server: install the
+- [x] 4.1 On a scratch host with a scratch SPIRE 1.14 server: install the
       package; unit enabled, inactive, condition unmet on `start`; write a
       config, the socket-group and credential drop-ins, start: the log shows
       the version and a pass, with the SPIRE socket under `/run`; once more
@@ -126,6 +131,44 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
       stopped (stays stopped); `dpkg -r` stops it and leaves no unit; a
       second user in the SPIRE group connects (task 1.2's open half)
       **Verify:** commands and key journal lines recorded here
+      **2026-11-01, cloud agent host, base `97fac5f` (PR tip after Fable),
+      nested systemd** (`unshare --fork --pid --mount --mount-proc
+      /lib/systemd/systemd`): PID 1 here is `tini`, so unit tests ran against
+      a nested systemd sharing the host `/etc` and network; SPIRE had to bind
+      its socket inside that mount namespace's `/run` or `/tmp`. Fake Proxmox
+      API from `scripts/qemu-lab/fake-proxmox-api.py`. Packages from
+      `make deb-local` (third binary package, version
+      `0.3.2+git20261101.97fac5f44d59`).
+      1. `dpkg -i` of that `.deb`: reconciler system user created; unit
+         `enabled`, `inactive`; `systemctl start` → skipped, not failed
+         (`ConditionPathExists` on `/etc/<pkg>/config.yaml` was not met).
+      2. Config `0750`/`0640` as README.Debian; drop-in
+         `SupplementaryGroups=spire` +
+         `LoadCredential=lab1.token:…`; SPIRE socket under
+         `/run/spire/server/private/api.sock`. Journal: version line with
+         `0.3.2+git20261101.97fac5f44d59, 1 clusters, interval 10s` then
+         `cluster lab1: created 4, deleted 0`.
+      3. SPIRE on `/tmp/spire-server/private/api.sock`: shipped
+         `PrivateTmp=true` → `connect: no such file or directory`; with
+         drop-in `PrivateTmp=false` → starts and logs the version.
+      4. Drop-in without `SupplementaryGroups`: five
+         `connect: permission denied` failures, then
+         `Start request repeated too quickly` / `failed`; plain
+         `systemctl start` stays failed until `reset-failed`.
+      5. Upgrade while running (`f4f36da` → `69847a1`): host `dpkg` cannot
+         talk to nested systemd, so `try-restart` was issued there after
+         install (same as postinst intent); journal shows new version
+         `0.3.2+git20261101.69847a1e73c0`. Upgrade while stopped: stays
+         `inactive`.
+      6. `dpkg -r`: unit file removed; nested manager needed a manual
+         `stop`+`daemon-reload` because prerm's host `systemctl` cannot
+         reach nested PID 1. `systemd-analyze security` on the installed
+         unit: **1.5 OK** (≤ 2.0).
+      7. Task 1.2 second-user connect: see 1.2 note above.
+      **Not verified here:** postinst/`prerm` talking to a real host PID 1
+      systemd (this image boots `tini`); Proxmox-host install (out of
+      scope). Full log kept as lab artifact `package-reconciler-4.1.log`.
+
 - [x] 4.2 Standalone binary from the local extraction: `file` says statically
       linked, `-version` prints the package version, hash equals the
       package's binary, `sha256sum -c` passes on the `.sha256`
