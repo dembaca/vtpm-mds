@@ -47,7 +47,7 @@ deferred). Record only until the maintainer's go.
       `noacl`: `/cluster/resources` `200` with an **empty list**, not `403`;
       `/access/permissions` an empty map; `/pools` `200`, empty. Not seen: a
       nested pool (none exists there).
-- [ ] 2.2 Against SPIRE 1.14.x: `ListAgents` output for a `tpm_devid` agent
+- [x] 2.2 Against SPIRE 1.14.x: `ListAgents` output for a `tpm_devid` agent
       (selectors, anything that ties it to an EK), entry create/delete under one
       SPIFFE ID with two selector sets, `BanAgent` then re-attestation refused
       **Verify:** lab output recorded here
@@ -62,10 +62,17 @@ deferred). Record only until the maintainer's go.
       and no selector for a `join_token` agent. A running agent banned with
       `agent ban` failed its next sync 5 s later with `PermissionDenied` on
       `SyncAuthorizedEntries` and shut down (`Agent is banned: removing SVID
-      and shutting down`). **Still open, needs the cloud lab:** `agent show`
-      for a `tpm_devid` agent (which selectors, anything tying it to an EK),
-      and that a banned `tpm_devid` agent ID cannot attest again with the
-      same LDevID.
+      and shutting down`).
+      **Cloud lab rest, 2026-11-01** (`cursor/reconcile-lab-verification-2-1e7e`,
+      SPIRE 1.14.0, two-tier lab PKI, guest LDevID CN=100): `agent show` for
+      `…/tpm_devid/e9e5769a…` (SHA-1 of leaf DER) selectors =
+      `tpm_devid:subject:cn:100`, `tpm_devid:issuer:cn:Lab DevID Intermediate`,
+      `tpm_devid:ca:fingerprint:<inter>`, `tpm_devid:ca:fingerprint:<root>` —
+      **nothing that names an EK**. After reconciler ban of that agent ID,
+      clearing agent data and attesting again with the same LDevID fails:
+      `PermissionDenied` / `failed to attest: agent is banned` (server
+      `Failed to attest: agent is banned`). Entry create/delete under one
+      SPIFFE ID with two selector sets: already covered 2026-10-29 above.
 
 ## 3. Implementation
 
@@ -131,11 +138,28 @@ deferred). Record only until the maintainer's go.
 
 ## 4. Verification
 
-- [ ] 4.1 Lab: two-tier PKI, SPIRE 1.14.x, a fake or real Proxmox API: a VM
+- [x] 4.1 Lab: two-tier PKI, SPIRE 1.14.x, a fake or real Proxmox API: a VM
       with pool and tags gets its aliases and a workload under the tag alias
       gets an SVID; removing the tag removes it within one interval plus sync;
       a VM without a pool gets only `vm/`; a destroyed VM's agent is banned
       after two reads
+      **2026-11-01, cloud QEMU lab** (`cursor/reconcile-lab-verification-2-1e7e`,
+      scripts under `scripts/qemu-lab/`: `fake-proxmox-api.py`,
+      `reconcile-lab-spire-server.conf`, `start-reconcile-lab-host.sh`; binary
+      from tree tip; trust_domain `lab.local`; cluster `lab1`; interval 10s;
+      guest `MDS_LAB_ACCEL=tcg` — nested KVM wedged this host). First pass:
+      `created 5` — `vm/100`, `pool/web`×2 (cn 100+101),
+      `pool/web/tag/role/frontend` (cn 100), `vm/101`. Workload entry parented
+      by the tag alias → guest `api fetch x509` got
+      `spiffe://lab.local/workload/frontend`. Cleared VM 100 tag →
+      `deleted 1` (tag alias); next fetch `PermissionDenied` / `no identity
+      issued`. VM 100 without `pool` → only `vm/100` for cn 100. Removed VM
+      100 from inventory → after two good reads
+      `banned …/tpm_devid/e9e5769a… (vm 100 not listed in two reads)`.
+      **Lab notes (not product):** SPIRE 1.14 `tpm_devid` needs
+      `endorsement_ca_path` (not `end_cert_path`); fake-PVE TLS cert needs an
+      IP SAN for `127.0.0.1` or the reconciler reports a doubtful TLS read;
+      SPIRE `bind_address` on `169.254.169.1` so the guest can attest.
 - [x] 4.2 Real cluster, read-only against Proxmox, against a scratch SPIRE
       server: one `-once` pass, aliases listed, nothing banned that is alive
       **2026-10-29, binary from `b98587e`**, the maintainer's read-only
