@@ -106,7 +106,7 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
 
 ## 3. Release
 
-- [ ] 3.1 `.github/workflows/deb.yml`: the third `.deb` in metadata, xz check,
+- [x] 3.1 `.github/workflows/deb.yml`: the third `.deb` in metadata, xz check,
       lintian, upload, release; in `build-deb` the standalone binary from
       `dpkg-deb -x` with the static and `-version` checks, uploaded as a
       fourth artifact; in `release` the binary and its `sha256sum`-format
@@ -114,9 +114,10 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
       **Verify:** the workflow on the PR is green and its artifacts list three
       `.deb` and the binary; the release job is tag-gated and cannot run on a
       PR, so say so instead of implying it passed
-      **2026-11-01, written; open until the PR's run is green.** The
-      extraction step's commands ran locally (4.2). The `release` job has not
-      run and cannot on a PR.
+      **2026-11-01:** the maintainer confirmed the PR's CI green and merged
+      #96 (ask `a3angi4c…`, 👍 20:46). The extraction step's commands also
+      ran locally (4.2). The `release` job has not run; it runs on the next
+      version tag.
 
 ## 4. Verification
 
@@ -192,8 +193,12 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
       installed as `README.Debian.gz`, so `vtpm-mds.service`'s
       `Documentation=file:///usr/share/doc/vtpm-mds/README.Debian` points
       nowhere; the `-X` here excludes only the reconciler's file.
-- [ ] 5.2 `README.md` status row: "packaged"; after merge the coordinator
+- [x] 5.2 `README.md` status row: "packaged"; after merge the coordinator
       archives the change and edits the Purpose paragraph of
       `openspec/specs/debian-packaging/spec.md` by hand to three packages
       (host, guest, SPIRE server host), since archiving merges requirements
       only
+      **2026-11-01:** #96 merged as `ac5fb70`; `openspec archive` applied 4
+      added, 3 modified and 1 removed requirement to `debian-packaging`; its
+      Purpose was rewritten by hand to three packages; README status
+      "implemented; packaged as `vtpm-mds-reconcile`".
