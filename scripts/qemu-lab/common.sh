@@ -65,3 +65,61 @@ discover_ovmf() {
   done
   export OVMF_CODE OVMF_VARS_TEMPLATE
 }
+
+# ensure_no_conflicting_imds: refuse when HOST_IP / IMDS_IP already sit on a
+# non-lab interface, or a route for the lab prefix leaves via another device.
+# Uses MDS_LAB_BRIDGE / MDS_LAB_HOST_IP / MDS_LAB_IMDS_IP / MDS_LAB_PREFIX
+# (same defaults as setup-host.sh). Moved here so start-reconcile-lab-host.sh
+# can share the guard without claiming the bridge itself.
+ensure_no_conflicting_imds() {
+  local bridge="${MDS_LAB_BRIDGE:-br-imds}"
+  local host_ip="${MDS_LAB_HOST_IP:-169.254.169.1}"
+  local imds_ip="${MDS_LAB_IMDS_IP:-169.254.169.254}"
+  local prefix="${MDS_LAB_PREFIX:-16}"
+  local conflict="" ip on via
+  for ip in "$host_ip" "$imds_ip"; do
+    on="$(ip -o -4 addr show | awk -v a="$ip" '$4 ~ "^"a"/" {print $2}' \
+          | grep -vx "$bridge" | head -1 || true)"
+    [[ -n "$on" ]] && conflict="${conflict}  ${ip} is already on ${on}"$'\n'
+  done
+  via="$(ip -o -4 route show "${host_ip%.*.*}.0.0/${prefix}" 2>/dev/null \
+         | awk '{for(i=1;i<NF;i++) if($i=="dev") print $(i+1)}' \
+         | grep -vx "$bridge" | head -1 || true)"
+  [[ -n "$via" ]] && conflict="${conflict}  a route for the lab prefix already goes via ${via}"$'\n'
+
+  if [[ -n "$conflict" ]]; then
+    cat >&2 <<EOF
+ERROR: this host already runs a metadata setup that the QEMU lab would collide
+with:
+${conflict}
+The lab is for the cloud lab host. On a Proxmox host, test against a real guest
+and the installed package instead — see scripts/qemu-lab/README.md.
+
+Nothing was changed. To run the lab here anyway, point it elsewhere with
+MDS_LAB_BRIDGE, MDS_LAB_HOST_IP, MDS_LAB_IMDS_IP and MDS_LAB_PREFIX, and note
+that the guest cloud-init config and devid-enroll's default URL carry the
+addresses too.
+EOF
+    return 1
+  fi
+}
+
+# refuse_non_lab_host: abort before gen-lab-pki / SPIRE bind can touch a
+# production Proxmox host or an existing site DevID CA. Callers that already
+# set MDS_LAB_ETC_DIR to a scratch directory pass the CA check.
+refuse_non_lab_host() {
+  if [[ -e /etc/pve ]]; then
+    echo "ERROR: /etc/pve present — refuse QEMU lab helpers on a Proxmox host." >&2
+    echo "Nothing was changed." >&2
+    return 1
+  fi
+  # Package etc path equals MM_PROJECT_CHANNEL in this env; name once.
+  local pkg_etc="/etc/vtpm-mds" # pragma: allowlist secret
+  if [[ -z "${MDS_LAB_ETC_DIR:-}" && -f "${pkg_etc}/devid-ca.pem" ]]; then
+    echo "ERROR: ${pkg_etc}/devid-ca.pem exists and MDS_LAB_ETC_DIR is unset." >&2
+    echo "Set MDS_LAB_ETC_DIR to a scratch directory so gen-lab-pki does not" >&2
+    echo "overwrite a site DevID CA. Nothing was changed." >&2
+    return 1
+  fi
+  ensure_no_conflicting_imds
+}

@@ -3,6 +3,10 @@
 # Creates br-imds with 169.254.169.1 and DNATs classic IMDS address 169.254.169.254.
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=common.sh
+source "${ROOT}/scripts/qemu-lab/common.sh"
+
 # Non-login shells (e.g. Claude cloud) leave USER unset.
 USER="${USER:-$(id -un)}"
 
@@ -24,48 +28,6 @@ ensure_kvm_access() {
   # Nested KVM is currently broken on Cloud Agent hosts; chmod keeps the node usable
   # for future kvm attempts without blocking the default TCG path.
   sudo chmod 666 /dev/kvm || true
-}
-
-ensure_no_conflicting_imds() {
-  # The lab claims HOST_IP and IMDS_IP outright. If another interface already
-  # carries either, or a route for the lab prefix already exists through some
-  # other interface, two connected routes for one prefix result and replies to
-  # a lab guest leave through the wrong one — the guest then sees nothing but
-  # connection timeouts, minutes after the point where this could be reported.
-  # Refuse rather than reconfigure: the addresses are also baked into the guest
-  # cloud-init config and into devid-enroll's default base URL, so a lab that
-  # silently moved would fail in harder-to-read ways than the conflict it
-  # avoided. Nothing is deleted here either; removing an interface this script
-  # did not create is exactly that kind of guess.
-  local conflict=""
-  local ip
-  for ip in "$HOST_IP" "$IMDS_IP"; do
-    local on
-    on="$(ip -o -4 addr show | awk -v a="$ip" '$4 ~ "^"a"/" {print $2}' \
-          | grep -vx "$BRIDGE" | head -1 || true)"
-    [[ -n "$on" ]] && conflict="${conflict}  ${ip} is already on ${on}"$'\n'
-  done
-  local via
-  via="$(ip -o -4 route show "${HOST_IP%.*.*}.0.0/${PREFIX}" 2>/dev/null \
-         | awk '{for(i=1;i<NF;i++) if($i=="dev") print $(i+1)}' \
-         | grep -vx "$BRIDGE" | head -1 || true)"
-  [[ -n "$via" ]] && conflict="${conflict}  a route for the lab prefix already goes via ${via}"$'\n'
-
-  if [[ -n "$conflict" ]]; then
-    cat >&2 <<EOF
-ERROR: this host already runs a metadata setup that the QEMU lab would collide
-with:
-${conflict}
-The lab is for the cloud lab host. On a Proxmox host, test vtpm-mds against a
-real guest and the installed package instead — see scripts/qemu-lab/README.md.
-
-Nothing was changed. To run the lab here anyway, point it elsewhere with
-MDS_LAB_BRIDGE, MDS_LAB_HOST_IP, MDS_LAB_IMDS_IP and MDS_LAB_PREFIX, and note
-that the guest cloud-init config and devid-enroll's default URL carry the
-addresses too.
-EOF
-    exit 1
-  fi
 }
 
 ensure_bridge() {
@@ -139,7 +101,7 @@ EOF
 }
 
 main() {
-  ensure_no_conflicting_imds
+  ensure_no_conflicting_imds || exit 1
   ensure_kvm_access
   ensure_dirs
   ensure_bridge

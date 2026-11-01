@@ -143,23 +143,33 @@ deferred). Record only until the maintainer's go.
       gets an SVID; removing the tag removes it within one interval plus sync;
       a VM without a pool gets only `vm/`; a destroyed VM's agent is banned
       after two reads
-      **2026-11-01, cloud QEMU lab** (`cursor/reconcile-lab-verification-2-1e7e`,
-      scripts under `scripts/qemu-lab/`: `fake-proxmox-api.py`,
-      `reconcile-lab-spire-server.conf`, `start-reconcile-lab-host.sh`; binary
-      from tree tip; trust_domain `lab.local`; cluster `lab1`; interval 10s;
-      guest `MDS_LAB_ACCEL=tcg` — nested KVM wedged this host). First pass:
-      `created 5` — `vm/100`, `pool/web`×2 (cn 100+101),
-      `pool/web/tag/role/frontend` (cn 100), `vm/101`. Workload entry parented
-      by the tag alias → guest `api fetch x509` got
-      `spiffe://lab.local/workload/frontend`. Cleared VM 100 tag →
-      `deleted 1` (tag alias); next fetch `PermissionDenied` / `no identity
-      issued`. VM 100 without `pool` → only `vm/100` for cn 100. Removed VM
-      100 from inventory → after two good reads
+      **2026-11-01, cloud QEMU lab** (`cursor/reconcile-lab-verification-2-1e7e`
+      then Fable fixes on `cursor/reconcile-lab-fixes-1e7e`; scripts under
+      `scripts/qemu-lab/`: `fake-proxmox-api.py`, `reconcile-lab-spire-server.conf`,
+      `start-reconcile-lab-host.sh`; binary from tree tip; trust_domain
+      `lab.local`; cluster `lab1`; interval 10s; guest `MDS_LAB_ACCEL=tcg` —
+      nested KVM wedged this host). First pass: `created 5` —
+      `vm/100`, `pool/web` (cn 100, cn 101), `pool/web/tag/role/frontend`
+      (cn 100), `vm/101`. Workload entry parented by the tag alias → guest
+      `api fetch x509` got `spiffe://lab.local/workload/frontend`. Cleared
+      VM 100 tag → `deleted 1` (tag alias); next fetch `PermissionDenied` /
+      `no identity issued`. VM 100 without `pool` → only `vm/100` for cn
+      100. Removed VM 100 from inventory → after two good reads
       `banned …/tpm_devid/e9e5769a… (vm 100 not listed in two reads)`.
+      **Re-run after Fable inventory expand:** default inventory includes
+      qemu 100 (pool + two tags `role.frontend` / `env.lab`), qemu 101
+      (no pool/tags fields), a `template:1` qemu, and an `lxc` guest.
+      `-once` created `vm/100`, `pool/web` (cn 100),
+      `pool/web/tag/role/frontend`, `pool/web/tag/env/lab`, `vm/101` —
+      no aliases for the template or the lxc. Fake API
+      `?type=node` returns an empty list (type filter).
       **Lab notes (not product):** SPIRE 1.14 `tpm_devid` needs
       `endorsement_ca_path` (not `end_cert_path`); fake-PVE TLS cert needs an
       IP SAN for `127.0.0.1` or the reconciler reports a doubtful TLS read;
-      SPIRE `bind_address` on `169.254.169.1` so the guest can attest.
+      SPIRE `bind_address` on `169.254.169.1` so the guest can attest. The
+      fake API does not check the token header and never answers `403` or an
+      empty listing for missing rights (those shapes were recorded in 2.1 on
+      a real cluster).
       **Not verified** (coordinator, on merge): the time from removing the
       tag to the refused fetch was not recorded, only that it happened; the
       lab has the default `swtpm-localca` EK layout and a lab intermediate,
