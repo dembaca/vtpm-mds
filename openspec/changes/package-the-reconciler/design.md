@@ -48,7 +48,12 @@ GitHub Release for a `v<changelog version>` tag.
   `vtpm-mds`), `/usr/lib/systemd/system/vtpm-mds-reconcile.service`,
   `vtpm-mds-reconcile(8)`, a `sysusers.d` entry, and
   `/usr/share/doc/vtpm-mds-reconcile/examples/config.yaml` (the man page's
-  example). **No conffile in `/etc`:** a shipped `config.yaml` would carry an
+  example, installed by `dh_installexamples` from
+  `debian/vtpm-mds-reconcile.examples`), and the package's own
+  `debian/vtpm-mds-reconcile.README.Debian` (the unprefixed
+  `debian/README.Debian` belongs to `vtpm-mds`). The unit runs
+  `ExecStart=/usr/sbin/vtpm-mds-reconcile -config
+  /etc/vtpm-mds-reconcile/config.yaml`, explicit like `vtpm-mds.service`. **No conffile in `/etc`:** a shipped `config.yaml` would carry an
   invented cluster, and a strict decoder plus a start-time privilege check
   would make the service fail at once. The host packages' binaries are not in
   it, and its binary is in neither of them.
@@ -73,7 +78,12 @@ GitHub Release for a `v<changelog version>` tag.
   (file `root:root 0600`), and the configuration points `token_file` at
   `/run/credentials/vtpm-mds-reconcile.service/<cluster>.token`, as the man
   page already shows. `ImportCredential=` would need no drop-in but needs
-  systemd ≥ 254; Debian 12 ships 252, so it is not the default.
+  systemd ≥ 254; Debian 12 ships 252, so it is not the default. Everything
+  else the reconciler reads from `/etc/vtpm-mds-reconcile/` (the
+  configuration, `ca_file`, the intermediates) must be readable by the
+  user: the documentation shows the directory `0750 root:vtpm-mds-reconcile`
+  and those files `0640`, while the token files stay `root:root 0600` and
+  reach the process only as credentials.
 - **D-f. Installing starts nothing; an upgrade restarts a running one.** The
   unit has `ConditionPathExists=/etc/vtpm-mds-reconcile/config.yaml` and is
   enabled on installation, so it starts at the next boot once configured and
@@ -82,35 +92,62 @@ GitHub Release for a `v<changelog version>` tag.
   manager and `try-restart`s the unit on an upgrade, with the guards of the
   host package (`$2` set, no `DPKG_ROOT`, a running manager) and a refused
   restart reported on stderr without failing `dpkg`. The operator starts it
-  the first time.
-- **D-g. Hardening.** `User=`/`Group=vtpm-mds-reconcile`, an empty
-  `CapabilityBoundingSet=`, `NoNewPrivileges`, `ProtectSystem=strict`,
-  `ProtectHome`, `PrivateTmp`, `PrivateDevices`, the kernel and clock
-  protections, `RestrictNamespaces`, `MemoryDenyWriteExecute`,
-  `SystemCallFilter=@system-service` minus `@privileged @resources` with
-  `EPERM`, `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`, `UMask=0077`.
+  the first time. Both flags need no new override: `debian/rules` already
+  runs `dh_installsystemd --no-start --no-stop-on-upgrade` once for every
+  package, so the only per-package work is
+  `debian/vtpm-mds-reconcile.postinst` (the hand reload and the guarded
+  `try-restart`, after `debian/postinst`). debhelper's generated `prerm`
+  still stops the unit on `remove`, so `dpkg -r` stops a running
+  reconciler.
+- **D-g. Hardening.** The confinement set of `vtpm-mds.service`, without
+  its capability, `StateDirectory` and IP lines: `User=`/`Group=vtpm-mds-reconcile`,
+  an empty `CapabilityBoundingSet=`, no `AmbientCapabilities=`, and
+  `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`; everything else
+  (`ProtectSystem=strict`, `PrivateTmp`, `PrivateDevices`, the kernel,
+  clock, hostname and control-group protections, `RestrictNamespaces`,
+  `LockPersonality`, `MemoryDenyWriteExecute`, `RestrictRealtime`,
+  `RestrictSUIDSGID`, `RemoveIPC`, `UMask=0077`,
+  `SystemCallArchitectures=native`, `SystemCallFilter=@system-service`
+  minus `@privileged @resources` with `EPERM`) as there. `ProtectSystem=strict`
+  does not stop a `connect()` to the admin socket: a socket on a read-only
+  mount can still be connected to.
+  **`PrivateTmp=true` hides SPIRE's default socket**, which is
+  `/tmp/spire-server/private/api.sock`. The unit keeps `PrivateTmp`, and
+  the documentation says: put the SPIRE server's `socket_path` under
+  `/run` (recommended; the man page example already uses
+  `/run/spire/server/private/api.sock`), or, for a server on the default
+  path, a drop-in with `PrivateTmp=false`. The socket path is at most 107
+  bytes (the kernel's `sun_path`).
   **No `IPAddressAllow=`**: the Proxmox API addresses are site-specific; an
   operator may add them in a drop-in. `Restart=on-failure`, `RestartSec=10s`,
+  `StartLimitIntervalSec=300`, `StartLimitBurst=5`,
   `After=`/`Wants=network-online.target`; no ordering on a SPIRE unit, whose
   name differs per installation, since a failed start is retried. Target:
   `systemd-analyze security` at or below 2.0.
-- **D-h. The static binary is the packaged binary.** The release job takes
-  `/usr/sbin/vtpm-mds-reconcile` out of the built `.deb` (`dpkg-deb -x`)
-  rather than building again, and publishes it as
-  `vtpm-mds-reconcile_<version>_linux_amd64` with a
-  `vtpm-mds-reconcile_<version>_linux_amd64.sha256` beside it. Both are the
+- **D-h. The static binary is the packaged binary.** The `build-deb` job,
+  which runs on every PR, takes `/usr/sbin/vtpm-mds-reconcile` out of the
+  built `.deb` (`dpkg-deb -x`) rather than building again, checks it, and
+  uploads it as a fourth artifact; the tag-gated `release` job publishes it
+  as `vtpm-mds-reconcile_<version>_linux_amd64` with a
+  `vtpm-mds-reconcile_<version>_linux_amd64.sha256` beside it, in
+  `sha256sum` format (`<hash>  <filename>`) so `sha256sum -c` works. Both are the
   same bytes, so a checksum of either identifies the other. It is static
   because the rules build with `CGO_ENABLED=0`; the job checks that `file`
   calls it statically linked and that `-version` prints the changelog
   version.
 - **D-i. Release notes** name three packages: host, guest, and the
-  reconciler for the SPIRE server host, plus the standalone binary.
+  reconciler for the SPIRE server host, plus the standalone binary. The
+  current sentence that the guest package "installs no daemon and no systemd
+  unit" is stale since the renewal timer shipped and is dropped.
 
 ## Risks / Trade-offs
 
-- **An operator who forgets the socket group** gets a reconciler that stops
-  at start with the socket error and restarts until the start limit. The
-  error names the socket; the documentation names the drop-in.
+- **An operator who forgets the socket group, or runs SPIRE on the default
+  `/tmp` socket,** gets a reconciler that stops at start with the socket
+  error. It restarts every 10 s, each time checking the privileges against
+  every Proxmox API first, until the start limit (5 starts in 300 s) leaves
+  it failed. The error names the socket; the documentation names both
+  drop-ins.
 - **No IP restriction by default** (D-g). The reconciler only connects out,
   to configured URLs, but a compromised one could reach anything the host
   reaches. Accepted: the address list is the operator's.

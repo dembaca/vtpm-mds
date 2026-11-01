@@ -48,6 +48,31 @@ workflow SHALL fail when a built package has members in another format.
 - **WHEN** the workflow checks the packages
 - **THEN** the job fails before any package is uploaded or released
 
+### Requirement: Local Lab Builds Pass lintian Whatever The Branch
+
+A local lab build (`make deb-local`) SHALL stamp the changelog with an entry
+that names the commit, the branch and whether the working tree was dirty, and
+every line the stamp adds under its `*` item SHALL be at most 80 columns
+long, whatever the branch is called, so that `lintian --fail-on
+error,warning` does not fail on the stamp. (lintian measures only those
+lines, not the entry's header or its ` -- maintainer  date` trailer.) A branch name too long for its line SHALL be shortened; the commit
+SHALL never be shortened beyond the 12-character abbreviation the version
+carries.
+
+#### Scenario: Long branch name
+
+- **GIVEN** a checkout on a branch whose name is 90 characters long
+- **WHEN** `make deb-local` builds the packages
+- **THEN** no line under the stamped entry's `*` item exceeds 80 columns, and
+  `lintian --fail-on error,warning` reports no `debian-changelog-line-too-long`
+
+#### Scenario: The build is still identifiable
+
+- **GIVEN** any checkout
+- **WHEN** `make deb-local` builds the host package
+- **THEN** its version is `<base>+git<date>.<12-character sha>`, with `.dirty`
+  when the tree had changes, and the changelog entry names the same commit
+
 ## ADDED Requirements
 
 ### Requirement: Three Binary Packages From One Source
@@ -157,7 +182,7 @@ version differs.
 #### Scenario: Binary runs without a Debian userland
 
 - **WHEN** the standalone binary is run with `-version` on a Linux amd64 host
-  with no shared Go or C libraries of this project installed
+  without any of this project's packages or shared libraries installed
 - **THEN** it prints `vtpm-mds-reconcile <version>` and exits 0
 
 ## REMOVED Requirements

@@ -44,8 +44,9 @@ None.
 - `debian-packaging`:
   - REMOVED "Two Binary Packages From One Source", replaced by the ADDED
     "Three Binary Packages From One Source".
-  - MODIFIED "Packages Are Independently Installable" and "Packages Are
-    Compressed With xz On Every Build Host" to cover the third package.
+  - MODIFIED "Packages Are Independently Installable", "Packages Are
+    Compressed With xz On Every Build Host" and "Local Lab Builds Pass
+    lintian Whatever The Branch" to cover the third package.
   - ADDED "Three Binary Packages From One Source", "Reconciler Package
     Ships The Reconciler Only", "Installing The Reconciler Package Starts
     Nothing Unconfigured" and "Release Attaches A Static Reconciler Binary".
@@ -53,10 +54,13 @@ None.
 ## Impact
 
 - `debian/control`, `debian/rules`, new `debian/vtpm-mds-reconcile.{service,
-  sysusers,manpages,install,postinst,lintian-overrides,docs}`, an example
-  config, `debian/README.Debian` or a package-specific one;
+  sysusers,manpages,examples,postinst,lintian-overrides,README.Debian}` and
+  an example config;
   `.github/workflows/deb.yml`; `Makefile` (`deb`, `deb-clean`);
-  `scripts/deb-local.sh`; `README.md` (status row "not yet packaged").
+  `scripts/deb-local.sh`; `README.md` (status row "not yet packaged");
+  on archiving, the Purpose paragraph of
+  `openspec/specs/debian-packaging/spec.md` by hand (archiving does not
+  rewrite it).
 - **Prerequisite:** `reconcile-spire-node-aliases-from-proxmox` is merged, so
   `cmd/vtpm-mds-reconcile` and `debian/vtpm-mds-reconcile.8` exist on `main`.
   This record is written against `main` before that; the code waits.
