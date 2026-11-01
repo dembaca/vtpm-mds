@@ -1,0 +1,212 @@
+# Tasks
+
+Written on 2026-10-29 by `agent-claude-vtpm-05a6b5e52` against
+`main@ccd0f47`, from the maintainer's decisions A-1 to A-4 (A-5/A-6
+deferred). Record only until the maintainer's go.
+
+## 1. Record
+
+- [x] 1.1 `proposal.md`, `design.md`, this file, deltas for `spire-reconciler`
+      (ADDED) and `devid-enrollment` (MODIFIED issuance line)
+      **Verify:** `openspec validate --all --strict`: Totals 7 passed, 0 failed
+      (2026-10-29, `0000d99`)
+- [x] 1.2 Review of the record by a stronger model (Fable), findings taken or
+      deferred by the maintainer
+      **Fable, 2026-10-29, of `0000d99`:** all taken. Must-fix: pools that
+      collide after lowercasing grant nothing; nested pools not served; a
+      fingerprint may identify only one cluster and no root may be configured
+      (D-f), since `ca:fingerprint` covers the root; only entries parented by
+      the server are owned (D-a). Should-fix: privilege check before every
+      pass with the propagate flag; an empty listing is always doubtful; what
+      makes an entry wanted (D-g); one alias per tag value; `.`/`..` and
+      config names as segments; `user-tag-access`/`registered-tags` in the
+      derivation; cluster rename; `-once` and restarts never ban. Nits: the
+      validate output recorded; renewals leave old agents (Risks); facts read
+      from source.
+- [x] 1.3 Maintainer's answers to Q-1 and Q-2
+      **Verify:** Q-1 (ask `s67xd1uz…`, 22:38): reused VM IDs are a change
+      of their own, by way of forwarded `leaf=` lines. Q-2 (ask `jpwfsysg…`,
+      22:49): a third `.deb` and a static binary in a follow-up change.
+- [x] 1.4 Maintainer's go for implementation
+      **Verify:** ask `srpayine…`, 👍 2026-10-29 22:51
+
+## 2. Before code
+
+- [x] 2.1 Against a real cluster, read-only: `/cluster/resources?type=vm`
+      returns `pool` and `tags` per qemu guest; a `PVEAuditor` token on `/`
+      sees all guests and pools; a token without it gets a short list, not
+      `403`; `/access/permissions` shows the privileges D-d checks
+      **Verify:** the API answers, recorded here without site names
+      **2026-10-29, two tokens of one `@pve` user with privilege separation,
+      made by the maintainer** (`probe`: `PVEAuditor` on `/` for user and
+      token; `noacl`: no token ACL). `probe`: `200`, every guest listed, keys
+      include `vmid` (a JSON **number**), `node`, `pool` (absent when none),
+      `tags` (separated by `;` and by spaces), `template` (`0`/`1`: templates
+      are listed as qemu, hence D-b's template rule); `/access/permissions`
+      gives `VM.Audit: 1` and `Pool.Audit: 1` on `/`, `/vms` and `/pool`.
+      `noacl`: `/cluster/resources` `200` with an **empty list**, not `403`;
+      `/access/permissions` an empty map; `/pools` `200`, empty. Not seen: a
+      nested pool (none exists there).
+- [x] 2.2 Against SPIRE 1.14.x: `ListAgents` output for a `tpm_devid` agent
+      (selectors, anything that ties it to an EK), entry create/delete under one
+      SPIFFE ID with two selector sets, `BanAgent` then re-attestation refused
+      **Verify:** lab output recorded here
+      **Partly done, 2026-10-29, local scratch SPIRE 1.14.0** (sqlite, own
+      socket, `join_token` agents, run as the agent user and stopped after):
+      two node aliases under `…/pve/cluster-1/vm/350` with
+      `subject:cn:350` + `ca:fingerprint:aaaa` and `…:bbbb` were both created
+      and `entry show -parentID spiffe://<td>/spire/server` lists both; the
+      same ID with the same selector set again is refused
+      `AlreadyExists, "similar entry already exists"`. `agent show` holds
+      SPIFFE ID, attestation type, SVID expiry and serial, `Can re-attest`,
+      and no selector for a `join_token` agent. A running agent banned with
+      `agent ban` failed its next sync 5 s later with `PermissionDenied` on
+      `SyncAuthorizedEntries` and shut down (`Agent is banned: removing SVID
+      and shutting down`).
+      **Cloud lab rest, 2026-11-01** (`cursor/reconcile-lab-verification-2-1e7e`,
+      SPIRE 1.14.0, two-tier lab PKI, guest LDevID CN=100): `agent show` for
+      `…/tpm_devid/e9e5769a…` (SHA-1 of leaf DER) selectors =
+      `tpm_devid:subject:cn:100`, `tpm_devid:issuer:cn:Lab DevID Intermediate`,
+      `tpm_devid:ca:fingerprint:<inter>`, `tpm_devid:ca:fingerprint:<root>` —
+      **nothing that names an EK**. After reconciler ban of that agent ID,
+      clearing agent data and attesting again with the same LDevID fails:
+      `PermissionDenied` / `failed to attest: agent is banned` (server
+      `Failed to attest: agent is banned`). Entry create/delete under one
+      SPIFFE ID with two selector sets: already covered 2026-10-29 above.
+
+## 3. Implementation
+
+- [x] 3.1 `logIssuance` writes `leaf=<sha1>`; test that it equals the SHA-1 of
+      the returned leaf DER
+      **Verify:** `go test ./internal/devid/ -run 'LoggedOnce|Issuance'`:
+      both PASS (2026-10-29); `go vet ./...` and `go test ./...` green.
+      `debian/vtpm-mds.8` names only the `ek=` value of the line, so it is
+      unchanged.
+- [x] 3.2 `internal/reconcile`: desired-alias computation (D-b, D-c, D-g) as a pure
+      function, table tests for every scenario of the delta
+      **Verify:** `go test ./internal/reconcile/`: PASS (2026-10-29),
+      `Wanted` in `wanted.go`, subtests for every scenario of the first two
+      requirements plus dot segments, separators, a tag without value, two
+      intermediates, no fingerprints, duplicates and sorting. D-g's
+      field-default check belongs to the writer (3.4).
+- [x] 3.3 Proxmox reader with the permission check and the doubtful-read rule
+      (D-d), tests on a fake API
+      **Verify:** `go test ./internal/reconcile/ -run TestRead`: PASS
+      (2026-10-29): a good read, an empty listing, only templates, no rights
+      (resources not requested), privilege without propagation, server error
+      (no token in the message), unreachable, vmid as a number. Response
+      shapes from task 2.1.
+- [x] 3.4 SPIRE writer: diff under the prefix, create/delete, bans after two
+      reads (D-e), tests on a fake entry and agent API
+      **Decision half done (2026-10-29):** `Diff` and `BanTracker` in
+      `diff.go`, pure; `go test ./internal/reconcile/ -run 'TestDiff|TestBanTracker'`
+      PASS (a removed tag, entries outside the prefix, a workload entry under
+      it, a hand-edited alias, duplicates, `cluster-10` vs `cluster-1`; a
+      destroyed VM, a VM missing once, another cluster's agent, counts dropped
+      for vanished agents). 3.5 must refuse a cluster without an
+      intermediate, or `Diff` would delete all its aliases.
+      **Adapter (2026-10-29):** `spire.go` over `spire-api-sdk v1.14.7` and
+      `grpc v1.74.2`, pinned with `GOTOOLCHAIN=local` so `go.mod` stays at
+      `go 1.24.0` (the latest grpc wants 1.26). `TestSPIREAgainstAServer`,
+      run only with `VTPM_RECONCILE_SPIRE_SOCKET`, PASS against a scratch
+      SPIRE 1.14.0: a first pass creates the 6 aliases (3 IDs × 2
+      intermediates), a second changes nothing, a removed tag deletes its 2,
+      nothing wanted deletes the remaining 4, agents list, banning an unknown
+      agent fails; a hand-written `spiffe://example.org/nodes/build` alias
+      survived every pass.
+- [x] 3.5 `cmd/vtpm-mds-reconcile`: strict config (D-i, D-f), `-version`,
+      `-once` for a single pass that never bans (D-e), signal handling
+      **Verify (2026-10-29):** `go test ./internal/reconcile/ -run
+      'TestLoadConfig|TestClusterClient|TestPass'` PASS: unknown key, short
+      interval, no intermediate, a root as intermediate, a fingerprint in two
+      clusters, duplicate and invalid cluster names, `http://`, token file
+      empty or padded; a pass creates then changes nothing, a doubtful cluster
+      is left alone while another is reconciled, a destroyed VM is banned on
+      the second pass, a doubtful read in between neither resets nor advances
+      the count, `allowBans=false` never bans. `main` (flags, start refusal,
+      signals) has no unit test; 4.2 runs it.
+- [x] 3.6 `vtpm-mds-reconcile(8)` (D-j), `README.md`, `ARCHITECTURE.md`
+      **2026-10-29:** `debian/vtpm-mds-reconcile.8` (not installed until the
+      packaging change, Q-2): the derivation (who sets a tag, incl.
+      `user-tag-access`/`registered-tags`; why a tag alone is worth the
+      owner; why the pool; which IDs; what an owner does), the seven examples,
+      the safety notes (prefix, doubtful reads and `NoAccess`, bans, cluster
+      rename, restored VM must enroll). `man -l --warnings` clean. README
+      feature row "in progress, not yet packaged"; ARCHITECTURE trust model.
+      **Verify (3.x):** `go vet ./...`, `go test ./...`,
+      `openspec validate --all --strict`
+
+## 4. Verification
+
+- [x] 4.1 Lab: two-tier PKI, SPIRE 1.14.x, a fake or real Proxmox API: a VM
+      with pool and tags gets its aliases and a workload under the tag alias
+      gets an SVID; removing the tag removes it within one interval plus sync;
+      a VM without a pool gets only `vm/`; a destroyed VM's agent is banned
+      after two reads
+      **2026-11-01, cloud QEMU lab** (`cursor/reconcile-lab-verification-2-1e7e`
+      then Fable fixes on `cursor/reconcile-lab-fixes-1e7e`; scripts under
+      `scripts/qemu-lab/`: `fake-proxmox-api.py`, `reconcile-lab-spire-server.conf`,
+      `start-reconcile-lab-host.sh`; binary from tree tip; trust_domain
+      `lab.local`; cluster `lab1`; interval 10s; guest `MDS_LAB_ACCEL=tcg` —
+      nested KVM wedged this host). First pass: `created 5` —
+      `vm/100`, `pool/web` (cn 100, cn 101), `pool/web/tag/role/frontend`
+      (cn 100), `vm/101`. Workload entry parented by the tag alias → guest
+      `api fetch x509` got `spiffe://lab.local/workload/frontend`. Cleared
+      VM 100 tag → `deleted 1` (tag alias); next fetch `PermissionDenied` /
+      `no identity issued`. VM 100 without `pool` → only `vm/100` for cn
+      100. Removed VM 100 from inventory → after two good reads
+      `banned …/tpm_devid/e9e5769a… (vm 100 not listed in two reads)`.
+      **Re-run after Fable inventory expand:** default inventory includes
+      qemu 100 (pool + two tags `role.frontend` / `env.lab`), qemu 101
+      (no pool/tags fields), a `template:1` qemu, and an `lxc` guest.
+      `-once` created `vm/100`, `pool/web` (cn 100),
+      `pool/web/tag/role/frontend`, `pool/web/tag/env/lab`, `vm/101` —
+      no aliases for the template or the lxc. Fake API
+      `?type=node` returns an empty list (type filter).
+      **Lab notes (not product):** SPIRE 1.14 `tpm_devid` needs
+      `endorsement_ca_path` (not `end_cert_path`); fake-PVE TLS cert needs an
+      IP SAN for `127.0.0.1` or the reconciler reports a doubtful TLS read;
+      SPIRE `bind_address` on `169.254.169.1` so the guest can attest. The
+      fake API does not check the token header and never answers `403` or an
+      empty listing for missing rights (those shapes were recorded in 2.1 on
+      a real cluster).
+      **Not verified** (coordinator, on merge): the time from removing the
+      tag to the refused fetch was not recorded, only that it happened; the
+      lab has the default `swtpm-localca` EK layout and a lab intermediate,
+      not a site CA layout (4.2 covered a real cluster's API, not its
+      LDevIDs); a pass with two intermediates of one cluster (unit and
+      scratch-SPIRE tests only).
+- [x] 4.2 Real cluster, read-only against Proxmox, against a scratch SPIRE
+      server: one `-once` pass, aliases listed, nothing banned that is alive
+      **2026-10-29, binary from `b98587e`**, the maintainer's read-only
+      `PVEAuditor` token, the API over loopback with pveproxy's certificate
+      pinned (the cluster CA file is not readable by the agent user), a test
+      intermediate, scratch SPIRE 1.14.0 with one hand-written node alias
+      `spiffe://example.org/nodes/build`. First `-once`: `created 27, deleted
+      0`, exit 0: one `vm/` alias per non-template guest and one `pool/` alias
+      per pooled guest; no tag alias, as no pooled guest carries a
+      `vtpm_mds.io.` tag. Second `-once`: nothing logged, exit 0. With the
+      token without rights: `cluster cluster-1: doubtful read: missing
+      Pool.Audit on /pool, missing VM.Audit on /vms`, exit 1, nothing changed.
+      The hand-written alias survived; `-once` banned nothing.
+
+## 5. Ship
+
+- [x] 5.1 Review of the implementation by a stronger model before ready
+      **Fable, 2026-10-29, of `c1863ff`:** no must-fix; no path found that
+      deletes a live alias, touches an entry outside the owned parent and
+      prefix, or bans an agent whose VM is listed. Should-fix taken: `-once`
+      exits 1 when a cluster was left unchanged (`Pass` returns the count);
+      wanted aliases are created before stale ones are deleted, and one that
+      replaces a deleted entry after it, so a failed create leaves the old
+      aliases (tested); `entryFromProto` with a unit test per field; remote
+      strings quoted in logs; the man page said aliases go after two reads,
+      they go on the first, only the ban waits. Nits taken: absolute
+      `spire_socket`, a socket that cannot be listed stops the start,
+      intermediates deduplicated by fingerprint, nil logger, drained error
+      bodies, man page on `ca_file`, token rotation and removing a cluster.
+      Not taken: refusing to ban an agent whose cn is not all digits; the spec
+      bans by cn alone, and every LDevID under an intermediate has
+      `CN=<vmid>`. Rerun of 4.2 with the fixed binary: `created 27`, then two
+      passes with nothing, rights-less token exit 1, wrong socket exit 1.
+- [ ] 5.2 After merge, the coordinator archives the change

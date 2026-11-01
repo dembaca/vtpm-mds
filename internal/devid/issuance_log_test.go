@@ -3,8 +3,10 @@ package devid
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"net/http"
@@ -76,7 +78,8 @@ func issuanceLines(logs string) []string {
 }
 
 // A successful finish writes exactly one issuance line with the certificate's
-// serial, the VM and the EK fingerprint, and nothing secret.
+// serial, the VM, the EK fingerprint and the SHA-1 of the leaf DER, and nothing
+// secret.
 func TestASuccessfulFinishIsLoggedOnce(t *testing.T) {
 	finish, logs, ekFP := enrollThroughHandlers(t, false)
 	if finish.Code != http.StatusOK {
@@ -99,7 +102,9 @@ func TestASuccessfulFinishIsLoggedOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	line := lines[0]
-	for _, want := range []string{"serial=" + cert.SerialNumber.Text(16), "vm=100", "ek=" + ekFP} {
+	sum := sha1.Sum(block.Bytes)
+	leaf := "leaf=" + hex.EncodeToString(sum[:])
+	for _, want := range []string{"serial=" + cert.SerialNumber.Text(16), "vm=100", "ek=" + ekFP, leaf} {
 		if !strings.Contains(line, want) {
 			t.Errorf("the line lacks %q: %q", want, line)
 		}

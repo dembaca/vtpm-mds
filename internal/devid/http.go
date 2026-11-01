@@ -1,8 +1,10 @@
 package devid
 
 import (
+	"crypto/sha1"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -155,17 +157,21 @@ func (e *Enroller) HandleFinish(w http.ResponseWriter, r *http.Request) {
 }
 
 // logIssuance writes the one line that says a certificate was issued: its serial
-// in hexadecimal, the VM it was issued to and the fingerprint of the EK certificate
-// the enrolment was bound to. It holds nothing else of the enrolment: not the
-// certificate, the keys, the challenge or the session. A certificate that cannot be
-// read back is logged with serial "unknown", which cannot happen for one that
-// Finish has just built.
+// in hexadecimal, the VM it was issued to, the fingerprint of the EK certificate
+// the enrolment was bound to, and the SHA-1 of the leaf's DER, which is the last
+// segment of the agent ID SPIRE's tpm_devid attestor gives that certificate. It
+// holds nothing else of the enrolment: not the certificate, the keys, the
+// challenge or the session. A certificate that cannot be read back is logged with
+// serial and leaf "unknown", which cannot happen for one that Finish has just
+// built.
 func logIssuance(certPEM []byte, vmid, ekFP string) {
-	serial := "unknown"
+	serial, leaf := "unknown", "unknown"
 	if block, _ := pem.Decode(certPEM); block != nil {
 		if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
 			serial = cert.SerialNumber.Text(16)
+			sum := sha1.Sum(cert.Raw)
+			leaf = hex.EncodeToString(sum[:])
 		}
 	}
-	log.Printf("devid issued serial=%s vm=%s ek=%s", serial, vmid, ekFP)
+	log.Printf("devid issued serial=%s vm=%s ek=%s leaf=%s", serial, vmid, ekFP, leaf)
 }
