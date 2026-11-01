@@ -160,6 +160,12 @@ deferred). Record only until the maintainer's go.
       `endorsement_ca_path` (not `end_cert_path`); fake-PVE TLS cert needs an
       IP SAN for `127.0.0.1` or the reconciler reports a doubtful TLS read;
       SPIRE `bind_address` on `169.254.169.1` so the guest can attest.
+      **Not verified** (coordinator, on merge): the time from removing the
+      tag to the refused fetch was not recorded, only that it happened; the
+      lab has the default `swtpm-localca` EK layout and a lab intermediate,
+      not a site CA layout (4.2 covered a real cluster's API, not its
+      LDevIDs); a pass with two intermediates of one cluster (unit and
+      scratch-SPIRE tests only).
 - [x] 4.2 Real cluster, read-only against Proxmox, against a scratch SPIRE
       server: one `-once` pass, aliases listed, nothing banned that is alive
       **2026-10-29, binary from `b98587e`**, the maintainer's read-only
