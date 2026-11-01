@@ -96,9 +96,11 @@ GitHub Release for a `v<changelog version>` tag.
   runs `dh_installsystemd --no-start --no-stop-on-upgrade` once for every
   package, so the only per-package work is
   `debian/vtpm-mds-reconcile.postinst` (the hand reload and the guarded
-  `try-restart`, after `debian/postinst`). debhelper's generated `prerm`
-  still stops the unit on `remove`, so `dpkg -r` stops a running
-  reconciler.
+  `try-restart`, after `debian/postinst`) and
+  `debian/vtpm-mds-reconcile.prerm`: with `--no-start` debhelper generates
+  no stop on removal (the built package had no `prerm` at all), so the
+  package stops the unit on `remove` itself, as `debian/prerm` does for the
+  host package.
 - **D-g. Hardening.** The confinement set of `vtpm-mds.service`, without
   its capability, `StateDirectory` and IP lines: `User=`/`Group=vtpm-mds-reconcile`,
   an empty `CapabilityBoundingSet=`, no `AmbientCapabilities=`, and
