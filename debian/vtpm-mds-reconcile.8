@@ -283,6 +283,17 @@ or
 on
 .B /pool
 stops the process, naming the cluster and the privilege.
+.SH FILES
+.TP
+.I /etc/vtpm\-mds\-reconcile/config.yaml
+The configuration; the packaged unit starts only when it exists.
+.TP
+.I /usr/share/doc/vtpm\-mds\-reconcile/examples/config.yaml
+An example configuration.
+.TP
+.I /usr/share/doc/vtpm\-mds\-reconcile/README.Debian
+Setting up the packaged service: file modes, token credentials, the SPIRE
+socket group.
 .SH SEE ALSO
 .BR vtpm\-mds (8),
 .BR devid\-enroll (1),

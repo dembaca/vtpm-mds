@@ -50,3 +50,20 @@ Description: Guest DevID enrollment client for vtpm-mds
  oneshot plus daily timer that renew the LDevID before SPIRE when due. It
  ships no IMDS listener and does not require
  the vtpm-mds package.
+
+Package: vtpm-mds-reconcile
+Architecture: any
+Depends: ${misc:Depends}
+Description: SPIRE node aliases from Proxmox pools and tags
+ vtpm-mds-reconcile runs once, beside a SPIRE server, and keeps SPIRE node
+ aliases in line with each Proxmox guest's VM ID, pool and tags. It reads
+ every configured cluster over the Proxmox API and writes, through the
+ SPIRE admin socket, aliases that select the guest's LDevID by its VM ID
+ and its cluster's DevID intermediate, so registrations can name a pool or
+ a tag instead of a list of VM IDs. Agents of destroyed VMs are banned.
+ .
+ This package contains the binary, its man page, a hardened systemd unit
+ running as its own user, and an example configuration. It installs no
+ configuration in /etc and starts nothing until one is written. It belongs
+ on the SPIRE server host, not on hypervisors or in guests, and does not
+ require the vtpm-mds or devid-enroll packages.

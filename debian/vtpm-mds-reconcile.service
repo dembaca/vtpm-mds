@@ -1,0 +1,60 @@
+[Unit]
+Description=vTPM metadata service: SPIRE node aliases from Proxmox pools and tags
+Documentation=man:vtpm-mds-reconcile(8)
+Documentation=file:///usr/share/doc/vtpm-mds-reconcile/README.Debian
+# Nothing to do until the operator has written a configuration; a start
+# before that is skipped, not failed (package-the-reconciler D-f).
+ConditionPathExists=/etc/vtpm-mds-reconcile/config.yaml
+After=network-online.target
+Wants=network-online.target
+# A reconciler that cannot open the SPIRE socket fails at start; stop
+# retrying after five starts in five minutes.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/vtpm-mds-reconcile -config /etc/vtpm-mds-reconcile/config.yaml
+Restart=on-failure
+RestartSec=10s
+
+# Its own user, not the SPIRE server's (D-c). Access to the SPIRE admin socket
+# and the cluster tokens come from the operator's drop-in: a
+# SupplementaryGroups= line for the SPIRE server's group and one
+# LoadCredential=<cluster>.token:<file> line per cluster (D-d, D-e). See
+# README.Debian.
+User=vtpm-mds-reconcile
+Group=vtpm-mds-reconcile
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+ProtectHome=true
+# Hides SPIRE's default socket under /tmp/spire-server/private/: put the
+# server's socket_path under /run, or add PrivateTmp=false in a drop-in (D-g).
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+UMask=0077
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+# HTTPS to the Proxmox APIs and the SPIRE admin socket. The API addresses are
+# site-specific, so there is no IPAddressAllow=; a drop-in may add one.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

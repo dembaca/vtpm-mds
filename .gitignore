@@ -45,6 +45,7 @@ config.local.yaml
 debian/prox-mds
 debian/vtpm-mds
 debian/devid-enroll
+debian/vtpm-mds-reconcile
 debian/.debhelper
 debian/.gocache
 debian/.gomod
