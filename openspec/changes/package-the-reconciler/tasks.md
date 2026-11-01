@@ -45,24 +45,41 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
       package-prefixed `README.Debian`, `sha256sum` format, extraction in
       `build-deb`, explicit `ExecStart`, the stale guest sentence in the
       release notes, 107 usable bytes.
-- [ ] 1.4 Maintainer's go for the code
+- [x] 1.4 Maintainer's go for the code
+      **Verify:** ask `rt4y3rt3…`, 👍 2026-11-01 17:20, after #94 and its
+      archive (#98) were merged; record rebased onto `1f2d920`
 
 ## 2. Package
 
-- [ ] 2.1 `debian/control`: package `vtpm-mds-reconcile` (D-a); `debian/rules`
+- [x] 2.1 `debian/control`: package `vtpm-mds-reconcile` (D-a); `debian/rules`
       builds and installs `bin/vtpm-mds-reconcile` and its unit; the existing
       `dh_installsystemd --no-start --no-stop-on-upgrade` covers it, no new
       override (D-f)
       **Verify:** `make deb` (or `make deb-local`) yields three `.deb` at one
       version; `dpkg-deb -c` of each matches "Reconciler Package Ships The
       Reconciler Only" and the host and guest requirements
-- [ ] 2.2 `vtpm-mds-reconcile.service` (D-b, D-f, D-g), `.sysusers` (D-c),
+      **2026-11-01, `make deb-local` at `0.3.2+git20261101.bd447c1edb25`:** three `.deb` at that
+      version. `vtpm-mds-reconcile`: `/usr/sbin/vtpm-mds-reconcile`, its unit,
+      `sysusers.d/vtpm-mds-reconcile.conf`, the man page, `README.Debian`,
+      `examples/config.yaml`, nothing in `/etc`; `Depends:` only the sysusers
+      alternatives debhelper adds. `vtpm-mds` and `devid-enroll` contain no
+      `reconcile` path and are otherwise unchanged.
+- [x] 2.2 `vtpm-mds-reconcile.service` (D-b, D-f, D-g), `.sysusers` (D-c),
       `.manpages`, `.examples` with the example config (D-b), `.postinst`
       (D-f), `.lintian-overrides` (`statically-linked-binary`)
       **Verify:** `systemd-analyze verify` on the unit; `systemd-analyze
       security vtpm-mds-reconcile` ≤ 2.0 after install;
       `lintian --fail-on error,warning` on all three `.deb`
-- [ ] 2.3 Documentation for the operator in
+      **2026-11-01:** `lintian --fail-on error,warning` exit 0 on all three.
+      `systemd-analyze verify` on the extracted unit: only that
+      `/usr/sbin/vtpm-mds-reconcile` does not exist on this host (not
+      installed here). `systemd-analyze security --offline=true` on the
+      extracted tree: **1.4 OK**; the installed unit waits for 4.1. Found on
+      the way: with `--no-start` debhelper generates no stop on removal (the
+      first build had no `prerm`), so `debian/vtpm-mds-reconcile.prerm` was
+      added (D-f corrected); the rebuilt package has
+      `postinst`, `postrm` and `prerm`.
+- [x] 2.3 Documentation for the operator in
       `debian/vtpm-mds-reconcile.README.Debian`: the socket-group drop-in
       (D-d); the SPIRE socket under `/run` or a `PrivateTmp=false` drop-in
       for the default `/tmp` path, and the 107-byte limit (D-g); the
@@ -71,11 +88,16 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
       lines, no behaviour text
       **Verify:** `man -l --warnings` clean; the drop-ins shown are the ones
       used in 4.1
-- [ ] 2.4 `Makefile`: the `deb` message; `--exclude=debian/vtpm-mds-reconcile`
+      **2026-11-01:** written; `man -l --warnings` prints nothing. Whether
+      the drop-ins work as shown is 4.1.
+- [x] 2.4 `Makefile`: the `deb` message; `--exclude=debian/vtpm-mds-reconcile`
       in the `deb` tar (the `debian/vtpm-mds` exclude does not match it);
       `debian/vtpm-mds-reconcile` in the `deb-clean` `rm -rf`.
       `scripts/deb-local.sh` prints the third package
       **Verify:** `make deb-clean && make deb-local` from a clean tree
+      **2026-11-01:** the first `make deb-local` ran in a fresh worktree and
+      printed all three packages; `make deb-clean` afterwards removed
+      `debian/vtpm-mds-reconcile` and `dist/`.
 
 ## 3. Release
 
@@ -87,6 +109,9 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
       **Verify:** the workflow on the PR is green and its artifacts list three
       `.deb` and the binary; the release job is tag-gated and cannot run on a
       PR, so say so instead of implying it passed
+      **2026-11-01, written; open until the PR's run is green.** The
+      extraction step's commands ran locally (4.2). The `release` job has not
+      run and cannot on a PR.
 
 ## 4. Verification
 
@@ -101,10 +126,14 @@ Files: `debian/`, `.github/workflows/deb.yml`, `Makefile`,
       stopped (stays stopped); `dpkg -r` stops it and leaves no unit; a
       second user in the SPIRE group connects (task 1.2's open half)
       **Verify:** commands and key journal lines recorded here
-- [ ] 4.2 Standalone binary from the local extraction: `file` says statically
+- [x] 4.2 Standalone binary from the local extraction: `file` says statically
       linked, `-version` prints the package version, hash equals the
       package's binary, `sha256sum -c` passes on the `.sha256`
-- [ ] 4.3 `go vet ./...`, `go test ./...`, `openspec validate --all --strict`
+      **2026-11-01, `0.3.2+git20261101.bd447c1edb25`:** `file`: "ELF 64-bit LSB executable, x86-64,
+      … statically linked, … stripped"; `-version`: `vtpm-mds-reconcile
+      0.3.2+git20261101.bd447c1edb25`; `cmp` with the packaged binary: identical; `sha256sum -c`: OK
+- [x] 4.3 `go vet ./...`, `go test ./...`, `openspec validate --all --strict`
+      **2026-11-01:** vet silent, every test package `ok`, validate 8/8
 
 ## 5. Ship
 
