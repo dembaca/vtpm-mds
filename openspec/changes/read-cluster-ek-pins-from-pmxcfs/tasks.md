@@ -125,15 +125,39 @@ including D-g and D-b.
       guest `devid-enroll` exited `0` (08:11:26Z–08:11:31Z) into the scratch
       directory `/tmp/devid-scratch.HDKRWg` (cursor's RESULT in ~bgl-infra,
       post `59mcbwo84fnz5gxw8g5rt1nwwo`, relayed by the maintainer).
-- [ ] 2.3 After P1-w's backfill has written `/etc/pve/vtpm-ek/399`: VM 399
+- [x] 2.3 After P1-w's backfill has written `/etc/pve/vtpm-ek/399`: VM 399
       enrolls into a scratch directory, no warning line. A mismatching
       cluster pin is covered by the unit tests only; the live file is not
       altered for it
+      **Done, 2026-11-04 22:33, by `agent-vtpm-hogan-b5d2abc35`** (the
+      maintainer's 👍 on the coordinator's ask `nuc6ahkh…`), against the
+      installed `0.3.2+git20261025.d6c40ce6070c`, whose config sets neither
+      key (so the default directory applies). `/etc/pve/vtpm-ek/399` was
+      `root:www-data 0640`, 65 bytes, mtime 2026-11-04 18:48. Its sha256
+      `24fbf7d9…c4864f` equals that of the logged `ek=19517bd1…aacc069` plus a
+      newline, so the cluster pin holds VM 399's EK. In the guest,
+      `devid-enroll -out /tmp/devid-scratch.swSxHG` (0.3.2, no
+      `-spire-data`) exited `0` (21:33:06Z–21:33:10Z). hogan logged
+      `POST "/latest/devid/enroll/start" 200`, `devid issued
+      serial=7cd328c6… vm=399 ek=19517bd1…` and `enroll/finish 200` from
+      `169.254.225.141`, and nothing else from 22:33 on. There was no
+      `no cluster pin`, `local pin differs`, `invalid cluster pin`, `401` or
+      `500` line. The absence of `no cluster pin … using local pin` while the
+      directory exists means the cluster pin was found and used. In the guest,
+      `/var/lib/spire/agent/devid.*` still date from 2026-10-25 07:54, and
+      `spire-agent` has not restarted since 2026-10-25 14:53. The pin file was
+      the same before and after (not written by this run). The scratch
+      directory was removed afterwards. Not checked: the local pin under
+      `ek-pins/` (unreadable to the agent user), and the mismatch case live
+      (unit tests only, as above).
 - [x] 2.4 Time one leg with the cluster directory and guest configs as they are
       on hogan, from the access log
       Access log on hogan, 2026-10-26 09:11, no `/etc/pve/vtpm-ek`: VM 399's
       `enroll/start` 2.2 ms and `enroll/finish` 5.8 ms. With the directory
-      present not yet measured (after 2.3).
+      present, 2026-11-04 22:33 (2.3's run): `enroll/start` 8.3 ms and
+      `enroll/finish` 11.6 ms. That is one sample each, from a daemon up since
+      before the backfill. Where the extra ~6 ms goes was not profiled. The
+      250 ms `guestExists` recheck was not hit (no stale pin).
 - [ ] 2.5 Read the same pin from holger's view (P1-w or cursor, read-only):
       the file is the same on every node
 
