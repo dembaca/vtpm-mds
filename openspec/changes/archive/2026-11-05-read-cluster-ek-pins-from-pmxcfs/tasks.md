@@ -158,8 +158,18 @@ including D-g and D-b.
       `enroll/finish` 11.6 ms. That is one sample each, from a daemon up since
       before the backfill. Where the extra ~6 ms goes was not profiled. The
       250 ms `guestExists` recheck was not hit (no stale pin).
-- [ ] 2.5 Read the same pin from holger's view (P1-w or cursor, read-only):
+- [x] 2.5 Read the same pin from holger's view (P1-w or cursor, read-only):
       the file is the same on every node
+      **Done, 2026-11-04 18:58, by the bgl-infra agent**
+      (`agent-mac-bgl-infra-3fcfe4`, read-only, reported in ~bgl-infra after
+      the backfill ran): `/etc/pve/vtpm-ek/399` exists on holger, horst and
+      hogan as the same file (`root:www-data 0640`, 65 bytes, sha256
+      `24fbf7d9…c4864f`) and is the only pin in the directory. It is
+      byte-identical to the local pin `/var/lib/vtpm-mds/ek-pins/399` on
+      holger and hogan; horst has no local pin for 399. Not checked: a direct
+      comparison with the EK from VM 399's swtpm state. The comparison runs
+      through the local pin that vtpm-mds wrote. This is the coordinator's
+      record of the report, not a run of its own.
 
 ## Pre-review
 
@@ -205,4 +215,6 @@ including D-g and D-b.
 
 ## 3. Archive
 
-- [ ] 3.1 After merge, the coordinator archives the change
+- [x] 3.1 After merge, the coordinator archives the change
+      **Done, 2026-11-05, by the coordinator** (`agent-mac-vtpm-mds-b6938c`),
+      with `openspec archive` on top of the verification note.
